@@ -46,7 +46,7 @@ test('metric values keep visual emphasis without becoming document headings', ()
   expect(markup).not.toContain('<h3')
 })
 
-test('dashboard header and table frame provide a stable heading outline', () => {
+test('dashboard chrome leaves the document heading to its page content', () => {
   const headerMarkup = renderToStaticMarkup(
     <SidebarProvider>
       <SiteHeader title="Users" />
@@ -65,8 +65,8 @@ test('dashboard header and table frame provide a stable heading outline', () => 
     </DataTableFrame>,
   )
 
-  expect(headerMarkup).toContain('<h1')
-  expect(headerMarkup).toContain('>Users</h1>')
+  expect(headerMarkup).toContain('>Users</span>')
+  expect(headerMarkup).not.toContain('<h1')
   expect(headerMarkup).toContain('h-16')
   expect(headerMarkup).toContain('motion-reduce:transition-none')
   expect(tableMarkup).toContain('<h2')

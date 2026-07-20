@@ -35,12 +35,12 @@ export function NavUser({
   settingsPath,
   user,
 }: {
-  accountPath: WorkspaceRoutePath
+  accountPath?: WorkspaceRoutePath
   onLogout: () => Promise<void>
   settingsPath: WorkspaceRoutePath
   user: UserDto
 }) {
-  const { isMobile } = useSidebar()
+  const { isMobile, setOpen } = useSidebar()
   const [logoutError, setLogoutError] = useState(false)
   const [logoutPending, setLogoutPending] = useState(false)
 
@@ -51,6 +51,7 @@ export function NavUser({
       await onLogout()
     } catch {
       setLogoutError(true)
+      setOpen(true)
     } finally {
       setLogoutPending(false)
     }
@@ -81,16 +82,15 @@ export function NavUser({
                   <Typography variant="control" truncate>
                     {user.displayName ?? user.email}
                   </Typography>
-                  <Typography variant="caption" tone="muted" truncate>
-                    {user.email}
-                  </Typography>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <Typography variant="caption" tone="muted" truncate>
+                      {user.email}
+                    </Typography>
+                    <Badge variant="outline" className="shrink-0 capitalize">
+                      {user.role}
+                    </Badge>
+                  </div>
                 </div>
-                <Badge
-                  variant="outline"
-                  className="capitalize group-data-[collapsible=icon]:hidden"
-                >
-                  {user.role}
-                </Badge>
                 <HugeiconsIcon
                   className="ml-auto size-4 group-data-[collapsible=icon]:hidden"
                   icon={MoreVerticalCircle01Icon}
@@ -123,12 +123,14 @@ export function NavUser({
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                <DropdownMenuItem asChild>
-                  <DashboardLink to={accountPath}>
-                    <HugeiconsIcon icon={UserCircle02Icon} strokeWidth={2} />
-                    Account
-                  </DashboardLink>
-                </DropdownMenuItem>
+                {accountPath && (
+                  <DropdownMenuItem asChild>
+                    <DashboardLink to={accountPath}>
+                      <HugeiconsIcon icon={UserCircle02Icon} strokeWidth={2} />
+                      Account
+                    </DashboardLink>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem asChild>
                   <DashboardLink to={settingsPath}>
                     <HugeiconsIcon icon={Settings01Icon} strokeWidth={2} />
@@ -139,10 +141,7 @@ export function NavUser({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 disabled={logoutPending}
-                onSelect={(event) => {
-                  event.preventDefault()
-                  void logout()
-                }}
+                onSelect={() => void logout()}
                 variant="destructive"
               >
                 <HugeiconsIcon icon={Logout01Icon} strokeWidth={2} />

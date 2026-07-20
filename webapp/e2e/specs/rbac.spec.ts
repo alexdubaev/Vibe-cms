@@ -65,6 +65,37 @@ test('mobile workspace navigation closes the sidebar sheet', async ({ page }) =>
   await expect(mobileSidebar).toBeHidden()
 })
 
+test('workspace account menu keeps a failed logout visible and retryable', async ({ page }) => {
+  const userEmail = uniqueEmail('web-e2e-sidebar-logout')
+  await page.goto('/')
+  await page.getByLabel('Email').fill(userEmail)
+  await page.getByLabel('Password').fill(e2ePassword)
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await expect(page).toHaveURL(/\/app$/)
+
+  await page.route('**/api/auth/logout', async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: { code: 'UNAVAILABLE', message: 'Temporary logout failure' },
+      }),
+    })
+  })
+
+  const sidebar = page.locator('[data-slot="sidebar"][data-state]')
+  await page.locator('[data-sidebar="trigger"]').click()
+  await expect(sidebar).toHaveAttribute('data-state', 'collapsed')
+  await page.locator('[data-sidebar="footer"] [data-sidebar="menu-button"]').click()
+  await page.getByRole('menuitem', { name: 'Log out' }).click()
+
+  await expect(sidebar).toHaveAttribute('data-state', 'expanded')
+  await expect(page.getByRole('alert')).toHaveText('Logout failed. Please try again.')
+  await expect(page).toHaveURL(/\/app$/)
+  await page.locator('[data-sidebar="footer"] [data-sidebar="menu-button"]').click()
+  await expect(page.getByRole('menuitem', { name: 'Log out' })).toBeEnabled()
+})
+
 test('role mutation failures are announced inside the confirmation dialog', async ({
   browser,
   page,
