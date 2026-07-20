@@ -49,11 +49,11 @@ export function DataTableFrame({
           <div className="overflow-x-auto">{children}</div>
         </div>
       </CardContent>
-      <CardFooter className="justify-between gap-3 border-t">
+      <CardFooter className="flex-col items-stretch justify-between gap-3 border-t sm:flex-row sm:items-center">
         <Typography variant="bodySm" tone="muted">
           {summary}
         </Typography>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex">
           <Button
             disabled={previousDisabled}
             onClick={onPrevious}
