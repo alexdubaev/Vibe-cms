@@ -116,7 +116,7 @@ export function LoginForm({
           selector={(state) => state.isSubmitting}
           children={(isSubmitting) => (
             <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Working...' : 'Login'}
+              {isSubmitting ? 'Signing in…' : 'Login'}
             </Button>
           )}
         />

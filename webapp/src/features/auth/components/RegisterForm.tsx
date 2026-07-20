@@ -144,7 +144,7 @@ export function RegisterForm({
           selector={(state) => state.isSubmitting}
           children={(isSubmitting) => (
             <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Working...' : 'Create account'}
+              {isSubmitting ? 'Creating account…' : 'Create account'}
             </Button>
           )}
         />

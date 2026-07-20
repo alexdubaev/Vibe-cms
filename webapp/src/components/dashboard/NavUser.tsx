@@ -69,6 +69,7 @@ export function NavUser({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <SidebarMenuButton
+                aria-label="Open account menu"
                 size="lg"
                 tooltip={user.displayName ?? user.email}
                 className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
