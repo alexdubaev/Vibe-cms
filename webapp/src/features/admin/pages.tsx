@@ -33,8 +33,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Typography } from '@/components/ui/typography'
-import { AppearanceSettings } from '@/features/settings'
-import { ProfileForm } from '@/features/users'
+import { AppearancePanel } from '@/features/settings'
+import { ProfilePanel } from '@/features/users'
 import {
   useAdminDashboardQuery,
   useAdminUsersQuery,
@@ -277,8 +277,8 @@ export function AdminSettings({ user }: { user: UserDto }) {
         description="Manage your administrator identity and workspace appearance."
         title="Settings"
       />
-      <ProfileForm user={user} />
-      <AppearanceSettings />
+      <ProfilePanel user={user} />
+      <AppearancePanel />
     </PageContainer>
   )
 }
