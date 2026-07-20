@@ -7,6 +7,7 @@ import type { AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { createAuthSecurity } from './http/security'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
+import { createUsersModule } from './modules/users'
 
 type CreateAppOptions = {
   env: AppEnv
@@ -15,8 +16,18 @@ type CreateAppOptions = {
 
 export function createApp({ env, prisma }: CreateAppOptions) {
   const auth = createAuthModule({ db: prisma, env })
+  const users = createUsersModule({
+    db: prisma,
+    requireAdmin: auth.requireAdmin,
+    requireAuth: auth.requireAuth,
+  })
   const app = new OpenAPIHono<AuthHttpEnv>({
     defaultHook: validationErrorHook,
+  })
+  app.openAPIRegistry.registerComponent('securitySchemes', 'BearerAuth', {
+    type: 'http',
+    scheme: 'bearer',
+    bearerFormat: 'JWT',
   })
 
   app.use(secureHeaders())
@@ -42,6 +53,17 @@ export function createApp({ env, prisma }: CreateAppOptions) {
     trustedProxyClientIpPosition: env.TRUSTED_PROXY_CLIENT_IP_POSITION,
   })) {
     app.use('/api/auth/*', middleware)
+  }
+  for (const middleware of createAuthSecurity({
+    bodyLimitBytes: env.AUTH_BODY_LIMIT_BYTES,
+    rateLimitMax: env.AUTH_RATE_LIMIT_MAX,
+    rateLimitWindowSeconds: env.AUTH_RATE_LIMIT_WINDOW_SECONDS,
+    trustProxy: env.TRUST_PROXY,
+    trustedProxyClientIpHeader: env.TRUSTED_PROXY_CLIENT_IP_HEADER,
+    trustedProxyClientIpPosition: env.TRUSTED_PROXY_CLIENT_IP_POSITION,
+  })) {
+    app.use('/api/users/*', middleware)
+    app.use('/api/admin/*', middleware)
   }
   app.get('/', (c) => {
     return c.json({
@@ -72,6 +94,8 @@ export function createApp({ env, prisma }: CreateAppOptions) {
   })
 
   app.route('/api/auth', auth.routes)
+  app.route('/api/users', users.userRoutes)
+  app.route('/api/admin', users.adminRoutes)
 
   app.doc('/openapi.json', {
     openapi: '3.0.0',

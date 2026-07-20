@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { UserDto } from './index'
 import {
   apiErrorSchema,
   cookieAuthResponseSchema,
@@ -19,8 +20,9 @@ const validUser = {
   id: 'user_1',
   email: 'user@example.com',
   displayName: null,
+  role: 'user',
   createdAt: '2026-05-11T00:00:00.000Z',
-}
+} satisfies UserDto
 
 describe('auth contracts', () => {
   test('normalizes registration and login input', () => {

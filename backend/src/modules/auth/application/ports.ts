@@ -21,12 +21,13 @@ export type AuthRepository = {
     }
   }): Promise<{ user: AuthUserRecord; session: { id: string } }>
   createSession(input: {
+    authorizeUser(user: AuthUserRecord): boolean | Promise<boolean>
     userId: string
     refreshTokenHash: string
     refreshTokenFamilyHash: string
     expiresAt: Date
     metadata: SessionMetadata
-  }): Promise<{ id: string }>
+  }): Promise<{ user: AuthUserRecord; session: { id: string } } | null>
   findActiveRefreshSession(input: {
     refreshTokenHash: string
     refreshTokenFamilyHash: string

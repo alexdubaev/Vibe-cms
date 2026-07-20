@@ -1,160 +1,137 @@
-import { Link } from '@tanstack/react-router'
+import { Link, Outlet, useLocation, useRouter, useSearch } from '@tanstack/react-router'
+import type { UserDto, UserRole } from '@web-app-demo/contracts'
+import { useEffect, useRef } from 'react'
 
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PageContainer, PageHeader } from '@/components/PageLayout'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
-import { Spinner } from '@/components/ui/spinner'
-import { Typography } from '@/components/ui/typography'
-import { AuthForm, useAuth } from '@/features/auth'
+  GuestAuthSection,
+  SessionErrorSection,
+  SessionLoadingSection,
+} from '@/components/WebRouteSections'
+import { WorkspaceShell } from '@/components/WorkspaceShell'
+import { Button } from '@/components/ui/button'
+import { AdminDashboard, AdminSettings, AdminUsers } from '@/features/admin'
+import { useAuth } from '@/features/auth'
+import { homePathForRole, safeReturnPath } from '@/features/navigation'
+import { UserHome, UserProfile, UserSettings } from '@/features/users'
 
 export function HomePage() {
   const auth = useAuth()
+  const { returnTo } = useSearch({ from: '/' })
 
-  if (auth.isBootstrapping) {
-    return <LoadingState />
-  }
-
+  if (auth.isBootstrapping) return <SessionLoadingSection />
   if (auth.sessionError && !auth.user) {
-    return <SessionErrorState retry={auth.retrySession} />
+    return <SessionErrorSection retry={auth.retrySession} />
   }
-
   if (auth.user) {
     return (
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-16">
-        <Badge variant="outline" className="w-fit">
-          Authenticated starter
-        </Badge>
-        <div className="grid max-w-3xl gap-4">
-          <Typography variant="h1">Session is active</Typography>
-          <Typography className="max-w-2xl" tone="muted">
-            Logged in as{' '}
-            <Typography as="strong" variant="emphasis" tone="default">
-              {auth.user.email}
-            </Typography>
-            .
-            This is the baseline auth pattern for future web features.
-          </Typography>
-        </div>
-        <Button asChild size="lg" className="w-fit">
-          <Link to="/app">Open app</Link>
-        </Button>
-      </section>
+      <HrefRedirect
+        href={safeReturnPath(auth.user.role, returnTo) ?? homePathForRole(auth.user.role)}
+      />
     )
   }
-
-  return (
-    <section className="mx-auto grid w-full max-w-6xl gap-8 px-5 py-12 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-center">
-      <div className="grid gap-5">
-        <Badge variant="outline" className="w-fit">
-          Golden path template
-        </Badge>
-        <Typography className="max-w-3xl" variant="h1">
-          Auth, validation, API state, and forms are wired from day one.
-        </Typography>
-        <Typography className="max-w-2xl" tone="muted">
-          The web app uses shared Zod contracts, TanStack Query for server state, TanStack Form for
-          input state, and an API client that refreshes sessions through the backend.
-        </Typography>
-      </div>
-      <AuthForm />
-    </section>
-  )
+  return <GuestAuthSection />
 }
 
-export function AppPage() {
+export function UserHomePage() {
+  const user = useWorkspaceUser('user')
+  return <UserHome user={user} />
+}
+
+export function UserProfilePage() {
+  const user = useWorkspaceUser('user')
+  return <UserProfile user={user} />
+}
+
+export function UserSettingsPage() {
   const auth = useAuth()
+  return <UserSettings onLogout={auth.logout} />
+}
 
-  if (auth.isBootstrapping) {
-    return <LoadingState />
-  }
+export function AdminDashboardPage() {
+  return <AdminDashboard />
+}
 
-  if (auth.sessionError && !auth.user) {
-    return <SessionErrorState retry={auth.retrySession} />
-  }
+export function AdminUsersPage() {
+  const user = useWorkspaceUser('admin')
+  return <AdminUsers currentUser={user} />
+}
 
-  if (!auth.user) {
-    return (
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-16">
-        <Badge variant="outline" className="w-fit">
-          Protected example
-        </Badge>
-        <div className="grid max-w-3xl gap-4">
-          <Typography variant="h1">Login required</Typography>
-          <Typography className="max-w-2xl" tone="muted">
-            This route intentionally stays small and shows where protected product UI begins.
-          </Typography>
+export function AdminSettingsPage() {
+  const user = useWorkspaceUser('admin')
+  return <AdminSettings user={user} />
+}
+
+export function UserWorkspaceLayout() {
+  return <WorkspaceRoute role="user" />
+}
+
+export function AdminWorkspaceLayout() {
+  return <WorkspaceRoute role="admin" />
+}
+
+export function NotFoundPage() {
+  const auth = useAuth()
+  const destination = auth.user ? homePathForRole(auth.user.role) : '/'
+  return (
+    <main>
+      <PageContainer>
+        <PageHeader
+          description="The page you requested does not exist."
+          title="Page not found"
+        />
+        <div>
+          <Button asChild>
+            {destination === '/' ? (
+              <Link search={{ returnTo: undefined }} to="/">Return home</Link>
+            ) : (
+              <Link to={destination}>Return home</Link>
+            )}
+          </Button>
         </div>
-        <Button asChild size="lg" className="w-fit">
-          <Link to="/">Go to auth</Link>
-        </Button>
-      </section>
-    )
+      </PageContainer>
+    </main>
+  )
+}
+
+function WorkspaceRoute({ role }: { role: UserRole }) {
+  const auth = useAuth()
+  const location = useLocation()
+
+  if (auth.isBootstrapping) return <SessionLoadingSection />
+  if (auth.sessionError && !auth.user) {
+    return <SessionErrorSection retry={auth.retrySession} />
+  }
+  if (!auth.user) {
+    const returnTo = `${location.pathname}${location.searchStr}`
+    return <HrefRedirect href={`/?returnTo=${encodeURIComponent(returnTo)}`} />
+  }
+  if (auth.user.role !== role) {
+    return <HrefRedirect href={homePathForRole(auth.user.role)} />
   }
 
   return (
-    <section className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-12">
-      <div className="grid gap-3">
-        <Badge variant="outline" className="w-fit">
-          Current user
-        </Badge>
-        <Typography variant="h1">
-          {auth.user.displayName ?? auth.user.email}
-        </Typography>
-        <Typography tone="muted">{auth.user.email}</Typography>
-      </div>
-
-      <Separator />
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>User ID</CardTitle>
-            <CardDescription wrap="break">{auth.user.id}</CardDescription>
-          </CardHeader>
-        </Card>
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Created</CardTitle>
-            <CardDescription>{new Date(auth.user.createdAt).toLocaleString()}</CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    </section>
+    <WorkspaceShell onLogout={auth.logout} user={auth.user}>
+      <Outlet />
+    </WorkspaceShell>
   )
 }
 
-function LoadingState() {
-  return (
-    <section className="mx-auto w-full max-w-6xl px-5 py-16">
-      <Card className="w-fit">
-        <CardContent className="flex items-center gap-3">
-          <Spinner />
-          <Typography variant="bodySm" tone="muted">
-            Checking session...
-          </Typography>
-        </CardContent>
-      </Card>
-    </section>
-  )
+function useWorkspaceUser(role: UserRole): UserDto {
+  const user = useAuth().user
+  if (!user || user.role !== role) {
+    throw new Error(`${role} workspace page rendered outside its guarded layout`)
+  }
+  return user
 }
 
-function SessionErrorState({ retry }: { retry: () => Promise<void> }) {
-  return (
-    <section className="mx-auto grid w-full max-w-6xl gap-4 px-5 py-16" role="alert">
-      <Typography variant="h2">Session check is temporarily unavailable</Typography>
-      <Typography tone="muted">
-        Your session was not cleared. Check the connection and try again.
-      </Typography>
-      <Button type="button" className="w-fit" onClick={() => void retry()}>
-        Try again
-      </Button>
-    </section>
-  )
+function HrefRedirect({ href }: { href: string }) {
+  const router = useRouter()
+  const hasRedirected = useRef(false)
+  useEffect(() => {
+    if (hasRedirected.current) return
+    hasRedirected.current = true
+    router.history.replace(href)
+  }, [href, router])
+  return null
 }

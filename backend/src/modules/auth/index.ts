@@ -12,7 +12,7 @@ import {
   hashRefreshToken,
   hashRefreshTokenFamily,
 } from './infrastructure/refresh-tokens'
-import { createRequireAuth, type AuthHttpEnv } from './transport/middleware'
+import { createRequireAuth, createRequireRole, type AuthHttpEnv } from './transport/middleware'
 import { createAuthRoutes } from './transport/routes'
 
 type CreateAuthModuleOptions = {
@@ -65,6 +65,7 @@ export function createAuthModule({
     authenticateAccessToken: (accessToken: string | undefined) =>
       service.authenticateAccessToken(accessToken),
     requireAuth,
+    requireAdmin: createRequireRole('admin'),
     routes: createAuthRoutes({ env, requireAuth, service }),
   }
 }

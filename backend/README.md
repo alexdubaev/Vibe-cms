@@ -35,6 +35,8 @@ bun run --cwd backend prisma:validate
 bun run --cwd backend prisma:generate
 bun run --cwd backend prisma:migrate
 bun run --cwd backend prisma:deploy
+bun run --cwd backend prisma:seed
+bun run --cwd backend db:deploy
 ```
 
 On Windows PowerShell, use `Copy-Item backend/.env.example backend/.env` instead of `cp`. Workspace aliases are also available from the repository root: `bun run dev:backend`, `bun run build:backend`, `bun run typecheck:backend`, and `bun run test:backend`.
@@ -53,9 +55,22 @@ Keep an explicit username and password in Prisma connection URLs even on local n
 
 `JWT_SECRET` must be at least 32 characters locally. Production accepts the 64-or-more-character hexadecimal output of `openssl rand -hex 32`; do not use the `.env.example` placeholder, repeated characters, or human phrases.
 
+`ADMIN_SEED_EMAIL` defaults to `admin@example.com` for local seeding.
+`ADMIN_SEED_PASSWORD` is optional locally: without it, `bun run prisma:seed`
+creates a new locked account with `passwordHash = null`; promoting an existing
+account preserves its current password credential. With a password, the seed
+hashes it with Argon2id and creates or unlocks the account. The seed is
+idempotent and an empty password never erases an
+existing hash; reusing the already configured password also preserves the hash
+and active sessions. Production uses `bun run db:deploy`: it applies migrations,
+optionally bootstraps the first administrator from a paired email/password, then
+fails unless at least one administrator has a password credential.
+Production bootstrap also rejects blank, known-placeholder, and repeated-pattern
+passwords in addition to enforcing the 12–128 character limit.
+
 `COOKIE_SECURE=false` is appropriate for local HTTP; production requires `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, HTTP, or path-bearing CORS origins are invalid. Every cookie-backed auth write (`register`, `login`, `refresh`, and `logout`) also requires a trusted `Origin` in production cookie mode.
 
-Auth writes are protected by `AUTH_BODY_LIMIT_BYTES` and a bounded in-process fixed-window limiter. `TRUST_PROXY=false` uses the direct Bun connection address. Behind a trusted proxy, set `TRUST_PROXY=true` together with the provider's authoritative `TRUSTED_PROXY_CLIENT_IP_HEADER`; use `TRUSTED_PROXY_CLIENT_IP_POSITION=last` only when the provider appends the client to a comma-separated chain. DigitalOcean App Platform uses `do-connecting-ip`, while the documented Yandex Serverless Containers path uses the last `X-Forwarded-For` value. The default App Platform shape is one API instance. Before horizontally scaling, move rate-limit state to a shared trusted store or edge/WAF layer.
+Auth and authenticated account-management writes are protected by `AUTH_BODY_LIMIT_BYTES` and a bounded in-process fixed-window limiter. `TRUST_PROXY=false` uses the direct Bun connection address. Behind a trusted proxy, set `TRUST_PROXY=true` together with the provider's authoritative `TRUSTED_PROXY_CLIENT_IP_HEADER`; use `TRUSTED_PROXY_CLIENT_IP_POSITION=last` only when the provider appends the client to a comma-separated chain. DigitalOcean App Platform uses `do-connecting-ip`, while the documented Yandex Serverless Containers path uses the last `X-Forwarded-For` value. The default App Platform shape is one API instance. Before horizontally scaling, move rate-limit state to a shared trusted store or edge/WAF layer.
 
 `REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `auth:sessions:cleanup` on a schedule to delete revoked, sliding-expired, and absolute-expired rows after `SESSION_RETENTION_DAYS`.
 
@@ -88,15 +103,36 @@ Production deployment for the backend uses DigitalOcean App Platform with Digita
 - `POST /api/auth/token/login`
 - `POST /api/auth/token/refresh`
 - `POST /api/auth/token/logout`
+- `PATCH /api/users/me`
+- `GET /api/admin/dashboard`
+- `GET /api/admin/users`
+- `PATCH /api/admin/users/:userId/role`
 - `GET /openapi.json`
 - `GET /health/live`
 - `GET /health/ready`
 
 Passwords are hashed through `Bun.password` with Argon2id. Access tokens are short-lived JWTs through `jose`. Initial refresh tokens are random; rotated successors are opaque, domain-separated HMAC values derived with the server secret so concurrent uses of the same credential receive the same successor. Only current and immediately previous SHA-256 hashes are stored in the database. Refresh atomically rotates the credential inside the same logical session, so another browser tab's still-valid access token is not revoked. Reuse of the previous credential after the short race-tolerance window revokes that session as potentially compromised.
 
+Every password registration and new social account is created with role `user`;
+clients cannot submit a role. `UserDto` includes the current `user | admin` role,
+but access JWTs do not. Authenticated requests load the active session and user
+from PostgreSQL, so a role change takes effect without waiting for a token to
+expire. All `/api/admin/*` routes apply the same server-side `403 FORBIDDEN`
+guard.
+
+The users module owns self-service profile updates, safe admin summaries,
+dashboard counts, and role changes. A role change is serialized in PostgreSQL,
+cannot demote the acting administrator or leave the system without an
+administrator, and revokes every session of the affected user only when the role
+actually changes. Role/bootstrap authority changes and existing-account session
+issuance share a per-user fence; login re-reads the current user and re-verifies
+the password before inserting a session.
+Admin list responses expose only `id`, `email`, `displayName`,
+`role`, and `createdAt`.
+
 ## Architecture
 
-`src/index.ts` only starts the API server. `src/runtime.ts` loads env and creates the Prisma client for API, worker, and cron entrypoints. `src/app.ts` is the composition root. Product contexts live under `src/modules/<context>` and expose only `index.ts` across context boundaries. Auth is the golden path: `transport` owns Hono/HTTP, `application` owns use cases and ports, optional `domain` code stays pure, and `infrastructure` owns Prisma and token/password adapters. Route factories capture dependencies in closures; request context contains only the authenticated principal. Run `bun run architecture:check` to enforce these dependency rules. `src/db.ts` normalizes DigitalOcean Managed PostgreSQL URLs that use `sslmode=require` so the Prisma PostgreSQL adapter uses libpq-compatible TLS handling.
+`src/index.ts` only starts the API server. `src/runtime.ts` loads env and creates the Prisma client for API, worker, and cron entrypoints. `src/app.ts` is the composition root. Product contexts live under `src/modules/<context>` and expose only `index.ts` across context boundaries. Auth is the authentication/principal golden path; the separate users context owns profiles, admin directory reads, and role policy. `transport` owns Hono/HTTP, `application` owns use cases and ports, optional `domain` code stays pure, and `infrastructure` owns Prisma and token/password adapters. Route factories capture dependencies in closures; request context contains only the authenticated principal. Run `bun run architecture:check` to enforce these dependency rules. `src/db.ts` normalizes DigitalOcean Managed PostgreSQL URLs that use `sslmode=require` so the Prisma PostgreSQL adapter uses libpq-compatible TLS handling.
 
 The storage service lives in `src/storage` and wraps DigitalOcean Spaces through S3-compatible SDK calls. Product-specific upload routes should validate ownership and permissions, then delegate object key generation, presigned upload/download URLs, public CDN URL construction, and deletion to that service.
 

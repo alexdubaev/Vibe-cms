@@ -8,8 +8,63 @@ const user = {
   email: 'user@example.com',
   passwordHash: 'password-hash',
   displayName: null,
+  role: 'user' as const,
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
 }
+
+test('verifies an unchanged password before opening the session transaction', async () => {
+  let insideSessionTransaction = false
+  const verificationContexts: boolean[] = []
+  const repository = {
+    findUserByEmail: async () => user,
+    createSession: async (input: Parameters<AuthRepository['createSession']>[0]) => {
+      insideSessionTransaction = true
+      const authorized = await input.authorizeUser(user)
+      insideSessionTransaction = false
+      return authorized ? { user, session: { id: 'session-created' } } : null
+    },
+  } as unknown as AuthRepository
+  const service = new AuthService({
+    accessTokens: {
+      sign: async () => 'access-token',
+      verify: async () => ({ sub: user.id, email: user.email, sessionId: 'session-created' }),
+    },
+    clock: { now: () => new Date('2026-01-01T00:00:00.000Z') },
+    logoutCleanup: async () => undefined,
+    passwords: {
+      hash: async () => 'password-hash',
+      verify: async () => {
+        verificationContexts.push(insideSessionTransaction)
+        return true
+      },
+    },
+    projectUser: async (record) => ({
+      id: record.id,
+      email: record.email,
+      displayName: record.displayName,
+      role: record.role,
+      createdAt: record.createdAt.toISOString(),
+    }),
+    refreshReuseGraceSeconds: 10,
+    refreshTokenTtlDays: 30,
+    sessionAbsoluteTtlDays: 90,
+    refreshTokens: {
+      create: () => 'refresh-token',
+      hash: (token) => `hash:${token}`,
+      familyHash: (token) => `family:${token}`,
+      rotate: (token) => `next:${token}`,
+    },
+    repository,
+  })
+
+  await expect(service.login({
+    email: user.email,
+    password: 'password123',
+  }, {})).resolves.toMatchObject({
+    accessToken: 'access-token',
+  })
+  expect(verificationContexts).toEqual([false])
+})
 
 test('refresh keeps the logical session id stable while rotating its credential', async () => {
   const signedSessionIds: string[] = []
@@ -17,7 +72,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
   const repository = {
     findUserByEmail: async () => null,
     createPasswordUserWithSession: async () => ({ user, session: { id: 'session-created' } }),
-    createSession: async () => ({ id: 'session-created' }),
+    createSession: async () => ({ user, session: { id: 'session-created' } }),
     findActiveRefreshSession: async (input) => {
       refreshCutoffs.push(input.createdAfter)
       return {
@@ -52,6 +107,7 @@ test('refresh keeps the logical session id stable while rotating its credential'
       id: record.id,
       email: record.email,
       displayName: record.displayName,
+      role: record.role,
       createdAt: record.createdAt.toISOString(),
     }),
     refreshTokenTtlDays: 30,
@@ -99,6 +155,7 @@ test('refresh revokes the logical session when a previous credential is reused a
       id: user.id,
       email: user.email,
       displayName: null,
+      role: user.role,
       createdAt: user.createdAt.toISOString(),
     }),
     refreshReuseGraceSeconds: 10,
@@ -150,6 +207,7 @@ test('refresh returns the winning successor when another request wins the rotati
       id: user.id,
       email: user.email,
       displayName: null,
+      role: user.role,
       createdAt: user.createdAt.toISOString(),
     }),
     refreshReuseGraceSeconds: 10,

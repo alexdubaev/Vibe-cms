@@ -10,13 +10,22 @@ datasource db {
 model User {
   id           String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
   email        String        @unique
-  passwordHash String        @map("password_hash")
+  passwordHash String?       @map("password_hash")
   displayName  String?       @map("display_name")
+  role         UserRole      @default(user)
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
   sessions     AuthSession[]
 
+  @@index([role], map: "users_role_idx")
   @@map("users")
+}
+
+enum UserRole {
+  user
+  admin
+
+  @@map("user_role")
 }
 
 model AuthSession {
