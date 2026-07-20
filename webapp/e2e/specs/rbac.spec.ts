@@ -65,6 +65,37 @@ test('mobile workspace navigation closes the sidebar sheet', async ({ page }) =>
   await expect(mobileSidebar).toBeHidden()
 })
 
+test('workspace navigation and account controls are keyboard operable', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'Login' }).click()
+  await page.getByLabel('Email').fill(e2eAdminEmail)
+  await page.getByLabel('Password').fill(e2eAdminPassword)
+  await page.getByRole('button', { name: 'Login' }).click()
+  await expect(page).toHaveURL(/\/admin$/)
+
+  const usersLink = page.getByRole('link', { name: 'Users' })
+  await usersLink.focus()
+  await expect(usersLink).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/\/admin\/users$/)
+
+  const accountMenu = page.getByRole('button', { name: 'Open account menu' })
+  await accountMenu.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('menuitem', { name: 'Log out' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menuitem', { name: 'Log out' })).toBeHidden()
+  await expect(accountMenu).toBeFocused()
+
+  const sidebar = page.locator('[data-slot="sidebar"][data-state]')
+  const sidebarTrigger = page.locator('[data-sidebar="trigger"]')
+  await sidebarTrigger.focus()
+  await page.keyboard.press('Enter')
+  await expect(sidebar).toHaveAttribute('data-state', 'collapsed')
+})
+
 test('admin data surfaces recover from errors and expose safe directory states', async ({
   page,
 }) => {

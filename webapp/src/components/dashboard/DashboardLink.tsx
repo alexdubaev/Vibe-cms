@@ -9,29 +9,26 @@ import type { WorkspaceRoutePath } from '@/features/navigation'
 
 type DashboardLinkProps = Omit<
   ComponentPropsWithoutRef<'a'>,
-  'href'
+  'className' | 'href' | 'style'
 > & {
   to: WorkspaceRoutePath
 }
 
 export const DashboardLink = forwardRef<HTMLAnchorElement, DashboardLinkProps>(
-function DashboardLink({
-  onClick,
-  to,
-  ...props
-}, ref) {
-  const { setOpenMobile } = useSidebar()
+  function DashboardLink({ onClick, to, ...props }, ref) {
+    const { setOpenMobile } = useSidebar()
 
-  return (
-    <Link
-      {...props}
-      activeOptions={{ exact: true }}
-      onClick={(event) => {
-        onClick?.(event)
-        if (!event.defaultPrevented) setOpenMobile(false)
-      }}
-      ref={ref}
-      to={to}
-    />
-  )
-})
+    return (
+      <Link
+        {...props}
+        activeOptions={{ exact: true }}
+        onClick={(event) => {
+          onClick?.(event)
+          if (!event.defaultPrevented) setOpenMobile(false)
+        }}
+        ref={ref}
+        to={to}
+      />
+    )
+  },
+)
