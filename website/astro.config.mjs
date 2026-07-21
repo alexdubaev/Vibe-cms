@@ -2,6 +2,7 @@
 import { defineConfig } from 'astro/config';
 
 import react from '@astrojs/react';
+import tailwindcss from '@tailwindcss/vite';
 
 // https://astro.build/config
 //
@@ -33,5 +34,8 @@ import react from '@astrojs/react';
 //      DigitalOcean/Yandex static path; use rebuilds or CDN/runtime cache
 //      freshness instead.
 export default defineConfig({
-  integrations: [react()]
+  integrations: [react()],
+  vite: {
+    plugins: [tailwindcss()]
+  }
 });

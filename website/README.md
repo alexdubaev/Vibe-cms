@@ -5,7 +5,7 @@ The website workspace is a separate Astro project for public, SEO-facing surface
 ## Stack
 
 - Astro (static SSG by default; SSR-ready per route)
-- Tailwind CSS 4 through the official PostCSS plugin
+- Tailwind CSS 4 through the official Vite plugin
 - shadcn/ui registry rendered through React on the server by default
 - TypeScript
 - Vite through Astro
