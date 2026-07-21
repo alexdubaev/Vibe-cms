@@ -123,6 +123,10 @@ export function createPrismaUsersRepository(db: DbClient): UsersRepository {
           where: { userId: target.id, revokedAt: null },
           data: { revokedAt: input.now },
         })
+        await tx.passwordResetToken.updateMany({
+          where: { userId: target.id, usedAt: null },
+          data: { usedAt: input.now },
+        })
         return toAdminUserSummary(updated)
       }, userAuthorityTransitionTransactionOptions)
     },

@@ -2,7 +2,9 @@ import { OpenAPIHono } from '@hono/zod-openapi'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
 
+import { createBackgroundTasks, type TaskDeferrer } from './background-tasks'
 import type { DbClient } from './db'
+import { disabledEmailDelivery, type EmailDelivery } from './email/service'
 import type { AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { createAuthSecurity } from './http/security'
@@ -10,12 +12,19 @@ import { createAuthModule, type AuthHttpEnv } from './modules/auth'
 import { createUsersModule } from './modules/users'
 
 type CreateAppOptions = {
+  backgroundTasks?: TaskDeferrer
+  emailDelivery?: EmailDelivery
   env: AppEnv
   prisma: DbClient
 }
 
-export function createApp({ env, prisma }: CreateAppOptions) {
-  const auth = createAuthModule({ db: prisma, env })
+export function createApp({
+  backgroundTasks = createBackgroundTasks(),
+  emailDelivery = disabledEmailDelivery,
+  env,
+  prisma,
+}: CreateAppOptions) {
+  const auth = createAuthModule({ backgroundTasks, db: prisma, emailDelivery, env })
   const users = createUsersModule({
     db: prisma,
     requireAdmin: auth.requireAdmin,

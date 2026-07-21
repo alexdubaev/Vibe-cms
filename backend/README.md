@@ -70,9 +70,11 @@ passwords in addition to enforcing the 12–128 character limit.
 
 `COOKIE_SECURE=false` is appropriate for local HTTP; production requires `COOKIE_SECURE=true` with exact HTTPS origins in `CORS_ORIGINS`. Production browser auth uses `SameSite=None; Secure` refresh cookies, so wildcard, empty, HTTP, or path-bearing CORS origins are invalid. Every cookie-backed auth write (`register`, `login`, `refresh`, and `logout`) also requires a trusted `Origin` in production cookie mode.
 
+`WEBAPP_ORIGIN` is the public browser-app origin used to compose transactional links such as password reset. It defaults to the first `CORS_ORIGINS` entry. Email delivery is provider-neutral: `createApp` accepts an `EmailDelivery` adapter, while the committed runtime uses a disabled adapter until a project wires its chosen provider. With delivery disabled, password-reset requests still return the same generic accepted response and do not create tokens.
+
 Auth and authenticated account-management writes are protected by `AUTH_BODY_LIMIT_BYTES` and a bounded in-process fixed-window limiter. `TRUST_PROXY=false` uses the direct Bun connection address. Behind a trusted proxy, set `TRUST_PROXY=true` together with the provider's authoritative `TRUSTED_PROXY_CLIENT_IP_HEADER`; use `TRUSTED_PROXY_CLIENT_IP_POSITION=last` only when the provider appends the client to a comma-separated chain. DigitalOcean App Platform uses `do-connecting-ip`, while the documented Yandex Serverless Containers path uses the last `X-Forwarded-For` value. The default App Platform shape is one API instance. Before horizontally scaling, move rate-limit state to a shared trusted store or edge/WAF layer.
 
-`REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `auth:sessions:cleanup` on a schedule to delete revoked, sliding-expired, and absolute-expired rows after `SESSION_RETENTION_DAYS`.
+`REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `auth:sessions:cleanup` on a schedule to delete revoked, sliding-expired, and absolute-expired session rows after `SESSION_RETENTION_DAYS` and remove expired password-reset tokens.
 
 DigitalOcean Spaces env is optional. Leave `SPACES_*` blank until the product needs uploads, media, exports, or downloads. When storage is active, configure the complete Spaces group in `backend/.env` and follow [../docs/STORAGE.md](../docs/STORAGE.md).
 
@@ -103,6 +105,8 @@ Production deployment for the backend uses DigitalOcean App Platform with Digita
 - `POST /api/auth/token/login`
 - `POST /api/auth/token/refresh`
 - `POST /api/auth/token/logout`
+- `POST /api/auth/password-reset/request`
+- `POST /api/auth/password-reset/confirm`
 - `PATCH /api/users/me`
 - `GET /api/admin/dashboard`
 - `GET /api/admin/users`
@@ -112,6 +116,8 @@ Production deployment for the backend uses DigitalOcean App Platform with Digita
 - `GET /health/ready`
 
 Passwords are hashed through `Bun.password` with Argon2id. Access tokens are short-lived JWTs through `jose`. Initial refresh tokens are random; rotated successors are opaque, domain-separated HMAC values derived with the server secret so concurrent uses of the same credential receive the same successor. Only current and immediately previous SHA-256 hashes are stored in the database. Refresh atomically rotates the credential inside the same logical session, so another browser tab's still-valid access token is not revoked. Reuse of the previous credential after the short race-tolerance window revokes that session as potentially compromised.
+
+Password reset uses a random 32-byte, 30-minute token. Only its SHA-256 hash is stored, requests are limited to one token per account per minute, and account lookup plus email delivery run after the generic response so response timing does not reveal whether an email exists. The API runtime drains accepted background tasks during graceful shutdown; every task has a deadline, server and task draining share one absolute shutdown deadline, and email adapters must honor the supplied `AbortSignal`. Timed-out work stays tracked while abort cleanup settles inside the remaining shutdown budget. Delivery remains best-effort across abrupt process loss, so clients keep the generic retryable experience. A failed reset email invalidates its token and is reported through the background-task error boundary. A successful confirmation atomically changes the Argon2id password hash, consumes every outstanding reset token, revokes every active session, clears the browser refresh cookie, and does not sign the user in automatically. Reset links place the raw token in the URL fragment so it is not sent in the initial HTTP request or referrer. Scheduled auth cleanup removes expired reset-token rows.
 
 Every password registration and new social account is created with role `user`;
 clients cannot submit a role. `UserDto` includes the current `user | admin` role,

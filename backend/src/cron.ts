@@ -18,16 +18,23 @@ const cronTasks = {
     const absoluteRetentionCutoff = new Date(
       now.getTime() - (env.SESSION_ABSOLUTE_TTL_DAYS + env.SESSION_RETENTION_DAYS) * dayMs,
     )
-    const { count } = await prisma.authSession.deleteMany({
-      where: {
-        OR: [
-          { expiresAt: { lt: retentionCutoff } },
-          { revokedAt: { lt: retentionCutoff } },
-          { createdAt: { lt: absoluteRetentionCutoff } },
-        ],
-      },
-    })
-    console.log(`Cron auth:sessions:cleanup removed ${count} stale sessions.`)
+    const [sessions, resetTokens] = await Promise.all([
+      prisma.authSession.deleteMany({
+        where: {
+          OR: [
+            { expiresAt: { lt: retentionCutoff } },
+            { revokedAt: { lt: retentionCutoff } },
+            { createdAt: { lt: absoluteRetentionCutoff } },
+          ],
+        },
+      }),
+      prisma.passwordResetToken.deleteMany({
+        where: { expiresAt: { lt: now } },
+      }),
+    ])
+    console.log(
+      `Cron auth:sessions:cleanup removed ${sessions.count} stale sessions and ${resetTokens.count} expired password reset tokens.`,
+    )
   },
 } satisfies Record<string, CronTask>
 

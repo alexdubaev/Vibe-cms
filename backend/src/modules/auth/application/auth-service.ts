@@ -1,4 +1,9 @@
-import type { LoginRequest, RegisterPayload } from '@web-app-demo/contracts'
+import type {
+  LoginRequest,
+  PasswordResetConfirmRequest,
+  PasswordResetRequest,
+  RegisterPayload,
+} from '@web-app-demo/contracts'
 
 import { AuthFailure } from '../domain/errors'
 import { sessionExpiresAt, type SessionMetadata } from '../domain/session'
@@ -9,6 +14,9 @@ import type {
   AuthRepository,
   Clock,
   LogoutCleanup,
+  PasswordResetNotifier,
+  PasswordResetTaskDeferrer,
+  PasswordResetTokens,
   Passwords,
   ProjectUser,
   RefreshTokens,
@@ -16,8 +24,13 @@ import type {
 
 type AuthServiceDependencies = {
   accessTokens: AccessTokens
+  backgroundTasks: PasswordResetTaskDeferrer
   clock: Clock
   logoutCleanup: LogoutCleanup
+  passwordResetCooldownSeconds: number
+  passwordResetNotifier: PasswordResetNotifier
+  passwordResetTokenTtlMinutes: number
+  passwordResetTokens: PasswordResetTokens
   passwords: Passwords
   projectUser: ProjectUser
   refreshTokenTtlDays: number
@@ -68,6 +81,86 @@ export class AuthService {
           currentUser.passwordHash === user.passwordHash ||
           await this.dependencies.passwords.verify(input.password, currentUser.passwordHash)
         )
+      ),
+    )
+  }
+
+  async requestPasswordReset(input: PasswordResetRequest) {
+    const { backgroundTasks, passwordResetNotifier } = this.dependencies
+    if (!passwordResetNotifier.configured) return { accepted: true as const }
+
+    backgroundTasks.defer((signal) => this.deliverPasswordReset(input, signal))
+    return { accepted: true as const }
+  }
+
+  private async deliverPasswordReset(input: PasswordResetRequest, signal: AbortSignal) {
+    const { passwordResetNotifier, repository } = this.dependencies
+    const user = await repository.findUserByEmail(input.email)
+    if (!user?.passwordHash) return
+
+    const now = this.dependencies.clock.now()
+    const token = this.dependencies.passwordResetTokens.create()
+    const tokenHash = this.dependencies.passwordResetTokens.hash(token)
+    const expiresAt = new Date(
+      now.getTime() + this.dependencies.passwordResetTokenTtlMinutes * 60 * 1000,
+    )
+    const created = await repository.createPasswordResetToken({
+      userId: user.id,
+      tokenHash,
+      expiresAt,
+      now,
+      createdAfter: new Date(
+        now.getTime() - this.dependencies.passwordResetCooldownSeconds * 1000,
+      ),
+    })
+    if (!created) return
+
+    try {
+      await passwordResetNotifier.sendPasswordReset(
+        {
+          email: user.email,
+          token,
+          expiresAt,
+        },
+        signal,
+      )
+    } catch (error) {
+      await repository.invalidatePasswordResetToken({ tokenHash, now })
+      throw error
+    }
+
+  }
+
+  async confirmPasswordReset(input: PasswordResetConfirmRequest) {
+    const tokenHash = this.dependencies.passwordResetTokens.hash(input.token)
+    const active = await this.dependencies.repository.hasActivePasswordResetToken({
+      tokenHash,
+      now: this.dependencies.clock.now(),
+    })
+    if (!active) {
+      throw new AuthFailure(
+        'password_reset_invalid',
+        'Password reset link is invalid or expired',
+      )
+    }
+
+    const passwordHash = await this.dependencies.passwords.hash(input.password)
+    const completed = await this.dependencies.repository.completePasswordReset({
+      tokenHash,
+      passwordHash,
+      now: this.dependencies.clock.now(),
+    })
+    if (!completed) {
+      throw new AuthFailure(
+        'password_reset_invalid',
+        'Password reset link is invalid or expired',
+      )
+    }
+
+    this.dependencies.backgroundTasks.defer((signal) =>
+      this.dependencies.passwordResetNotifier.sendPasswordChanged(
+        { email: completed.email },
+        signal,
       ),
     )
   }

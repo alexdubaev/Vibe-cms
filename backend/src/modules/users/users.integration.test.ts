@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createApp } from '../../app'
@@ -116,6 +117,8 @@ maybeDescribe('users and admin API integration', () => {
       data: { role: 'admin' },
     })
     const target = await register('target@example.com', 'Target')
+    const resetTokenBeforePromotion = 'p'.repeat(43)
+    await createOutstandingPasswordResetToken(target.user.id, resetTokenBeforePromotion)
 
     const dashboard = await app.request('/api/admin/dashboard', {
       headers: authenticatedHeaders(admin.accessToken),
@@ -185,6 +188,7 @@ maybeDescribe('users and admin API integration', () => {
       headers: authenticatedHeaders(target.accessToken),
     })
     expect(revokedMe.status).toBe(401)
+    await expectPasswordResetRejected(resetTokenBeforePromotion)
 
     const promotedLogin = await login('target@example.com')
     const promotedDashboard = await app.request('/api/admin/dashboard', {
@@ -492,6 +496,8 @@ maybeDescribe('users and admin API integration', () => {
 
   test('revokes existing sessions when bootstrap changes privileges or credentials', async () => {
     const existing = await register('bootstrap-existing@example.com')
+    const resetTokenBeforeBootstrap = 'b'.repeat(43)
+    await createOutstandingPasswordResetToken(existing.user.id, resetTokenBeforeBootstrap)
 
     await bootstrapAdmin(prisma, {
       email: existing.user.email,
@@ -501,6 +507,7 @@ maybeDescribe('users and admin API integration', () => {
     expect(await app.request('/api/auth/me', {
       headers: authenticatedHeaders(existing.accessToken),
     })).toHaveProperty('status', 401)
+    await expectPasswordResetRejected(resetTokenBeforeBootstrap)
     expect(await prisma.user.findUniqueOrThrow({
       where: { id: existing.user.id },
       select: { role: true },
@@ -554,6 +561,26 @@ maybeDescribe('users and admin API integration', () => {
       headers: authenticatedHeaders(replacementSession.accessToken),
     })).toHaveProperty('status', 200)
   })
+
+  function createOutstandingPasswordResetToken(userId: string, token: string) {
+    return prisma.passwordResetToken.create({
+      data: {
+        userId,
+        tokenHash: createHash('sha256').update(token).digest('hex'),
+        expiresAt: new Date(Date.now() + 30 * 60 * 1_000),
+      },
+    })
+  }
+
+  async function expectPasswordResetRejected(token: string) {
+    const response = await app.request('/api/auth/password-reset/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password: 'late-reset-password' }),
+    })
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.code).toBe('AUTH_PASSWORD_RESET_INVALID')
+  }
 
   function gateNextSessionCreate() {
     let markReached: () => void = () => undefined

@@ -77,6 +77,7 @@ function updateExistingAdmin(
     if (!changesAuthenticationAuthority) {
       return { email: config.email, passwordHash: existing.passwordHash }
     }
+    const now = new Date()
 
     const updated = await tx.user.update({
       where: { id: existing.id },
@@ -88,7 +89,11 @@ function updateExistingAdmin(
     })
     await tx.authSession.updateMany({
       where: { userId: existing.id, revokedAt: null },
-      data: { revokedAt: new Date() },
+      data: { revokedAt: now },
+    })
+    await tx.passwordResetToken.updateMany({
+      where: { userId: existing.id, usedAt: null },
+      data: { usedAt: now },
     })
     return updated
   }, userAuthorityTransitionTransactionOptions)

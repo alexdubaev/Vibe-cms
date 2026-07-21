@@ -136,6 +136,30 @@ describe('loadEnv', () => {
     ).toThrow('CORS_ORIGINS')
   })
 
+  test('requires WEBAPP_ORIGIN to be an HTTP origin and HTTPS in production', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/web_app_demo',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+
+    expect(() => loadEnv({ ...baseEnv, WEBAPP_ORIGIN: 'https://web.example.com/path' }))
+      .toThrow('WEBAPP_ORIGIN')
+    expect(() => loadEnv({ ...baseEnv, WEBAPP_ORIGIN: 'ftp://web.example.com' }))
+      .toThrow('WEBAPP_ORIGIN')
+    expect(() => loadEnv({ ...baseEnv, WEBAPP_ORIGIN: 'http://localhost:5173' }))
+      .not.toThrow()
+    expect(() =>
+      loadEnv({
+        ...baseEnv,
+        NODE_ENV: 'production',
+        JWT_SECRET: '0123456789abcdef'.repeat(4),
+        COOKIE_SECURE: 'true',
+        CORS_ORIGINS: 'https://web.example.com',
+        WEBAPP_ORIGIN: 'http://web.example.com',
+      }),
+    ).toThrow('WEBAPP_ORIGIN')
+  })
+
   test('keeps absolute session lifetime at least as long as refresh lifetime', () => {
     expect(() =>
       loadEnv({
