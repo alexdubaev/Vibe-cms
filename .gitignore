@@ -23,7 +23,11 @@ bun-debug.log*
 # Environment files
 .env
 .env.*
-!.env.example
+!backend/.env*.example
+!webapp/.env*.example
+!website/.env*.example
+!mobile/.env*.example
+!mobile/.maestro/.env*.example
 
 # Prisma generated client
 backend/src/generated/prisma/
