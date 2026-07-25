@@ -214,8 +214,8 @@ This block exists only for fresh installs from the template. If this repository 
 ## Safety And Workspace Hygiene
 
 - Never stop or kill processes just to free ports. Use isolated ports, alternate URLs, or test config overrides.
-- Do not propose or implement CI/CD, hosted automation, deployment pipelines, or release ceremony unless explicitly asked.
-- Add automation only when it removes real repeated pain.
+- Do not create CI/CD, GitHub Actions, hosted automation, deployment pipelines, or release ceremony unless the user explicitly requests it.
+- Run relevant tests, typechecks, linters, builds, and other task checks locally before reporting completion; add local automation only when it removes real repeated pain.
 - Do not print secrets, tokens, private keys, credentials, cookies, customer data, or raw `.env` values in final responses.
 - Do not add real secrets to fixtures, tests, docs, screenshots, logs, or committed files.
 - Keep ad-hoc investigation artifacts out of the repository root. Put temporary screenshots, logs, and one-off exports under `./.scratch/` or the tool-owned artifact directory; do not create new root-level `.tmp-*` or `.codex-tmp-*` files.

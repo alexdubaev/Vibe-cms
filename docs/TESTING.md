@@ -47,7 +47,7 @@ The integration and Docker smoke runners refuse database names that do not end w
 
 The Docker smoke test builds the backend image, starts it against `postgres_test`, waits for `/health/ready`, and removes only the smoke container it created.
 
-`.github/workflows/ci.yml` runs typecheck, deployment/script tests, contract tests, webapp client tests, backend tests, and the webapp Playwright smoke flow on pushes to `main` and `master` plus pull requests.
+This template does not ship with GitHub Actions or other hosted CI/CD. Run the relevant checks locally after each task, starting with the smallest set that meaningfully covers the changed surface and expanding only when risk justifies it.
 
 ## Webapp E2E
 
