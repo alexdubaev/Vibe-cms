@@ -7,7 +7,7 @@ import type { DbClient } from './db'
 import { disabledEmailDelivery, type EmailDelivery } from './email/service'
 import type { AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
-import { createAuthSecurity } from './http/security'
+import { createAuthSecurity, createFixedWindowRateLimit } from './http/security'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
 import { createUsersModule } from './modules/users'
 
@@ -25,7 +25,14 @@ export function createApp({
   prisma,
 }: CreateAppOptions) {
   const auth = createAuthModule({ backgroundTasks, db: prisma, emailDelivery, env })
+  const adminUsersReadRateLimit = createFixedWindowRateLimit<AuthHttpEnv>({
+    errorMessage: 'Too many admin user directory requests',
+    key: (c) => c.var.user.id,
+    max: env.ADMIN_USERS_READ_RATE_LIMIT_MAX,
+    windowSeconds: env.ADMIN_USERS_READ_RATE_LIMIT_WINDOW_SECONDS,
+  })
   const users = createUsersModule({
+    adminUsersReadRateLimit,
     db: prisma,
     requireAdmin: auth.requireAdmin,
     requireAuth: auth.requireAuth,

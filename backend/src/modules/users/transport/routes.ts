@@ -79,6 +79,7 @@ const listUsersRoute = createRoute({
     400: { content: errorContent, description: 'Invalid query' },
     401: { content: errorContent, description: 'Authentication required' },
     403: { content: errorContent, description: 'Administrator access required' },
+    429: { content: errorContent, description: 'Too many requests' },
   },
 })
 
@@ -112,12 +113,14 @@ const updateRoleRoute = createRoute({
 })
 
 type CreateUsersRoutesOptions = {
+  adminUsersReadRateLimit: MiddlewareHandler<AuthHttpEnv>
   requireAdmin: MiddlewareHandler<AuthHttpEnv>
   requireAuth: MiddlewareHandler<AuthHttpEnv>
   service: UsersService
 }
 
 export function createUsersRoutes({
+  adminUsersReadRateLimit,
   requireAdmin,
   requireAuth,
   service,
@@ -135,6 +138,7 @@ export function createUsersRoutes({
 
   adminRoutes.use('*', requireAuth)
   adminRoutes.use('*', requireAdmin)
+  adminRoutes.use('/users', adminUsersReadRateLimit)
   adminRoutes.openapi(dashboardRoute, async (c) => c.json(await service.dashboard(), 200))
   adminRoutes.openapi(listUsersRoute, async (c) => {
     return c.json(await service.listUsers(c.req.valid('query')), 200)

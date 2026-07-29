@@ -110,6 +110,8 @@ describe('storageConfigFromEnv', () => {
         AUTH_BODY_LIMIT_BYTES: 64 * 1024,
         AUTH_RATE_LIMIT_MAX: 60,
         AUTH_RATE_LIMIT_WINDOW_SECONDS: 60,
+        ADMIN_USERS_READ_RATE_LIMIT_MAX: 120,
+        ADMIN_USERS_READ_RATE_LIMIT_WINDOW_SECONDS: 60,
         SHUTDOWN_GRACE_SECONDS: 20,
         TRUST_PROXY: false,
         COOKIE_SECURE: false,

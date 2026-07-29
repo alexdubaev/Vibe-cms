@@ -55,6 +55,8 @@ const envSchema = z.object({
   AUTH_BODY_LIMIT_BYTES: z.coerce.number().int().positive().max(1024 * 1024).default(64 * 1024),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+  ADMIN_USERS_READ_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
+  ADMIN_USERS_READ_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
   SHUTDOWN_GRACE_SECONDS: z.coerce.number().int().positive().max(60).default(20),
   TRUST_PROXY: booleanStringSchema,
   TRUSTED_PROXY_CLIENT_IP_HEADER: optionalHttpHeaderNameSchema,
