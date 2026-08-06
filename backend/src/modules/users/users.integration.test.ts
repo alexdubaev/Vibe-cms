@@ -541,6 +541,114 @@ maybeDescribe('users and admin API integration', () => {
     }
   })
 
+  test('concurrent first development seeds converge on one admin and user', async () => {
+    const accounts = {
+      admin: {
+        email: 'concurrent-development-admin@example.com',
+        password: 'concurrent-development-admin-password',
+      },
+      user: {
+        email: 'concurrent-development-user@example.com',
+        password: 'concurrent-development-user-password',
+      },
+    }
+    let userReads = 0
+    let markBothUserReadsComplete: () => void = () => undefined
+    const bothUserReadsComplete = new Promise<void>((resolve) => {
+      markBothUserReadsComplete = resolve
+    })
+    let releaseUserReads: () => void = () => undefined
+    const userReadBarrier = new Promise<void>((resolve) => {
+      releaseUserReads = resolve
+    })
+    const db = prisma.$extends({
+      query: {
+        user: {
+          async findUnique({ args, query }) {
+            const result = await query(args)
+            if (args.where.email === accounts.user.email && userReads < 2) {
+              userReads += 1
+              if (userReads === 2) markBothUserReadsComplete()
+              await userReadBarrier
+            }
+            return result
+          },
+        },
+      },
+    }) as unknown as DbClient
+
+    const firstSeed = bootstrapDevelopmentData(db, accounts)
+    const secondSeed = bootstrapDevelopmentData(db, accounts)
+    await bothUserReadsComplete
+    releaseUserReads()
+
+    await expect(Promise.all([firstSeed, secondSeed])).resolves.toEqual([
+      {
+        admin: { email: accounts.admin.email, role: 'admin' },
+        user: { email: accounts.user.email, role: 'user' },
+      },
+      {
+        admin: { email: accounts.admin.email, role: 'admin' },
+        user: { email: accounts.user.email, role: 'user' },
+      },
+    ])
+    expect(await prisma.user.count({
+      where: { email: { in: [accounts.admin.email, accounts.user.email] } },
+    })).toBe(2)
+  })
+
+  test('replaces development user credentials and revokes stale authentication state', async () => {
+    const accounts = {
+      admin: {
+        email: 'rotated-development-admin@example.com',
+        password: 'rotated-development-admin-password',
+      },
+      user: {
+        email: 'rotated-development-user@example.com',
+        password: 'initial-development-user-password',
+      },
+    }
+    await bootstrapDevelopmentData(prisma, accounts)
+
+    const login = await app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(accounts.user),
+    })
+    expect(login.status).toBe(200)
+    const session = await login.json()
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { email: accounts.user.email },
+      select: { id: true },
+    })
+    const resetToken = 'd'.repeat(43)
+    await createOutstandingPasswordResetToken(user.id, resetToken)
+
+    const replacementPassword = 'replacement-development-user-password'
+    await bootstrapDevelopmentData(prisma, {
+      ...accounts,
+      user: { ...accounts.user, password: replacementPassword },
+    })
+
+    expect(await app.request('/api/auth/me', {
+      headers: authenticatedHeaders(session.accessToken),
+    })).toHaveProperty('status', 401)
+    await expectPasswordResetRejected(resetToken)
+
+    const oldPasswordLogin = await app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(accounts.user),
+    })
+    expect(oldPasswordLogin.status).toBe(401)
+    const replacementPasswordLogin = await app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...accounts.user, password: replacementPassword }),
+    })
+    expect(replacementPasswordLogin.status).toBe(200)
+  })
+
   test('revokes existing sessions when bootstrap changes privileges or credentials', async () => {
     const existing = await register('bootstrap-existing@example.com')
     const resetTokenBeforeBootstrap = 'b'.repeat(43)
