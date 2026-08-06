@@ -19,22 +19,22 @@ const typographyVariants = cva("min-w-0 tracking-normal", {
       bodyXs: "text-xs leading-normal font-normal",
       bodySmMedium: "text-sm leading-normal font-medium",
       emphasis: "font-medium",
-      label: "text-sm leading-none font-medium",
-      control: "text-sm leading-none font-medium whitespace-nowrap",
-      controlXs: "text-xs leading-none font-medium whitespace-nowrap",
-      kbd: "font-sans text-xs leading-none font-medium whitespace-nowrap",
+      label: "text-sm leading-normal font-medium",
+      control: "text-sm leading-normal font-medium whitespace-nowrap",
+      controlXs: "text-xs leading-normal font-medium whitespace-nowrap",
+      kbd: "font-sans text-xs leading-normal font-medium whitespace-nowrap",
       input:
         "text-base leading-normal font-normal md:text-sm file:text-sm file:font-medium",
       caption: "text-xs leading-normal font-normal",
       shortcut: "text-xs leading-normal tracking-widest font-normal",
       code: "font-mono text-sm leading-normal font-medium",
-      avatar: "text-sm leading-none font-normal group-data-[size=sm]/avatar:text-xs",
+      avatar: "text-sm leading-normal font-normal group-data-[size=sm]/avatar:text-xs",
       avatarCount:
-        "text-sm leading-none font-normal group-has-data-[size=sm]/avatar-group:text-xs",
+        "text-sm leading-normal font-normal group-has-data-[size=sm]/avatar-group:text-xs",
       calendar:
         "text-sm leading-normal font-normal [&_.rdp-caption_label]:text-sm [&_.rdp-caption_label]:font-medium [&_.rdp-dropdowns]:text-sm [&_.rdp-dropdowns]:font-medium [&_.rdp-week_number]:text-[0.8rem] [&_.rdp-weekday]:text-[0.8rem] [&_.rdp-weekday]:font-normal",
       calendarDay:
-        "text-sm leading-none font-normal [&>span]:text-xs",
+        "text-sm leading-normal font-normal [&>span]:text-xs",
       commandGroup:
         "text-sm leading-normal font-normal **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:leading-normal **:[[cmdk-group-heading]]:font-medium",
       srOnly: "sr-only",
