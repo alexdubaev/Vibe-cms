@@ -58,8 +58,10 @@ test('registers, restores the session, opens protected UI, and logs out', async 
   await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Users' })).toHaveCount(0)
   await expect(page.getByRole('main').getByText(email, { exact: true })).toBeVisible()
-  await expect(page.getByRole('main').getByText('Subscription', { exact: true })).toBeVisible()
-  await expect(page.getByRole('main').getByText('Not configured', { exact: true })).toBeVisible()
+  await expect(page.getByRole('main').getByText('Member since', { exact: true })).toBeVisible()
+  // The account surface must not advertise billing this template does not have; CHECKLIST.md
+  // records payments as absent, and a reintroduced card would have to update that ledger first.
+  await expect(page.getByRole('main').getByText('Subscription', { exact: true })).toHaveCount(0)
   await expect
     .poll(async () =>
       (await page.context().cookies()).some(

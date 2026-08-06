@@ -1,8 +1,4 @@
-import {
-  Calendar03Icon,
-  CreditCardIcon,
-  UserCircle02Icon,
-} from '@hugeicons/core-free-icons'
+import { Calendar03Icon, UserCircle02Icon } from '@hugeicons/core-free-icons'
 import type { UserDto } from '@web-app-demo/contracts'
 
 import { SectionCards } from '@/components/dashboard'
@@ -20,12 +16,6 @@ export function AccountSummary({ user }: { user: UserDto }) {
           icon: UserCircle02Icon,
           label: 'Account',
           value: user.displayName ?? 'No display name',
-        },
-        {
-          description: 'No billing integration is enabled in this web template.',
-          icon: CreditCardIcon,
-          label: 'Subscription',
-          value: 'Not configured',
         },
         {
           description: `Workspace role: ${formatRole(user.role)}`,

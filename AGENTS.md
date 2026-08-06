@@ -37,7 +37,7 @@
 ## Repository Grounding
 
 - Start from repository evidence, not assumptions.
-- For non-trivial work, read `README.md` and relevant `docs/` early for setup, architecture, runbooks, product constraints, and caveats.
+- For non-trivial work, read `README.md`, `CHECKLIST.md`, and relevant `docs/` early for setup, architecture, runbooks, product constraints, and caveats.
 - Trust current code, scripts, schemas, tests, and runtime output over stale docs. Call out doc drift and align it when practical.
 - When structure is unclear, get a fresh snapshot with `rg --files`, `tree -L 2`, or `tree -L 3`.
 - Do not treat `README.md` as a file inventory. Discover structure dynamically.
@@ -57,8 +57,9 @@
 
 ## Project Context
 
-- Use `README.md` as the source of truth for first-run repository download, bootstrap, and product intake instructions.
-- Keep durable project choices in README files and docs, not in this agent file.
+- Use `README.md` as the source of truth for first-run repository download and bootstrap instructions, and `CHECKLIST.md` as the intake questionnaire and the record of the answers.
+- Treat `CHECKLIST.md` as the statement of what this product needs. Its capability ledger governs: build nothing it marks `absent` or `removed`, and treat an unlisted capability as `absent`. Dormant code, a leftover migration, or a mention in docs is not a product requirement; confirm with the user, then record the answer in the ledger.
+- Keep durable project choices in `CHECKLIST.md`, README files, and docs, not in this agent file.
 - Infrastructure, deployment, storage, local database, testing runbooks, and provider-specific choices live in `README.md` and `docs/`.
 - When a surface is deferred, prefer a short note in that surface's README over extra agent instructions.
 - Prefer a monolithic backend. Do not split into microservices unless the product has a concrete operational need.
@@ -78,9 +79,10 @@
 <!-- BOOTSTRAP_ONLY_START -->
 This block exists only for fresh installs from the template. If this repository has not been initialized for a real project yet:
 
-- Read `README.md`, especially `Agent Repo Download Instructions`, before setup or feature work.
-- Follow that README section for product intake, active/deferred surfaces, repository remote handling, Docker/PostgreSQL setup, deployment scope, Expo/EAS owner setup, and mobile Maestro dev-client setup when mobile E2E is active.
-- Record durable project choices in README files and docs, not in `AGENTS.md` or `CLAUDE.md`.
+- Read `README.md`, especially `Agent Repo Download Instructions`, and `CHECKLIST.md` before setup or feature work.
+- When installing this template for a project, run the `CHECKLIST.md` intake in the user's language and record the answers in that file before feature work starts. When working on the template itself, leave its answers unfilled and keep only its capability ledger accurate.
+- Follow that README section for repository remote handling, Docker/PostgreSQL setup, Expo/EAS owner setup, and mobile Maestro dev-client setup when mobile E2E is active; the product intake itself lives in `CHECKLIST.md`.
+- Record durable project choices in `CHECKLIST.md`, README files, and docs, not in `AGENTS.md` or `CLAUDE.md`.
 - After first-run setup is complete, delete this entire `Bootstrap-Only Instructions` block from both `AGENTS.md` and `CLAUDE.md`.
 <!-- BOOTSTRAP_ONLY_END -->
 
