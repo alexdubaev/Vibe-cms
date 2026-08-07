@@ -29,6 +29,7 @@ bun run --cwd backend test:unit
 bun run --cwd backend test:integration
 bun run --cwd backend start:api
 bun run --cwd backend start:worker
+bun run --cwd backend start:scheduler
 bun run --cwd backend start:cron -- noop
 bun run --cwd backend smoke:docker
 bun run --cwd backend prisma:validate
@@ -88,8 +89,10 @@ DigitalOcean Spaces env is optional. Leave `SPACES_*` blank until the product ne
 The backend is one workspace with one Prisma schema and one Dockerfile, but it has separate runtime entrypoints:
 
 - API: `bun run start:api`, backed by `src/index.ts`.
-- Worker: `bun run start:worker`, backed by `src/worker.ts`. It is intentionally empty until a real long-running background handler is added, and deployment generation refuses to deploy this placeholder command as an App Platform worker.
-- Cron: `bun run start:cron -- <task>`, backed by `src/cron.ts`. Available tasks are `noop`, `db:ping`, and `auth:sessions:cleanup`.
+- Jobs: declared once in `src/jobs.ts` and shared by the three runners below. `noop`, `db:ping`, and `auth:sessions:cleanup` ship with the template; see [../docs/BACKGROUND_JOBS.md](../docs/BACKGROUND_JOBS.md).
+- Cron: `bun run start:cron -- <job>`, backed by `src/cron.ts`. Runs one job and exits, for a provider timer to call.
+- Scheduler: `bun run start:scheduler`, backed by `src/scheduler.ts`. Keeps schedules in the repository instead of a cloud console.
+- Worker: `bun run start:worker`, backed by `src/worker.ts`. A loop, for work that must run more often than once a minute. Scheduler and worker both ship with empty collections, and deployment generation refuses to deploy either as an App Platform worker until one has entries.
 
 All entrypoints use `src/runtime.ts` for env loading, Prisma creation, and cleanup, so backend services can be shared without duplicating Prisma schema or database setup.
 
@@ -97,7 +100,7 @@ Primary keys use database-generated UUIDv7 values in PostgreSQL (`@default(dbgen
 
 ## Deployment
 
-Production deployment for the backend uses DigitalOcean App Platform with DigitalOcean Managed PostgreSQL by default. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) instead of duplicating provider-specific steps here. The root `bun run deploy:do:specs` command generates concrete App Platform specs safely under `.scratch/deploy`; do not hand-substitute secrets or URLs into specs. If the user explicitly chooses Yandex Cloud, use [../docs/YANDEX_CLOUD.md](../docs/YANDEX_CLOUD.md).
+Production deployment for the backend uses DigitalOcean App Platform with DigitalOcean Managed PostgreSQL by default. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) instead of duplicating provider-specific steps here. The root `bun run deploy:do:specs` command generates concrete App Platform specs safely under `.scratch/deploy`; do not hand-substitute secrets or URLs into specs. If `CHECKLIST.md` records Yandex Cloud, use [../docs/YANDEX_CLOUD.md](../docs/YANDEX_CLOUD.md) instead.
 
 ## Auth API
 

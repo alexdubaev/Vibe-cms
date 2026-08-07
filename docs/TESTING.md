@@ -39,6 +39,13 @@ bun run --cwd backend prisma:validate
 bun run smoke:backend:docker
 ```
 
+Backend test files are discovered, not listed, and the filename decides which runner picks them
+up: anything under `backend/src` or `backend/scripts` named `*.integration.test.ts` needs the Docker
+Postgres and runs in `test:integration`; every other `*.test.ts` or `*.test.mjs` there runs in
+`test:unit` without a database. Name a database-backed test accordingly - `backend/scripts/test-files.mjs`
+owns the split and `backend/scripts/test-files.test.mjs` fails if the two runners stop being
+complementary.
+
 Contract tests live in `packages/contracts/src/*.test.ts` and protect shared request/response/error schemas used by backend and webapp. Webapp unit tests live in `webapp/tests` and cover API refresh/retry behavior that would be too expensive and brittle to fully exercise in E2E. The `mobile` branch extends this same contract/testing model for Expo.
 
 Backend tests live next to their owning product modules. Integration tests exercise auth and users/admin RBAC through application/transport boundaries and real PostgreSQL persistence. The integration runner starts `postgres_test`, applies migrations, and covers session rotation, role guards, profile validation, last-admin/concurrent-demotion safety, role-change session revocation, seed idempotence, and stable error shapes. By default, the test database port is derived from the absolute repository path so parallel checkouts do not collide, and `TEST_DATABASE_URL` is derived from that port. Set `POSTGRES_TEST_PORT` and `TEST_DATABASE_URL` only when a fixed test database is required. Local database startup, credentials, and reset behavior are documented in [LOCAL_DATABASE.md](LOCAL_DATABASE.md).

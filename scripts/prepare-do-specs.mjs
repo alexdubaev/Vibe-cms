@@ -1,17 +1,36 @@
 #!/usr/bin/env bun
 import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getDomain } from 'tldts'
 
+import { backgroundJobNames } from '../backend/src/jobs.ts'
 import { parseAdminSeedConfig } from '../backend/src/modules/users/domain/admin-seed-config.ts'
 import { validateDigitalOceanCronSchedule } from './do-cron.mjs'
+import { collectionIsEmpty } from './runner-collections.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const scratchDir = resolve(repoRoot, '.scratch/deploy')
 const targets = new Set(['backend-initial', 'backend-final', 'webapp', 'website', 'all'])
 const target = process.argv[2]
+// A worker component restarts forever if its command exits, so refuse the two template runners
+// while their configuration is still empty. Both are legitimate once they have work to do, which
+// is why this reads the source instead of matching command strings.
+const emptyRunnerConfigurations = [
+  {
+    command: 'bun run start:worker',
+    source: 'backend/src/worker.ts',
+    collection: 'workerLoops',
+  },
+  {
+    command: 'bun run start:scheduler',
+    source: 'backend/src/scheduler.ts',
+    collection: 'schedules',
+  },
+]
+
 const knownWeakJwtSecrets = new Set(['replace-with-at-least-32-random-characters'])
 const appPlatformInstanceSizeSlugs = new Set([
   'apps-s-1vcpu-0.5gb',
@@ -624,13 +643,28 @@ workers:
 ${optionalStorageEnvBlock()}`
 }
 
+function runnerHasNoWork({ command, source, collection }) {
+  let contents
+
+  try {
+    contents = readFileSync(resolve(repoRoot, source), 'utf8')
+  } catch {
+    throw new Error(
+      `A worker component asks for '${command}', but ${source} does not exist, so there is no way to tell whether that process has any work to do.`,
+    )
+  }
+
+  return collectionIsEmpty(contents, collection)
+}
+
 function requiredWorkerRunCommand(name) {
   const value = requiredEnv(name)
   assertSafeYamlString(name, value)
 
-  if (value === 'bun run start:worker') {
+  const runner = emptyRunnerConfigurations.find((candidate) => candidate.command === value)
+  if (runner && runnerHasNoWork(runner)) {
     throw new Error(
-      `${name} must point at a real long-running worker command. The template placeholder 'bun run start:worker' exits immediately and must not be deployed as an App Platform worker.`,
+      `${name} points at '${runner.command}', but '${runner.collection}' in ${runner.source} is still empty, so the process exits immediately and App Platform would restart it forever. Add entries there first (see docs/BACKGROUND_JOBS.md) or point the worker at your own command.`,
     )
   }
 
@@ -653,7 +687,7 @@ function optionalBackendCronJobsBlock() {
     requiredEnv('DO_BACKEND_CRON_NAME'),
   )
   reserveAppPlatformComponentName(name, 'scheduled job')
-  const task = requiredSafeTaskName('DO_BACKEND_CRON_TASK')
+  const task = requiredRegisteredJobName('DO_BACKEND_CRON_TASK')
   const schedule = requiredCronSchedule('DO_BACKEND_CRON_SCHEDULE')
   const timeZone = process.env.DO_BACKEND_CRON_TIME_ZONE?.trim() || 'UTC'
 
@@ -721,6 +755,21 @@ function optionalAppPlatformInstanceSizeSlugEnv(name, defaultValue) {
 
   if (!appPlatformInstanceSizeSlugs.has(value)) {
     throw new Error(`${name} must be one of: ${[...appPlatformInstanceSizeSlugs].join(', ')}`)
+  }
+
+  return value
+}
+
+// A scheduled component runs `start:cron -- <job>`, so a typo here is only discovered when the
+// job fails on every tick in production. The registry is the authority on which names exist.
+function requiredRegisteredJobName(name) {
+  const value = requiredSafeTaskName(name)
+  const registered = backgroundJobNames()
+
+  if (!registered.includes(value)) {
+    throw new Error(
+      `${name} is '${value}', which is not a job in backend/src/jobs.ts. Available jobs: ${registered.join(', ')}`,
+    )
   }
 
   return value
