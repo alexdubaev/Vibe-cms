@@ -63,6 +63,7 @@
 - Infrastructure, deployment, storage, local database, testing runbooks, and provider-specific choices live in `README.md` and `docs/`.
 - When a surface is deferred, prefer a short note in that surface's README over extra agent instructions.
 - Prefer a monolithic backend. Do not split into microservices unless the product has a concrete operational need.
+- Solve the problem with the infrastructure that already exists before adding a new element. Durable background work goes in the `task_outbox` table drained by `outbox:drain`, not in a queue service; a cache, broker, event log, or search engine needs a measured limit of the current approach, recorded in `CHECKLIST.md`, first. `docs/ARCHITECTURE.md` states the rule, the smaller first answer for each case, and the escape condition.
 - For real-time infrastructure decisions, follow `docs/ARCHITECTURE.md` and `docs/DEPLOYMENT.md`.
 
 ### Product Modules Architecture
@@ -133,6 +134,7 @@ This block exists only for fresh installs from the template. If this repository 
 - Async flow: trigger -> queue/job/task -> retry/idempotency -> side effect -> status/error visibility.
 - Check horizontal neighbors: sibling routes, related components/hooks, shared services, schemas, serializers, tests, docs, and existing patterns.
 - Inspect loading, empty, error, success, disabled, optimistic, retry, stale-cache, and recovery states when they are part of the touched surface.
+- If a bug remains unclear after repository research, search the web for the exact error, symptom, and relevant dependency versions before guessing.
 - Do enough research to find the owning layer. Do not turn research into wandering.
 
 ## Implementation Discipline
@@ -202,6 +204,7 @@ This block exists only for fresh installs from the template. If this repository 
 - Concrete DigitalOcean spec defaults belong in `scripts/prepare-do-specs.mjs` and `.do/*.yaml.example`; update README/docs alongside those scripts.
 - Hosting is one recorded choice in `CHECKLIST.md`, not a running comparison: Russia or a data-residency requirement means Yandex Cloud, anything else means DigitalOcean, and an explicit wish for full control means an own server. Ask where the users are, not which cloud they prefer, and delete the other paths' tooling during setup.
 - Background jobs are declared once in `backend/src/jobs.ts` and run by whichever process the hosting implies - a provider timer through `cron.ts`, the in-repo `scheduler.ts`, or the `worker.ts` loop. See `docs/BACKGROUND_JOBS.md` before adding a fourth way.
+- Work that must survive a process restart goes through `backend/src/outbox`; `background-tasks.ts` stays for work whose loss is acceptable. `docs/BACKGROUND_JOBS.md` compares the three before you pick.
 - Before deployment work, read the relevant docs and use repository scripts/generators rather than provider details from memory.
 - Before deployment or cloud-resource updates, verify the release source with `git remote -v`, `git status --short --branch`, and the configured deployment branch/commit. If the worktree is dirty, the branch is not pushed/synced, or the release source is ambiguous, stop and report the blocker. Do not run `git reset`, `git checkout --`, `git clean`, `git stash`, or equivalent cleanup to make deployment possible unless the user explicitly requested that exact action.
 - Keep durable storage and media decisions in `docs/STORAGE.md` and provider-specific deployment docs.
@@ -220,8 +223,8 @@ This block exists only for fresh installs from the template. If this repository 
 ## Safety And Workspace Hygiene
 
 - Never stop or kill processes just to free ports. Use isolated ports, alternate URLs, or test config overrides.
-- Do not create CI/CD, GitHub Actions, hosted automation, deployment pipelines, or release ceremony unless the user explicitly requests it.
-- Run relevant tests, typechecks, linters, builds, and other task checks locally before reporting completion; add local automation only when it removes real repeated pain.
+- Do not create or use GitHub CI/CD, GitHub Actions, hosted automation, or deployment pipelines.
+- Run tests, typechecks, linters, builds, and all other task checks only locally; add local automation only when it removes real repeated pain.
 - Do not print secrets, tokens, private keys, credentials, cookies, customer data, or raw `.env` values in final responses.
 - Do not add real secrets to fixtures, tests, docs, screenshots, logs, or committed files.
 - Keep ad-hoc investigation artifacts out of the repository root. Put temporary screenshots, logs, and one-off exports under `./.scratch/` or the tool-owned artifact directory; do not create new root-level `.tmp-*` or `.codex-tmp-*` files.

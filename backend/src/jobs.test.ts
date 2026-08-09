@@ -1,7 +1,8 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 
+import { loadEnv } from './env'
 import type { BackendRuntime } from './runtime'
-import { runBackgroundJob } from './jobs'
+import { backgroundJobNames, runBackgroundJob } from './jobs'
 
 const runtime = {} as BackendRuntime
 
@@ -12,10 +13,41 @@ describe('runBackgroundJob', () => {
 
   test('rejects an unknown job and names the ones that exist', async () => {
     // All three runners take job names from user input or config, so a typo has to fail loudly
-    // with the list of real names rather than silently do nothing.
-    await expect(runBackgroundJob('missing', runtime)).rejects.toThrow(
-      'Unknown job "missing". Available jobs: noop, db:ping, auth:sessions:cleanup, uploads:pending:cleanup',
-    )
+    // with the list of real names rather than silently do nothing. Checked against the registry
+    // rather than a copy of it: adding a job must not break this test, or the next person to add
+    // one edits the string instead of reading why it is here.
+    const names = backgroundJobNames()
+    const failure = await runBackgroundJob('missing', runtime).catch((error: unknown) => error)
+
+    expect(names.length).toBeGreaterThan(1)
+    expect(String(failure)).toContain('Unknown job "missing"')
+    for (const name of names) expect(String(failure)).toContain(name)
+  })
+
+  test('outbox:drain reaches the outbox and reports what it did', async () => {
+    // The registry loads the outbox with `await import()`, so a broken path or a renamed export
+    // would only surface at runtime, on a schedule, in production.
+    const { createFakeOutboxRuntime, taskRow } = await import('./outbox/fake-outbox-prisma')
+    const rows = [taskRow({ id: 'a', type: 'shipped:later' })]
+    const drainRuntime = createFakeOutboxRuntime(rows)
+    const log = spyOn(console, 'log').mockImplementation(() => {})
+
+    try {
+      await runBackgroundJob('outbox:drain', {
+        ...drainRuntime,
+        env: loadEnv({
+          DATABASE_URL: 'postgresql://user:pass@localhost:5432/app',
+          JWT_SECRET: '12345678901234567890123456789012',
+        }),
+      } as BackendRuntime)
+
+      expect(log).toHaveBeenCalledWith(
+        'Job outbox:drain completed.',
+        expect.objectContaining({ backlog: 0, claimed: 0, unhandled: 1 }),
+      )
+    } finally {
+      log.mockRestore()
+    }
   })
 
   test('rejects Object.prototype keys instead of running nothing and reporting success', async () => {

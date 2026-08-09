@@ -38,7 +38,7 @@ export function createApp({
   privateStorage,
 }: CreateAppOptions) {
   const storage = privateStorage ?? createPrivateStorage(env)
-  const auth = createAuthModule({ backgroundTasks, db: prisma, emailDelivery, env })
+  const auth = createAuthModule({ db: prisma, emailDelivery, env })
   const adminUsersReadRateLimit = createFixedWindowRateLimit<AuthHttpEnv>({
     errorMessage: 'Too many admin user directory requests',
     key: (c) => c.var.user.id,

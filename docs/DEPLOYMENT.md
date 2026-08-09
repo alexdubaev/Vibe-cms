@@ -365,13 +365,22 @@ export DO_BACKEND_WORKER_RUN_COMMAND="bun run start:scheduler"
 # Add the auth-session retention job for production.
 export DO_BACKEND_CRON_NAME=auth-session-cleanup
 export DO_BACKEND_CRON_TASK=auth:sessions:cleanup
+# Or the outbox drain, if this install sends email - but read the cadence note below first.
+# export DO_BACKEND_CRON_TASK=outbox:drain
 export DO_BACKEND_CRON_SCHEDULE="0 3 * * *"
 export DO_BACKEND_CRON_TIME_ZONE=UTC
 
 bun run deploy:do:specs backend-final
 ```
 
-Use worker components only after the process has work to do. The generator requires `DO_BACKEND_WORKER_RUN_COMMAND`, and it reads `backend/src/scheduler.ts` and `backend/src/worker.ts` before accepting `bun run start:scheduler` or `bun run start:worker`: while `schedules` or `workerLoops` is still the empty list the process exits immediately, and App Platform would restart it forever. Fill the list in and the same command is accepted. Any other command is passed through as-is. Production auth should schedule `auth:sessions:cleanup`; it removes revoked sessions and sessions past either sliding or absolute lifetime only after `SESSION_RETENTION_DAYS`, and removes expired password-reset tokens. Keep every schedule at DigitalOcean's supported cadence of at least 15 minutes. Both optional components use `backend/Dockerfile`, the repository-root build context, and the same managed PostgreSQL binding as the API. Give these components the same `PRIVATE_STORAGE_*` group as the API. It is not conditional on the job: every runner builds storage through `createBackendRuntime`, so a worker or cron container fails the same startup validation without it. The generator already emits the group into both blocks.
+Use worker components only after the process has work to do. The generator requires `DO_BACKEND_WORKER_RUN_COMMAND`, and it reads `backend/src/scheduler.ts` and `backend/src/worker.ts` before accepting `bun run start:scheduler` or `bun run start:worker`: while `schedules` or `workerLoops` is still the empty list the process exits immediately, and App Platform would restart it forever. Fill the list in and the same command is accepted. Any other command is passed through as-is. Production auth should schedule `auth:sessions:cleanup`; it removes revoked sessions and sessions past either sliding or absolute lifetime only after `SESSION_RETENTION_DAYS`, and removes expired password-reset tokens. Keep every schedule at DigitalOcean's supported cadence of at least 15 minutes.
+
+That floor decides how the task outbox runs here. A password-reset email arriving fifteen minutes
+after the user asked for it is not acceptable, so an install that wires an email provider must run
+`outbox:drain` from the **worker** component with `bun run start:scheduler` and a one-minute entry
+in `backend/src/scheduler.ts`, not from a scheduled job. An install with no provider can leave the
+drain on a slow schedule or not run it at all: nothing is queued while delivery is unconfigured.
+See [BACKGROUND_JOBS.md](BACKGROUND_JOBS.md), "Running the drain". Both optional components use `backend/Dockerfile`, the repository-root build context, and the same managed PostgreSQL binding as the API. Give these components the same `PRIVATE_STORAGE_*` group as the API. It is not conditional on the job: every runner builds storage through `createBackendRuntime`, so a worker or cron container fails the same startup validation without it. The generator already emits the group into both blocks.
 
 ## Real-Time And Horizontal Scaling
 

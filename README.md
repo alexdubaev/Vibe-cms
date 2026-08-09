@@ -63,7 +63,7 @@ Install this repository into the project. Before cloning from a GitHub URL, ask 
 - `CHECKLIST.md` - the install intake questionnaire and the durable record of what this project needs, including which capabilities were deliberately removed.
 - `.do` - committed DigitalOcean App Platform spec templates; generate concrete specs into `.scratch/deploy` with `bun run deploy:do:specs`.
 - `docker-compose.yml` - local PostgreSQL 18 through the official `postgres:18-alpine` image on port `54329`; test runners use a repository-derived port by default, or `POSTGRES_TEST_PORT` when set. PostgreSQL 18 is intentional because the backend schema uses strict database-generated UUIDv7 IDs.
-- `docs/BACKGROUND_JOBS.md` - jobs, the three ways to run them, and how to pick one.
+- `docs/BACKGROUND_JOBS.md` - the three ways to work off the request path, the durable task outbox, and how to run them.
 - `docs/TESTING.md` - the backend and Playwright testing contract. Mobile Maestro guidance lives on the `mobile` branch.
 - `docs/LOCAL_DATABASE.md` - cross-platform local PostgreSQL setup for Windows, macOS, and Linux.
 - `docs/STORAGE.md` - private file storage: the filesystem and S3 drivers, the local S3 container, and the upload contract.
@@ -211,7 +211,7 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
 - `bun run test:backend:integration` - run DB-backed auth tests through `postgres_test`.
 - `bun run test:webapp` - run webapp client tests.
 - `bun run test:storage:s3` - run the storage contract against a real local S3 server (needs Docker).
-- `bun run --cwd backend start:cron -- <job>` - run one background job once; see [docs/BACKGROUND_JOBS.md](docs/BACKGROUND_JOBS.md).
+- `bun run --cwd backend start:cron -- <job>` - run one background job once, for example `outbox:drain`; see [docs/BACKGROUND_JOBS.md](docs/BACKGROUND_JOBS.md).
 - `bun run --cwd backend start:scheduler` - run the in-repo scheduler process (empty until you add schedules).
 - `bun run --cwd backend start:worker` - run the loop worker process (empty until you add loops).
 - `bun run deploy:do:specs` - safely generate concrete DigitalOcean specs under `.scratch/deploy`.
