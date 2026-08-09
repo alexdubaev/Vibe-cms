@@ -9,13 +9,25 @@ import type { AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { createAuthSecurity, createFixedWindowRateLimit } from './http/security'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
+import { createUploadsModule } from './modules/uploads'
 import { createUsersModule } from './modules/users'
+import {
+  browserUploadAllowedHeaders,
+  browserUploadExposedHeaders,
+  createPrivateStorage,
+  type PrivateStorageRuntime,
+} from './storage'
 
 type CreateAppOptions = {
   backgroundTasks?: TaskDeferrer
   emailDelivery?: EmailDelivery
   env: AppEnv
   prisma: DbClient
+  /**
+   * Storage is never absent: the filesystem driver always works. Injectable so tests can point
+   * it at a temporary directory instead of the configured root.
+   */
+  privateStorage?: PrivateStorageRuntime
 }
 
 export function createApp({
@@ -23,7 +35,9 @@ export function createApp({
   emailDelivery = disabledEmailDelivery,
   env,
   prisma,
+  privateStorage,
 }: CreateAppOptions) {
+  const storage = privateStorage ?? createPrivateStorage(env)
   const auth = createAuthModule({ backgroundTasks, db: prisma, emailDelivery, env })
   const adminUsersReadRateLimit = createFixedWindowRateLimit<AuthHttpEnv>({
     errorMessage: 'Too many admin user directory requests',
@@ -36,6 +50,12 @@ export function createApp({
     db: prisma,
     requireAdmin: auth.requireAdmin,
     requireAuth: auth.requireAuth,
+  })
+  const uploads = createUploadsModule({
+    backgroundTasks,
+    db: prisma,
+    requireAuth: auth.requireAuth,
+    storage: storage.storage,
   })
   const app = new OpenAPIHono<AuthHttpEnv>({
     defaultHook: validationErrorHook,
@@ -54,8 +74,13 @@ export function createApp({
         if (!origin) return env.CORS_ORIGINS[0] ?? null
         return env.CORS_ORIGINS.includes(origin) ? origin : null
       },
-      allowHeaders: ['Content-Type', 'Authorization'],
-      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      // One global CORS layer, because hono answers a preflight in the first middleware that
+      // matches: a second, route-scoped cors() registered later would never see an OPTIONS.
+      // The upload headers therefore have to live here. `browserUploadAllowedHeaders` is shared
+      // with the local S3 bucket's CORS rule so both drivers allow exactly the same request.
+      allowHeaders: browserUploadAllowedHeaders,
+      exposeHeaders: browserUploadExposedHeaders,
+      allowMethods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       credentials: true,
       maxAge: 600,
     }),
@@ -80,6 +105,7 @@ export function createApp({
   })) {
     app.use('/api/users/*', middleware)
     app.use('/api/admin/*', middleware)
+    app.use('/api/uploads/*', middleware)
   }
   app.get('/', (c) => {
     return c.json({
@@ -112,6 +138,13 @@ export function createApp({
   app.route('/api/auth', auth.routes)
   app.route('/api/users', users.userRoutes)
   app.route('/api/admin', users.adminRoutes)
+  app.route('/api/uploads', uploads.routes)
+
+  // Only the filesystem driver needs the backend to serve the URLs it signs. With an S3 driver
+  // the browser uploads straight to the bucket and there is nothing to mount here.
+  if (storage.httpRoutes) {
+    app.route('/storage', storage.httpRoutes)
+  }
 
   app.doc('/openapi.json', {
     openapi: '3.0.0',

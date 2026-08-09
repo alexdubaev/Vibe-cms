@@ -4,7 +4,7 @@ Use this document only after the user has asked for deployment. Read [CHECKLIST.
 
 The default production path is DigitalOcean App Platform plus DigitalOcean Managed PostgreSQL. Do not ask the user to choose a cloud provider during first-run setup. Confirm the recorded release scope and production domains; when deployment was deferred at install time those rows are still `_unanswered_`, so ask for them now and write the answers back into the checklist. Then ask only the release details the checklist does not cover:
 
-- whether uploads, images, media, exports, or downloads need DigitalOcean Spaces in this release;
+- which S3-compatible bucket backs private file storage in this release; the backend requires one in production, so this is a choice of provider rather than whether to have storage;
 - whether real-time chat, presence, collaboration, live notifications, or WebSocket-style updates must work across multiple backend instances;
 - whether an external CDN is required for advanced bot, rate-limit, or geographic traffic controls.
 
@@ -32,7 +32,7 @@ project runs on Yandex Cloud or an own server, delete the DigitalOcean tooling i
 - **this file**: delete every section except the seven below, then clean those seven.
   - "Release Source Preflight" - drop the App Platform paragraph.
   - "Secrets And Backend Env" - `TRUSTED_PROXY_CLIENT_IP_HEADER=do-connecting-ip` is wrong on any
-    other ingress, `SPACES_ENDPOINT` names a DigitalOcean host, and the storage paragraph mentions
+    other ingress, `PRIVATE_STORAGE_ENDPOINT` names a DigitalOcean host, and the storage paragraph mentions
     a `deploy:do:specs` command that no longer exists.
   - "Own Server" - keep as is; on the Yandex path, delete it too.
   - "Production Auth And CORS" - drop the `DO_AUTH_SITE_DOMAIN` sentence.
@@ -66,11 +66,11 @@ project runs on Yandex Cloud or an own server, delete the DigitalOcean tooling i
 - `AGENTS.md` and `CLAUDE.md`: the App Platform spec-defaults rule and the "anything else means
   DigitalOcean" half of the hosting rule. Keep the two files identical.
 - `CHECKLIST.md`: the DigitalOcean row in the hosting table, the option in the recorded-hosting row,
-  the DigitalOcean half of the hosting rule, and the App Platform defaults and Spaces env entries in
-  the agent-owned decisions section.
-- `backend/src/env.ts` and `backend/.env.example`: the `SPACES_*` naming, if the project also moves
-  object storage. `backend/src/storage/service.ts` hardcodes the DigitalOcean endpoint shape and
-  needs a provider pass either way.
+  the DigitalOcean half of the hosting rule, and the App Platform defaults in the agent-owned
+  decisions section. Storage stays: it is provider-neutral and every hosting path needs it.
+- `backend/src/env.ts` and `backend/.env.example`: the `PRIVATE_STORAGE_*` values, if the project
+  also moves object storage. The storage layer is provider-neutral, so this is a configuration
+  change rather than a code change.
 
 Finally, sweep for what no list can enumerate:
 
@@ -85,7 +85,7 @@ Every hit must either go or become provider-neutral, with four exceptions to lea
 - `backend/src/jobs.ts` - the one line that matches names all three hostings to explain what a
   job is, and is already provider-neutral;
 - `website/astro.config.mjs` - a comment naming both providers next to the static output path;
-- `backend/src/db.test.ts`, `backend/src/env.test.ts`, `backend/src/storage/service.test.ts` -
+- `backend/src/db.test.ts`, `backend/src/env.test.ts`, `backend/src/storage/*.test.ts` -
   "DigitalOcean" appears only in test titles about connection strings and S3 URL shapes.
 
 Everything else goes. Keep the storage guidance that is really about S3 and uploads; only the
@@ -143,19 +143,20 @@ COOKIE_SECURE=true
 
 `AUTH_RATE_LIMIT_*` and `ADMIN_USERS_READ_RATE_LIMIT_*` use bounded in-process maps. The admin directory budget is shared by all sessions and search filters for the same administrator, but neither budget is global across multiple backend processes. Replace the in-memory store with shared state before scaling the API to multiple instances when global enforcement is required.
 
-If storage is active, also configure:
+Object storage is required, not optional: the image runs with `NODE_ENV=production`, where the backend refuses the filesystem storage driver because a container disk does not survive a redeploy. `bun run deploy:do:specs` refuses to generate a backend spec without this group.
 
 ```bash
-SPACES_REGION=nyc3
-SPACES_BUCKET=<project-prod>
-SPACES_ENDPOINT=https://nyc3.digitaloceanspaces.com
-SPACES_CDN_BASE_URL=https://images.example.com
-SPACES_ACCESS_KEY_ID=<spaces-access-key>
-SPACES_SECRET_ACCESS_KEY=<spaces-secret-key>
-SPACES_UPLOAD_MAX_BYTES=10485760
-SPACES_UPLOAD_URL_TTL_SECONDS=900
-SPACES_DOWNLOAD_URL_TTL_SECONDS=300
-SPACES_PUBLIC_CACHE_CONTROL="public, max-age=31536000, immutable"
+PRIVATE_STORAGE_DRIVER=s3
+PRIVATE_STORAGE_REGION=nyc3
+PRIVATE_STORAGE_BUCKET=<project-prod>
+PRIVATE_STORAGE_ENDPOINT=https://nyc3.digitaloceanspaces.com
+PRIVATE_STORAGE_ACCESS_KEY_ID=<storage-access-key>
+PRIVATE_STORAGE_SECRET_ACCESS_KEY=<storage-secret-key>
+PRIVATE_STORAGE_ALLOW_REMOTE_ENDPOINT=true
+PRIVATE_STORAGE_FORCE_PATH_STYLE=false
+PRIVATE_STORAGE_UPLOAD_MAX_BYTES=5242880
+PRIVATE_STORAGE_UPLOAD_URL_TTL_SECONDS=900
+PRIVATE_STORAGE_DOWNLOAD_URL_TTL_SECONDS=300
 ```
 
 Export the complete group before generating specs. On DigitalOcean, `bun run deploy:do:specs backend-final` rejects partial storage configuration, writes access credentials as `SECRET`, and propagates the same group to explicitly enabled backend worker/cron components; on another hosting, set the same variables on the backend runtime by hand.
@@ -178,7 +179,7 @@ managed platform here: every step below is yours to run and to keep running.
   serve them from the same proxy with `index.html` as the SPA catch-all for the webapp.
 - **Background jobs.** Run `bun run --cwd backend start:scheduler` as its own service - see
   [BACKGROUND_JOBS.md](BACKGROUND_JOBS.md) for the systemd and Docker recipes.
-- **Uploads.** `backend/src/storage/service.ts` speaks S3, so any S3-compatible object storage
+- **Uploads.** `backend/src/storage` speaks S3 through a provider-neutral port, so any S3-compatible object storage
   works; see [STORAGE.md](STORAGE.md).
 
 Alert on the backend health endpoint and on "the scheduled job has not reported success recently".
@@ -198,7 +199,7 @@ doctl auth init
 
 4. DigitalOcean App Platform GitHub integration connected in the DigitalOcean Dashboard, with access to the user's repository before `doctl apps create`. Without this, `doctl apps create` can fail with `GitHub user not authenticated`.
 5. DigitalOcean Managed PostgreSQL for production. Do not use App Platform dev databases for production data.
-6. DigitalOcean Spaces Standard Storage with Spaces CDN when uploads, images, media, exports, or downloads are in scope.
+6. DigitalOcean Spaces Standard Storage, or another S3-compatible bucket, for private file storage. The backend refuses the filesystem storage driver in production, so a deployed app always needs one.
 7. DigitalOcean Managed Valkey only when horizontally scaled real-time features need Pub/Sub between backend instances.
 8. Production domains and DNS access for the authenticated webapp and API. Browser auth requires both custom hosts under one registrable site, for example `app.example.com` and `api.example.com`.
 
@@ -317,7 +318,7 @@ Backend service requirements:
 - Set `COOKIE_SECURE=true` for HTTPS production traffic.
 - Set `CORS_ORIGINS` to the exact deployed browser origins. Do not use `*`, empty values, or URLs with paths.
 - Attach DigitalOcean Managed PostgreSQL or provide its connection string as `DATABASE_URL`.
-- Add Spaces env only when the product uses storage. Leave Spaces env blank for projects without uploads.
+- Set the complete `PRIVATE_STORAGE_*` group. It is required, not conditional: `bun run deploy:do:specs` refuses to generate a backend spec without it, because a backend deployed without a bucket crash-loops on startup.
 - Keep the built-in limiter only for the default single-instance API. Use a shared limiter or trusted edge/WAF policy before increasing `instance_count`.
 
 The default one-container shape is not a high-availability floor; it is the budget starter. Raise `instance_count` to two or three when availability or traffic justifies the extra monthly cost. Use `apps-s-1vcpu-2gb` or larger shared containers when memory pressure is the primary limit. Move to dedicated CPU only after metrics show CPU-bound work, noisy shared-CPU performance, strict latency requirements, or a need for CPU-based autoscaling. `webapp` and fully prerendered `website` output are Static Site components and do not have App Platform runtime container sizes. A `website` route with SSR/on-demand rendering or server islands needs a runtime service.
@@ -370,7 +371,7 @@ export DO_BACKEND_CRON_TIME_ZONE=UTC
 bun run deploy:do:specs backend-final
 ```
 
-Use worker components only after the process has work to do. The generator requires `DO_BACKEND_WORKER_RUN_COMMAND`, and it reads `backend/src/scheduler.ts` and `backend/src/worker.ts` before accepting `bun run start:scheduler` or `bun run start:worker`: while `schedules` or `workerLoops` is still the empty list the process exits immediately, and App Platform would restart it forever. Fill the list in and the same command is accepted. Any other command is passed through as-is. Production auth should schedule `auth:sessions:cleanup`; it removes revoked sessions and sessions past either sliding or absolute lifetime only after `SESSION_RETENTION_DAYS`, and removes expired password-reset tokens. Keep every schedule at DigitalOcean's supported cadence of at least 15 minutes. Both optional components use `backend/Dockerfile`, the repository-root build context, and the same managed PostgreSQL binding as the API. Add Spaces or other runtime secrets to those components when the specific background task needs them.
+Use worker components only after the process has work to do. The generator requires `DO_BACKEND_WORKER_RUN_COMMAND`, and it reads `backend/src/scheduler.ts` and `backend/src/worker.ts` before accepting `bun run start:scheduler` or `bun run start:worker`: while `schedules` or `workerLoops` is still the empty list the process exits immediately, and App Platform would restart it forever. Fill the list in and the same command is accepted. Any other command is passed through as-is. Production auth should schedule `auth:sessions:cleanup`; it removes revoked sessions and sessions past either sliding or absolute lifetime only after `SESSION_RETENTION_DAYS`, and removes expired password-reset tokens. Keep every schedule at DigitalOcean's supported cadence of at least 15 minutes. Both optional components use `backend/Dockerfile`, the repository-root build context, and the same managed PostgreSQL binding as the API. Give these components the same `PRIVATE_STORAGE_*` group as the API. It is not conditional on the job: every runner builds storage through `createBackendRuntime`, so a worker or cron container fails the same startup validation without it. The generator already emits the group into both blocks.
 
 ## Real-Time And Horizontal Scaling
 
@@ -451,18 +452,16 @@ Both hosts must sit under one registrable site (`example.com` in the example). O
 
 The backend env validator rejects empty/wildcard/path-bearing `CORS_ORIGINS`, requires HTTPS origins and secure cookies in production, and requires a generated hexadecimal `JWT_SECRET` in production.
 
-## Spaces Storage
+## Object Storage
 
-Use DigitalOcean Spaces Standard Storage plus Spaces CDN for persistent files and media. Do not write uploads to the App Platform container filesystem; it is not durable across deployments or container replacements.
+Use DigitalOcean Spaces Standard Storage, or any other S3-compatible bucket, for private file storage. Do not write uploads to the App Platform container filesystem; it is not durable across deployments or container replacements, which is why the backend refuses the filesystem storage driver in production.
 
 Default production setup:
 
-- Create a Standard Storage Space in the same region group as the backend when practical.
-- Enable Spaces CDN for public media and use a custom subdomain such as `images.example.com` when the project has a production domain.
-- Configure Spaces CORS for browser direct uploads from deployed web origins.
-- Use backend-issued presigned PUT URLs for direct uploads.
-- Use public CDN URLs for public immutable media.
-- Use short-lived presigned GET URLs for private files.
+- Create the bucket in the same region group as the backend when practical, and keep it private.
+- Configure its CORS rule for browser direct uploads from the deployed web origins, allowing `GET`/`PUT`/`HEAD` with the `Content-Type` and `If-None-Match` headers and exposing `ETag`. `browserUploadAllowedHeaders` in `backend/src/storage/config.ts` is the list the app itself uses.
+- Set the complete `PRIVATE_STORAGE_*` group, including `PRIVATE_STORAGE_ALLOW_REMOTE_ENDPOINT=true`, which is the deliberate gate that lets the backend talk to a remote bucket at all.
+- Objects are reached only through short-lived presigned URLs. This template has no public-object path: no public ACLs, no CDN base URL, no public URL builder. Adding one is a deliberate second surface — see [STORAGE.md](STORAGE.md).
 - Generate optimized image variants in the backend, a worker, or a dedicated App Platform service when the product needs thumbnails, responsive sizes, compression, or format conversion.
 
 DigitalOcean Spaces and Spaces CDN do not provide first-party dynamic image transformation. Add third-party image services only when the user explicitly chooses that product tradeoff.
@@ -501,8 +500,7 @@ After deployment:
 - verify browser auth only from allowed `CORS_ORIGINS`;
 - verify `webapp` route refreshes hit the React catch-all instead of a static 404;
 - verify `website` loads static assets from the deployed domain;
-- verify public media loads through the Spaces CDN domain when storage is active;
-- verify private file links expire and require backend authorization when private storage is active;
+- verify an avatar upload completes end to end against the production bucket, and that its download link expires and requires backend authorization;
 - verify Prisma migrations were applied exactly once to the production database.
 - verify the PRE_DEPLOY log confirms a login-capable administrator without printing bootstrap credentials.
 

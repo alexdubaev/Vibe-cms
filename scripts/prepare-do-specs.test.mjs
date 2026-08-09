@@ -361,26 +361,67 @@ describe('prepare-do-specs', () => {
   });
 
   test('requires complete storage settings and marks credentials as secrets', () => {
-    const incomplete = runPrepareSpecs({ SPACES_BUCKET: 'uploads' });
+    const incomplete = runPrepareSpecs(
+      { PRIVATE_STORAGE_BUCKET: 'uploads' },
+      { omitStorage: true },
+    );
     expect(incomplete.status).not.toBe(0);
-    expect(`${incomplete.stdout}\n${incomplete.stderr}`).toContain('SPACES_REGION');
+    expect(`${incomplete.stdout}\n${incomplete.stderr}`).toContain('PRIVATE_STORAGE_REGION');
 
-    const complete = runPrepareSpecs({
-      SPACES_REGION: 'nyc3',
-      SPACES_BUCKET: 'uploads',
-      SPACES_ENDPOINT: 'https://nyc3.digitaloceanspaces.com',
-      SPACES_ACCESS_KEY_ID: 'access-key',
-      SPACES_SECRET_ACCESS_KEY: 'secret-key',
-    });
+    // No storage at all is refused too: the deployed backend cannot boot without a bucket, so a
+    // spec generated without one would crash-loop after the migration job already succeeded.
+    const absent = runPrepareSpecs({}, { omitStorage: true });
+    expect(absent.status).not.toBe(0);
+    expect(`${absent.stdout}\n${absent.stderr}`).toContain('PRIVATE_STORAGE_REGION');
+
+    const complete = runPrepareSpecs();
     expect(complete.status).toBe(0);
     const spec = readFileSync(backendSpecPath, 'utf8');
-    expect(spec).toContain('key: SPACES_ACCESS_KEY_ID');
-    expect(spec).toContain('key: SPACES_SECRET_ACCESS_KEY');
+    expect(spec).toContain('key: PRIVATE_STORAGE_ACCESS_KEY_ID');
+    expect(spec).toContain('key: PRIVATE_STORAGE_SECRET_ACCESS_KEY');
     expect(spec.match(/type: SECRET/g)?.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test('deploys the s3 driver and opens the remote-endpoint gate explicitly', () => {
+    // The backend is fail-closed on both: it refuses the filesystem driver in production, and
+    // refuses a non-loopback endpoint until the gate is opened deliberately. A generated spec
+    // has to state both, or the deployed app will not start.
+    const complete = runPrepareSpecs({
+      PRIVATE_STORAGE_REGION: 'ru-central1',
+      PRIVATE_STORAGE_ENDPOINT: 'https://storage.yandexcloud.net',
+    });
+
+    expect(complete.status).toBe(0);
+    const spec = readFileSync(backendSpecPath, 'utf8');
+    expect(spec).toContain('key: PRIVATE_STORAGE_DRIVER');
+    expect(spec).toContain('value: "s3"');
+    expect(spec).toContain('key: PRIVATE_STORAGE_ALLOW_REMOTE_ENDPOINT');
+  });
+
+  test('refuses to deploy a spec pointing at the local development container', () => {
+    const loopback = runPrepareSpecs({
+      PRIVATE_STORAGE_BUCKET: 'local-private-storage',
+      PRIVATE_STORAGE_ENDPOINT: 'http://127.0.0.1:24331',
+    });
+
+    expect(loopback.status).not.toBe(0);
+    expect(`${loopback.stdout}\n${loopback.stderr}`).toContain('PRIVATE_STORAGE_ENDPOINT');
   });
 });
 
-function runPrepareSpecs(extraEnv = {}, { skipReleaseGitCheck = true, target = 'backend-final' } = {}) {
+// A deployed backend refuses to boot without durable storage, so this is required input now.
+const completeStorageEnv = {
+  PRIVATE_STORAGE_REGION: 'nyc3',
+  PRIVATE_STORAGE_BUCKET: 'uploads',
+  PRIVATE_STORAGE_ENDPOINT: 'https://nyc3.digitaloceanspaces.com',
+  PRIVATE_STORAGE_ACCESS_KEY_ID: 'access-key',
+  PRIVATE_STORAGE_SECRET_ACCESS_KEY: 'secret-key',
+};
+
+function runPrepareSpecs(
+  extraEnv = {},
+  { skipReleaseGitCheck = true, target = 'backend-final', omitStorage = false } = {},
+) {
   const testOnlyEnv = skipReleaseGitCheck
     ? {
         NODE_ENV: 'test',
@@ -402,6 +443,7 @@ function runPrepareSpecs(extraEnv = {}, { skipReleaseGitCheck = true, target = '
       DO_AUTH_SITE_DOMAIN: 'example.com',
       DO_BACKEND_URL: 'https://api.example.com',
       DO_WEBAPP_URL: 'https://webapp.example.com',
+      ...(omitStorage ? {} : completeStorageEnv),
       ...extraEnv,
     },
   });

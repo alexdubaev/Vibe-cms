@@ -47,7 +47,7 @@ Install this repository into the project. Before cloning from a GitHub URL, ask 
 - Deploy `webapp` and fully prerendered `website` output as DigitalOcean App Platform Static Sites, not App Platform services. They do not get `instance_size_slug` or `instance_count`; static site assets are served through DigitalOcean's global CDN by default. Use an external CDN only when the product needs advanced controls such as bot filtering, custom rate limiting, or geographic traffic rules.
 - For DigitalOcean app specs, use committed `.do/*.yaml.example` templates plus `bun run deploy:do:specs`; generated specs stay in `.scratch/deploy` and must fail on empty values or unresolved placeholders before `doctl apps create`. Concrete App Platform machine defaults live in `scripts/prepare-do-specs.mjs`; update that script and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) together when changing infrastructure tiers.
 - Before deployment or cloud-resource updates, verify `git remote -v` and `git status --short --branch`. Deploy only from the intended pushed release branch with a clean worktree; if local changes, untracked files, or branch sync issues are present, stop instead of cleaning, stashing, resetting, or checking out over another session's work.
-- Use DigitalOcean Spaces Standard Storage plus Spaces CDN for persistent files, uploads, and public media. Do not store uploads on the App Platform container filesystem.
+- Use DigitalOcean Spaces Standard Storage, or any S3-compatible bucket, for persistent files and uploads. Do not store uploads on the App Platform container filesystem: the backend refuses the filesystem storage driver in production for exactly that reason.
 - If [CHECKLIST.md](CHECKLIST.md) records Yandex Cloud, use [docs/YANDEX_CLOUD.md](docs/YANDEX_CLOUD.md) instead: Serverless Containers for backend/API, Managed Service for PostgreSQL for production data, Object Storage for files/static sites, and Cloud CDN for public static/media delivery.
 - Explain manual prerequisites only for the active release path: DigitalOcean account, billing/project setup, `doctl auth init`, registry access when using DigitalOcean Container Registry, DigitalOcean Managed PostgreSQL, and production domains/DNS. Expo/EAS/App Store/Google Play setup lives on the `mobile` branch.
 - The agent may create uncommitted app-local `.env` files from their matching `.env.example` files and generate a local-only `JWT_SECRET`; never commit secrets or print raw secrets in the final report.
@@ -66,7 +66,7 @@ Install this repository into the project. Before cloning from a GitHub URL, ask 
 - `docs/BACKGROUND_JOBS.md` - jobs, the three ways to run them, and how to pick one.
 - `docs/TESTING.md` - the backend and Playwright testing contract. Mobile Maestro guidance lives on the `mobile` branch.
 - `docs/LOCAL_DATABASE.md` - cross-platform local PostgreSQL setup for Windows, macOS, and Linux.
-- `docs/STORAGE.md` - DigitalOcean Spaces, CDN, uploads, and image/media storage rules.
+- `docs/STORAGE.md` - private file storage: the filesystem and S3 drivers, the local S3 container, and the upload contract.
 - `docs/YANDEX_CLOUD.md` - the Yandex Cloud hosting path, chosen when users or data must stay in Russia.
 
 ## Choosing `webapp` vs `website`
@@ -200,6 +200,7 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
 - `bun run dev:backend` - start the backend API.
 - `bun run dev:webapp` - start the Vite CSR webapp.
 - `bun run dev:website` - start the Astro website project.
+- `bun run dev:backend:s3` - start the backend against the local S3 container instead of the disk.
 - `bun run typecheck` - run TypeScript checks across workspaces.
 - `bun run lint` - run ESLint over the webapp, the only workspace with a lint script.
 - `bun run architecture:check` - enforce the module/feature dependency boundaries.
@@ -209,11 +210,14 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
 - `bun run test:backend` - run backend unit and integration tests.
 - `bun run test:backend:integration` - run DB-backed auth tests through `postgres_test`.
 - `bun run test:webapp` - run webapp client tests.
+- `bun run test:storage:s3` - run the storage contract against a real local S3 server (needs Docker).
 - `bun run --cwd backend start:cron -- <job>` - run one background job once; see [docs/BACKGROUND_JOBS.md](docs/BACKGROUND_JOBS.md).
 - `bun run --cwd backend start:scheduler` - run the in-repo scheduler process (empty until you add schedules).
 - `bun run --cwd backend start:worker` - run the loop worker process (empty until you add loops).
 - `bun run deploy:do:specs` - safely generate concrete DigitalOcean specs under `.scratch/deploy`.
-- `bun run e2e:webapp` - run the Playwright auth smoke test through backend + Vite.
+- `bun run e2e:webapp` - run the Playwright journeys through backend + Vite.
+- `bun run e2e:webapp:s3` - run the same journeys against the local S3 container.
+- `bun run storage:local:start|status|stop|env` - manage the optional local S3 container; `stop` keeps its volume.
 - `bun run --cwd backend prisma:migrate` - create/apply a Prisma migration in development.
 - `bun run --cwd backend prisma:deploy` - apply existing Prisma migrations on a server.
 - `bun run dev:seed` - idempotently create the local demo accounts.
@@ -223,7 +227,7 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
 
 - [backend/README.md](backend/README.md) - API, auth, Prisma, and backend validation.
 - [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md) - Docker Compose PostgreSQL setup and reset workflow.
-- [docs/STORAGE.md](docs/STORAGE.md) - DigitalOcean Spaces, CDN, uploads, and image/media storage rules.
+- [docs/STORAGE.md](docs/STORAGE.md) - private file storage: the filesystem and S3 drivers, the local S3 container, and the upload contract.
 - [docs/YANDEX_CLOUD.md](docs/YANDEX_CLOUD.md) - the Yandex Cloud hosting path, used when the checklist records it.
 - [webapp/README.md](webapp/README.md) - CSR browser client setup, env, and Playwright smoke.
 - [mobile/README.md](mobile/README.md) - pointer to the full mobile template branch.

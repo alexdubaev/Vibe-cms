@@ -82,14 +82,14 @@ Auth and authenticated account-management writes are protected by `AUTH_BODY_LIM
 
 `REFRESH_TOKEN_TTL_DAYS` is the sliding credential lifetime, while `SESSION_ABSOLUTE_TTL_DAYS` limits the total logical session lifetime. `REFRESH_REUSE_GRACE_SECONDS` tolerates a short concurrent refresh race; replaying the immediately previous credential after that window revokes the logical session. Keep the grace window short (the default is 10 seconds). Run `auth:sessions:cleanup` on a schedule to delete revoked, sliding-expired, and absolute-expired session rows after `SESSION_RETENTION_DAYS` and remove expired password-reset tokens.
 
-DigitalOcean Spaces env is optional. Leave `SPACES_*` blank until the product needs uploads, media, exports, or downloads. When storage is active, configure the complete Spaces group in `backend/.env` and follow [../docs/STORAGE.md](../docs/STORAGE.md).
+Private file storage is on by default and needs no configuration: `PRIVATE_STORAGE_DRIVER=filesystem` stores uploads under `backend/.storage`, so `bun run dev` works with no cloud account and no Docker. Switch to `s3` to develop against the local container (`bun run storage:local:start`) or a real bucket; production refuses the filesystem driver. The full rule set and the upload contract are in [../docs/STORAGE.md](../docs/STORAGE.md).
 
 ## Runtime Entrypoints
 
 The backend is one workspace with one Prisma schema and one Dockerfile, but it has separate runtime entrypoints:
 
 - API: `bun run start:api`, backed by `src/index.ts`.
-- Jobs: declared once in `src/jobs.ts` and shared by the three runners below. `noop`, `db:ping`, and `auth:sessions:cleanup` ship with the template; see [../docs/BACKGROUND_JOBS.md](../docs/BACKGROUND_JOBS.md).
+- Jobs: declared once in `src/jobs.ts` and shared by the three runners below. `noop`, `db:ping`, `auth:sessions:cleanup`, and `uploads:pending:cleanup` ship with the template; see [../docs/BACKGROUND_JOBS.md](../docs/BACKGROUND_JOBS.md).
 - Cron: `bun run start:cron -- <job>`, backed by `src/cron.ts`. Runs one job and exits, for a provider timer to call.
 - Scheduler: `bun run start:scheduler`, backed by `src/scheduler.ts`. Keeps schedules in the repository instead of a cloud console.
 - Worker: `bun run start:worker`, backed by `src/worker.ts`. A loop, for work that must run more often than once a minute. Scheduler and worker both ship with empty collections, and deployment generation refuses to deploy either as an App Platform worker until one has entries.

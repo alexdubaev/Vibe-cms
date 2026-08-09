@@ -33,6 +33,9 @@ bun-debug.log*
 backend/src/generated/prisma/
 backend/.prisma-generate.lock
 
+# Uploads held by the local filesystem storage driver
+backend/.storage/
+
 # Editors and OS
 .DS_Store
 .idea/
