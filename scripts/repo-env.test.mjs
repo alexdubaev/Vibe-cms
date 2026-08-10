@@ -458,11 +458,22 @@ test('the AWS signer stays a single copy, which is what the exact pin in backend
     return found
   }
 
-  for (const packageName of ['@smithy/signature-v4', '@smithy/core']) {
-    const found = await copies(packageName)
+  // `@smithy/core` is the 5 MB half and must be a single copy - that is the whole cost the pin
+  // exists to avoid. The signer itself is 220 KB, and the package manager may lay several
+  // identical copies out for the SDK's own subtree; what matters there is that every copy is the
+  // *same version*, because a second version is the symptom that the pin has drifted from what
+  // the SDK resolved and that `@smithy/core` is about to split with it.
+  expect({ packageName: '@smithy/core', copies: (await copies('@smithy/core')).length }).toEqual({
+    packageName: '@smithy/core',
+    copies: 1,
+  })
 
-    expect({ packageName, copies: found.length }).toEqual({ packageName, copies: 1 })
+  const signerVersions = new Set()
+  for (const path of await copies('@smithy/signature-v4')) {
+    signerVersions.add(JSON.parse(await readFile(resolve(path, 'package.json'), 'utf8')).version)
   }
+
+  expect([...signerVersions]).toHaveLength(1)
 
   // And the pin itself is exact, because a caret here is what reintroduces the duplication.
   const backendPackage = JSON.parse(
@@ -470,6 +481,8 @@ test('the AWS signer stays a single copy, which is what the exact pin in backend
   )
 
   expect(backendPackage.dependencies['@smithy/signature-v4']).toMatch(/^\d+\.\d+\.\d+$/)
+  // And the pin is the version actually installed, not a stale one the resolver worked around.
+  expect([...signerVersions]).toEqual([backendPackage.dependencies['@smithy/signature-v4']])
 })
 
 test('the deploy generator refuses every email credential the env schema knows about', async () => {
