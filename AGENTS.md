@@ -61,6 +61,7 @@
 - Treat `CHECKLIST.md` as the statement of what this product needs. Its capability ledger governs: build nothing it marks `absent` or `removed`, and treat an unlisted capability as `absent`. Dormant code, a leftover migration, or a mention in docs is not a product requirement; confirm with the user, then record the answer in the ledger.
 - Keep durable project choices in `CHECKLIST.md`, README files, and docs, not in this agent file.
 - Infrastructure, deployment, storage, local database, testing runbooks, and provider-specific choices live in `README.md` and `docs/`.
+- Before implementing or changing website data, public catalogs, carts, checkout, orders, subscriptions, entitlements, or payments, always read `docs/WEB_SURFACES.md` first and preserve its surface ownership and single browser-checkout rules.
 - When a surface is deferred, prefer a short note in that surface's README over extra agent instructions.
 - Prefer a monolithic backend. Do not split into microservices unless the product has a concrete operational need.
 - Solve the problem with the infrastructure that already exists before adding a new element. Durable background work goes in the `task_outbox` table drained by `outbox:drain`, not in a queue service; a cache, broker, event log, or search engine needs a measured limit of the current approach, recorded in `CHECKLIST.md`, first. `docs/ARCHITECTURE.md` states the rule, the smaller first answer for each case, and the escape condition.
@@ -81,7 +82,7 @@
 This block exists only for fresh installs from the template. If this repository has not been initialized for a real project yet:
 
 - Read `README.md`, especially `Agent Repo Download Instructions`, and `CHECKLIST.md` before setup or feature work.
-- When installing this template for a project, run the `CHECKLIST.md` intake in the user's language and record the answers in that file before feature work starts. When working on the template itself, leave its answers unfilled and keep only its capability ledger accurate.
+- When installing this template for a project, run the `CHECKLIST.md` intake in the user's language and complete every conditional section activated by its answers before feature work starts. When working on the template itself, leave its answers unfilled and keep only its capability ledger accurate.
 - Follow that README section for repository remote handling, Docker/PostgreSQL setup, Expo/EAS owner setup, and mobile Maestro dev-client setup when mobile E2E is active; the product intake itself lives in `CHECKLIST.md`.
 - Record durable project choices in `CHECKLIST.md`, README files, and docs, not in `AGENTS.md` or `CLAUDE.md`.
 - After first-run setup is complete, delete this entire `Bootstrap-Only Instructions` block from both `AGENTS.md` and `CLAUDE.md`.
@@ -223,8 +224,8 @@ This block exists only for fresh installs from the template. If this repository 
 ## Safety And Workspace Hygiene
 
 - Never stop or kill processes just to free ports. Use isolated ports, alternate URLs, or test config overrides.
-- Do not create or use GitHub CI/CD, GitHub Actions, hosted automation, or deployment pipelines.
-- Run tests, typechecks, linters, builds, and all other task checks only locally; add local automation only when it removes real repeated pain.
+- Do not create or use GitHub CI/CD, GitHub Actions, or hosted validation workflows.
+- Run tests, typechecks, linters, validation builds, and all other task checks only locally; add local automation only when it removes real repeated pain. A production release or SSG rebuild explicitly activated in `CHECKLIST.md` and implemented through the selected hosting provider's deployment docs is not a task check.
 - Do not print secrets, tokens, private keys, credentials, cookies, customer data, or raw `.env` values in final responses.
 - Do not add real secrets to fixtures, tests, docs, screenshots, logs, or committed files.
 - Keep ad-hoc investigation artifacts out of the repository root. Put temporary screenshots, logs, and one-off exports under `./.scratch/` or the tool-owned artifact directory; do not create new root-level `.tmp-*` or `.codex-tmp-*` files.
