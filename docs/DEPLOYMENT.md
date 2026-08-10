@@ -57,7 +57,7 @@ project runs on Yandex Cloud or an own server, delete the DigitalOcean tooling i
   `bun run deploy:do:specs` mention, including the setup instructions near the top of `README.md`
   that name DigitalOcean as the supported production path.
 - `backend/README.md`: the DigitalOcean part of "Deployment", and - in "Runtime Entrypoints" - the
-  sentence about deployment generation refusing a runner whose list is empty.
+  sentence about deployment generation refusing the loop worker while its list is empty.
 - `website/README.md`: the `.do/backend-app.yaml.example` link and the
   `bun run deploy:do:specs website` command.
 - `docs/ARCHITECTURE.md`: the App Platform sizing and component guidance, the DigitalOcean half of
@@ -358,7 +358,7 @@ DigitalOcean App Platform supports non-routable worker components and scheduled 
 
 ```bash
 # Add one worker component only after the process it runs has work configured. On a fresh
-# template `schedules` is empty and the generator refuses this command - add an entry first.
+# template `schedules` already drains the task outbox every minute, so this command is accepted.
 export DO_BACKEND_WORKER_ENABLED=true
 export DO_BACKEND_WORKER_RUN_COMMAND="bun run start:scheduler"
 
@@ -373,7 +373,25 @@ export DO_BACKEND_CRON_TIME_ZONE=UTC
 bun run deploy:do:specs backend-final
 ```
 
-Use worker components only after the process has work to do. The generator requires `DO_BACKEND_WORKER_RUN_COMMAND`, and it reads `backend/src/scheduler.ts` and `backend/src/worker.ts` before accepting `bun run start:scheduler` or `bun run start:worker`: while `schedules` or `workerLoops` is still the empty list the process exits immediately, and App Platform would restart it forever. Fill the list in and the same command is accepted. Any other command is passed through as-is. Production auth should schedule `auth:sessions:cleanup`; it removes revoked sessions and sessions past either sliding or absolute lifetime only after `SESSION_RETENTION_DAYS`, and removes expired password-reset tokens. Keep every schedule at DigitalOcean's supported cadence of at least 15 minutes.
+Use worker components only after the process has work to do. The generator requires `DO_BACKEND_WORKER_RUN_COMMAND`, and it reads `backend/src/scheduler.ts` and `backend/src/worker.ts` before accepting `bun run start:scheduler` or `bun run start:worker`. `schedules` ships with the outbox drain, so the scheduler is accepted as-is; `workerLoops` ships empty, so `bun run start:worker` is refused - that process would exit immediately and App Platform would restart it forever. Fill the list in and the same command is accepted, and emptying `schedules` makes the scheduler refused in turn. Any other command is passed through as-is. Production auth should schedule `auth:sessions:cleanup`; it removes revoked sessions and sessions past either sliding or absolute lifetime only after `SESSION_RETENTION_DAYS`, and removes expired password-reset tokens. Keep every schedule at DigitalOcean's supported cadence of at least 15 minutes.
+
+An install that sends email exports the `EMAIL_*` group before generating the spec:
+
+```bash
+export EMAIL_DELIVERY=resend            # or postbox
+export EMAIL_FROM="Example <no-reply@example.com>"
+export EMAIL_RESEND_API_KEY=re_...
+```
+
+The generator emits them into the API, the worker, and the cron component alike, and adds
+`WEBAPP_ORIGIN` itself from the webapp URL you already supplied - every runner builds delivery
+through `createBackendRuntime`, and the runner is the process that actually sends, so a group on
+the API alone would deploy an install that accepts every reset request and delivers none of them.
+The credentials are marked `SECRET`. A half-configured group is refused at generation rather than
+becoming a crash loop after the migration job has already run, and `EMAIL_DELIVERY=console` is
+refused outright. Leave the group unset and no email keys are emitted at all: an install with no
+email is a legitimate install. See [EMAIL.md](EMAIL.md) for the provider groups and the failure
+contract.
 
 That floor decides how the task outbox runs here. A password-reset email arriving fifteen minutes
 after the user asked for it is not acceptable, so an install that wires an email provider must run
