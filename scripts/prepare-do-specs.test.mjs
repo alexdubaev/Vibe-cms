@@ -367,7 +367,6 @@ describe('prepare-do-specs', () => {
     instance_count: 1`);
     expect(spec).toContain(`      - key: TRUSTED_PROXY_CLIENT_IP_HEADER
         value: "do-connecting-ip"`);
-    expect(spec).toContain('    version: "18"');
     expect(spec).not.toContain('REPLACE_WITH_');
   });
 

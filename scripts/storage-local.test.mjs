@@ -1,10 +1,8 @@
-
 import { describe, expect, test } from 'bun:test'
 
 import {
   assertLocalPrivateStorageEndpoint,
 } from './repo-env.mjs'
-import { envBlock } from './storage-local.mjs'
 
 describe('assertLocalPrivateStorageEndpoint', () => {
   test('accepts loopback endpoints', () => {
