@@ -209,6 +209,11 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
 - `bun run lint` - run ESLint over the webapp, the only workspace with a lint script.
 - `bun run architecture:check` - enforce the module/feature dependency boundaries.
 - `bun run build` - run production build/typecheck/export scripts for workspaces that define them.
+- `bun audit` - list known vulnerabilities. It reports none today, and the `overrides` block in the
+  root `package.json` is why: every entry there is a minimum version that closes an advisory in a
+  transitive dependency nothing here imports directly. Treat that block as maintenance, not
+  configuration - after a dependency update, drop the floors one at a time and re-run `bun audit`;
+  the ones that stay quiet are no longer needed. `bun update` still moves everything within them.
 - `bun run test` - run contract, backend, and webapp unit/integration tests.
 - `bun run test:contracts` - run shared Zod contract tests.
 - `bun run test:backend` - run backend unit and integration tests.
