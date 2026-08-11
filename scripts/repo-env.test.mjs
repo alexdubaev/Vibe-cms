@@ -430,10 +430,10 @@ test('assertTestDatabaseUrl accepts non-test databases with an intentional overr
 
 test('the AWS signer resolves to one version, so the image carries one copy of it', async () => {
   // `backend/src/email/postbox-delivery.ts` signs Postbox requests with `@smithy/signature-v4`,
-  // pinned to the exact version the AWS SDK has already resolved for S3 storage. Any range wide
-  // enough to admit a newer release makes the package manager hoist a second signer and a second
-  // 5 MB `@smithy/core`, then push the SDK's copies into nineteen nested duplicates - and every
-  // other check stays green while the image grows by ~95 MB. This is the only thing that notices.
+  // which must resolve to the version the AWS SDK has already pulled in for S3 storage. When the
+  // two diverge the package manager hoists a second signer and a second 5 MB `@smithy/core`, then
+  // pushes the SDK's copies into nineteen nested duplicates - and every other check stays green
+  // while the image grows by ~95 MB. This is the only thing that notices.
   const copies = async (packageName) => {
     const found = []
     const walk = async (directory, depth) => {

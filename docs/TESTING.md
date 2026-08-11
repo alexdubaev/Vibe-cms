@@ -153,13 +153,22 @@ one-way and self-perpetuating, and it survived eight days because Prisma's gener
 git-ignored - a version regression there produces a zero-line diff, and this repository has no
 hosted CI by design.
 
-The same command also checks that the installed `node_modules` matches this branch's lockfile.
-Switching branches without reinstalling leaves the previous branch's dependencies in place, and
-every check then passes while reporting on packages the branch does not declare. A green run that
-means nothing is worse than a red one.
+The same command also checks the installed tree against this branch's lockfile, in both
+directions: nothing at the wrong version, and nothing present that the lockfile never mentions.
+The second direction is the one that matters, because `bun install` adds and updates but never
+prunes - switching from `mobile` to `master` leaves the whole Expo tree behind, measured at 484
+packages, while every shared package sits at the right version. Code can then import something
+that exists on disk and not in the lockfile, pass every local check, and fail in the image, where
+`backend/Dockerfile` installs with `--frozen-lockfile`. A green run that means nothing is worse
+than a red one.
 
-Both halves run inside `bun run mobile:template:check`, which already proves `origin/master` is an
-ancestor of `mobile`. Ancestry says the commits are a superset; this says the versions are.
+That half needs no second branch, so it also runs as a test inside `bun run test` and can be run
+alone with `--installed-only`. The branch comparison is separate because it is legitimately red
+between updating `master` and merging into `mobile`; it runs inside
+`bun run mobile:template:check`, which already proves `master` is an ancestor of `mobile`.
+Ancestry says the commits are a superset; this says the versions are. It resolves the counterpart
+as a local branch first and a remote-tracking ref second, because an installed project is told to
+delete the template's `origin`.
 
 ## Current Upstream Documentation
 
