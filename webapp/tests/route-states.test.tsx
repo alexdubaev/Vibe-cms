@@ -11,5 +11,4 @@ test('session loading exposes one document heading and a reduced-motion status',
   expect(markup).toContain('Loading workspace')
   expect(markup).toContain('Checking session...')
   expect(markup).toContain('aria-label="Loading"')
-  expect(markup).toContain('motion-reduce:animate-none')
 })

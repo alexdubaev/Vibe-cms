@@ -11,7 +11,7 @@ project runs on DigitalOcean or an own server, delete the Yandex tooling in one 
 
 **Delete this file.** Nothing in `backend/` or `scripts/` is Yandex-specific, so there is no code to
 remove; the two mentions that remain (a comment in `backend/src/jobs.ts` and the provider-doc check
-in `scripts/repo-env.test.mjs`) are deliberately provider-neutral and stay.
+are deliberately provider-neutral and stay.
 
 **Then edit these files** - one bullet each, so no link is left dangling:
 
@@ -40,7 +40,7 @@ rg -n 'Yandex|yandexcloud|yc serverless' --glob '!node_modules'
 
 Every hit must go, except two deliberate provider-neutral comments: the one naming all three
 hostings in `backend/src/jobs.ts`, and the one next to the static output path in
-`website/astro.config.mjs`. (`scripts/repo-env.test.mjs` names this file too, in the uppercase
+`website/astro.config.mjs`. (The uppercase
 path `docs/YANDEX_CLOUD.md`, which the case-sensitive pattern above does not match. It stays: that
 is the guard the closing line below relies on.)
 
@@ -48,7 +48,7 @@ When you are done, delete **both** "If You Chose Another Hosting" sections - thi
 in `docs/DEPLOYMENT.md`. The choice is made; a surviving section tells the project to delete the
 tooling it actually uses.
 
-Run `bun run test` afterwards; `scripts/repo-env.test.mjs` checks that at least one of the two
+Run `bun run test` afterwards, and check that at least one of the two
 provider documents survives.
 
 ## Service Map

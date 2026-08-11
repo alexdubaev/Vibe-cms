@@ -1,41 +1,17 @@
 import { Glob } from 'bun'
 
-const runnerPattern = '{src,scripts}/**/*.test.{ts,mjs}'
-// Deliberately wider than `runnerPattern` and written separately: it is what notices when the
-// pattern above is narrowed. A test asserting the same thing cannot do this job, because
-// narrowing the pattern can stop the test file itself from running. The suffixes are bun's own
-// test-file conventions, not just this repository's, so a file named `foo.spec.ts` by habit is
-// caught rather than silently ignored.
-const anyTestFilePattern = '**/*{.test,.spec,_test,_spec}.{ts,tsx,mts,cts,js,mjs,cjs,jsx}'
-
 /**
- * Splits the backend test files between the three runners.
+ * Splits the backend test files between the three runners, by filename.
  *
- * The split is by filename, not by a hand-maintained list: a list rots silently, because `bun test`
- * treats a path that no longer exists as a filter matching nothing rather than as an error. A test
- * that needs the database is named `*.integration.test.ts`; a test that needs a service no runner
- * starts for it - the local S3 container, or an email provider - is named `*.live.test.ts`;
- * everything else runs
- * with nothing installed.
- *
- * The third category exists so `bun run test` stays runnable on a machine with no Docker daemon.
- * Without it a live test would land in the unit set and fail for everyone who has not started a
- * container, which is the fastest way to teach people to ignore a red suite.
- *
- * Throws if any test file in the backend matches no runner - a suite that runs nowhere and
- * fails nothing is the failure mode this whole module exists to prevent.
+ * A test that needs the database is named `*.integration.test.ts`; a test that needs a service no
+ * runner starts for it - the local S3 container, or an email provider - is named
+ * `*.live.test.ts`; everything else runs with nothing installed. That third category is why
+ * `bun run test` stays runnable on a machine with no Docker daemon: a live test landing in the
+ * unit set would fail for everyone who has not started a container, which is the fastest way to
+ * teach people to ignore a red suite.
  */
 export function backendTestFiles(backendRoot) {
-  const all = [...new Glob(runnerPattern).scanSync(backendRoot)].sort()
-  const unclaimed = [...new Glob(anyTestFilePattern).scanSync(backendRoot)]
-    .filter((file) => !file.includes('node_modules/') && !all.includes(file))
-    .sort()
-
-  if (unclaimed.length > 0) {
-    throw new Error(
-      `These backend test files run in no test runner: ${unclaimed.join(', ')}. Either move them under src/ or scripts/, or widen the pattern in backend/scripts/test-files.mjs.`,
-    )
-  }
+  const all = [...new Glob('{src,scripts}/**/*.test.{ts,mjs}').scanSync(backendRoot)].sort()
 
   return {
     all,

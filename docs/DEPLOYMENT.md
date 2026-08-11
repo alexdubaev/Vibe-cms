@@ -28,7 +28,7 @@ project runs on Yandex Cloud or an own server, delete the DigitalOcean tooling i
 **Edit these files** - one bullet each, so nothing is left half-removed:
 
 - root `package.json`: drop the `deploy:do:specs` script. Leaving it behind points at a deleted
-  generator, and `scripts/repo-env.test.mjs` fails on exactly that half-removal.
+  generator - remove both together or neither.
 - **this file**: delete every section except the seven below, then clean those seven.
   - "Release Source Preflight" - drop the App Platform paragraph.
   - "Secrets And Backend Env" - `TRUSTED_PROXY_CLIENT_IP_HEADER=do-connecting-ip` is wrong on any
@@ -78,10 +78,8 @@ Finally, sweep for what no list can enumerate:
 rg -n 'DigitalOcean|App Platform|deploy:do:specs|doctl|Spaces|\.do/' --glob '!node_modules'
 ```
 
-Every hit must either go or become provider-neutral, with four exceptions to leave alone:
+Every hit must either go or become provider-neutral, with three exceptions to leave alone:
 
-- `scripts/repo-env.test.mjs` - its DigitalOcean block is the half-removal guard, and both removal
-  lists rely on it;
 - `backend/src/jobs.ts` - the one line that matches names all three hostings to explain what a
   job is, and is already provider-neutral;
 - `website/astro.config.mjs` - a comment naming both providers next to the static output path;

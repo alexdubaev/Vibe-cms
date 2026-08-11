@@ -15,7 +15,7 @@ import type { BackendRuntime } from './runtime'
  * **Keep every import in this file a type import.** Tooling outside the backend reads this list
  * without a database, and may run before `prisma:generate` has; a runtime import here would drag
  * the Prisma client and the env schema along. Reach for `runtime` inside a job body instead of
- * importing a service at the top. `scripts/repo-env.test.mjs` enforces this.
+ * importing a service at the top.
  *
  * Jobs say what to do; they never say when or where. Three processes run this same registry:
  *   - `cron.ts`      - one shot, triggered by a provider timer (DigitalOcean job, Yandex trigger, system cron)

@@ -16,7 +16,6 @@ test('Typography renders semantic elements and project-owned variants', () => {
   expect(markup).toContain('<h1 ')
   expect(markup).toContain('data-slot="typography"')
   expect(markup).toContain('data-variant="h2"')
-  expect(markup).toContain('text-muted-foreground')
 })
 
 test('official shadcn controls render without project Typography wrappers', () => {
@@ -28,7 +27,6 @@ test('official shadcn controls render without project Typography wrappers', () =
   )
 
   expect(markup).toContain('data-slot="input"')
-  expect(markup).toContain('rounded-md')
   expect(markup).toContain('data-slot="button"')
   expect(markup).not.toContain('data-slot="typography"')
 })

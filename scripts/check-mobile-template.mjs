@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const repositoryRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
+const repositoryRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
 
 /**
  * The release gate for the `mobile` line: it is publishable only when it is `master` plus the app.
@@ -10,13 +10,13 @@ export const repositoryRoot = resolve(fileURLToPath(new URL('..', import.meta.ur
  * Deliberately only git state. This used to also assert that particular sentences appeared in the
  * agent files and that particular rows in `CHECKLIST.md` said particular words, which failed on
  * ordinary edits and translations while proving nothing a reader would not see. What is left is
- * the property that actually defines the branch, and the suites below, which test behaviour.
+ * the property that actually defines the branch.
  */
 function git(args) {
   return execFileSync('git', args, { cwd: repositoryRoot, encoding: 'utf8' }).trim()
 }
 
-export function mobileReleaseErrors({ branch, status, head, originMobile, masterIsAncestor, requirePublished }) {
+function mobileReleaseErrors({ branch, status, head, originMobile, masterIsAncestor, requirePublished }) {
   const errors = []
 
   if (branch !== 'mobile') errors.push('current branch must be mobile')

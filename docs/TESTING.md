@@ -45,8 +45,7 @@ the Docker Postgres and runs in `test:integration`. Anything named `*.live.test.
 service or account that no runner starts for it - the local S3 container, or an email provider - and
 runs in `test:live`.
 Everything else named `*.test.ts` or `*.test.mjs` runs in `test:unit` with nothing installed. Name a
-test accordingly: `backend/scripts/test-files.mjs` owns the split and `backend/scripts/test-files.test.mjs`
-fails if the runners stop being complementary.
+test accordingly: `backend/scripts/test-files.mjs` owns the split.
 
 The third category exists so `bun run test` stays runnable on a machine with no Docker daemon. A
 live test landing in the unit set would fail for everyone who has not started a container, and a red
@@ -60,9 +59,8 @@ bun run --cwd backend test:live  # runs whichever live suites the environment co
 `backend/scripts/test-live.mjs` owns a table of live suites - storage, Postbox, Resend - each with
 the variables it needs. It runs the ones that are fully configured, refuses with the missing names
 when one is half configured, and refuses outright when none is, because a live contract test that
-quietly passes without contacting anything proves nothing. Every `*.live.test.ts` must belong to
-exactly one suite or the script fails, the same reasoning as the unclaimed-file check above. See
-[STORAGE.md](STORAGE.md) and [EMAIL.md](EMAIL.md).
+quietly passes without contacting anything proves nothing. See [STORAGE.md](STORAGE.md) and
+[EMAIL.md](EMAIL.md).
 
 Contract tests live in `packages/contracts/src/*.test.ts` and protect shared request/response/error schemas used by backend and webapp. Webapp unit tests live in `webapp/tests` and cover API refresh/retry behavior that would be too expensive and brittle to fully exercise in E2E. The `mobile` branch extends this same contract/testing model for Expo.
 
