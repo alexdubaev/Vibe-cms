@@ -13,24 +13,13 @@ const sourceRoots = [
 const sourceExtension = /\.(?:[cm]?[jt]sx?)$/
 const importPattern = /(?:^|\n)\s*(?:import|export)\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g
 const runtimeModulePattern = /\b(?:import|require)\s*\(\s*['"]([^'"]+)['"]\s*\)/g
-const applicationForbiddenPackages = [
-  '@prisma/',
-  'hono',
-  '@aws-sdk/',
-  'expo-',
-  'react',
-  'react-native',
-  'jose',
-]
-const contractForbiddenPackages = [
-  '@prisma/',
-  'hono',
-  'react',
-  'react-native',
-  'expo-',
-  '@aws-sdk/',
-  'jose',
-]
+/**
+ * Packages that belong to a delivery mechanism, not to business rules. Application layers and the
+ * shared contracts both refuse them, for the same reason and with the same list.
+ */
+const frameworkPackages = ['@prisma/', 'hono', '@aws-sdk/', 'expo-', 'react', 'react-native', 'jose']
+const applicationForbiddenPackages = frameworkPackages
+const contractForbiddenPackages = frameworkPackages
 const transportForbiddenPackages = ['@prisma/', '@aws-sdk/', 'jose', 'pg']
 
 export function checkArchitectureSources(files) {

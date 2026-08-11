@@ -143,33 +143,6 @@ bun run --cwd webapp e2e:ui
 
 The default branch intentionally does not contain the runnable Expo app or Maestro runner. Use the `mobile` branch for mobile E2E setup, dev-client guidance, stable React Native `testID` selectors, and `bun run --cwd mobile e2e:maestro:audit`.
 
-## Keeping The Two Branches Honest
-
-`bun run deps:drift:check` compares every dependency range that `master` and `mobile` both
-declare, and refuses a difference that is not on the exception list in
-`scripts/branch-dependency-drift.mjs` with a reason attached. It exists because a workspace-wide
-dependency sweep once landed on `mobile` alone: every sync runs master -> mobile, so the drift was
-one-way and self-perpetuating, and it survived eight days because Prisma's generated client is
-git-ignored - a version regression there produces a zero-line diff, and this repository has no
-hosted CI by design.
-
-The same command also checks the installed tree against this branch's lockfile, in both
-directions: nothing at the wrong version, and nothing present that the lockfile never mentions.
-The second direction is the one that matters, because `bun install` adds and updates but never
-prunes - switching from `mobile` to `master` leaves the whole Expo tree behind, measured at 484
-packages, while every shared package sits at the right version. Code can then import something
-that exists on disk and not in the lockfile, pass every local check, and fail in the image, where
-`backend/Dockerfile` installs with `--frozen-lockfile`. A green run that means nothing is worse
-than a red one.
-
-That half needs no second branch, so it also runs as a test inside `bun run test` and can be run
-alone with `--installed-only`. The branch comparison is separate because it is legitimately red
-between updating `master` and merging into `mobile`; it runs inside
-`bun run mobile:template:check`, which already proves `master` is an ancestor of `mobile`.
-Ancestry says the commits are a superset; this says the versions are. It resolves the counterpart
-as a local branch first and a remote-tracking ref second, because an installed project is told to
-delete the template's `origin`.
-
 ## Current Upstream Documentation
 
 For testing questions, consult the current upstream documentation linked here first. This document describes this repository's testing contract; upstream docs are authoritative for runner behavior.

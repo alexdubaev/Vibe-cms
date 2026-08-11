@@ -21,7 +21,7 @@ project runs on Yandex Cloud or an own server, delete the DigitalOcean tooling i
 
 **Delete these files**
 
-- `scripts/prepare-do-specs.mjs`, `scripts/do-cron.mjs`, `scripts/runner-collections.mjs`, and their
+- `scripts/prepare-do-specs.mjs`, `scripts/do-cron.mjs`, and their
   tests - only the DigitalOcean generator reads runner collections
 - `.do/`
 
@@ -373,7 +373,7 @@ export DO_BACKEND_CRON_TIME_ZONE=UTC
 bun run deploy:do:specs backend-final
 ```
 
-Use worker components only after the process has work to do. The generator requires `DO_BACKEND_WORKER_RUN_COMMAND`, and it reads `backend/src/scheduler.ts` and `backend/src/worker.ts` before accepting `bun run start:scheduler` or `bun run start:worker`. `schedules` ships with the outbox drain, so the scheduler is accepted as-is; `workerLoops` ships empty, so `bun run start:worker` is refused - that process would exit immediately and App Platform would restart it forever. Fill the list in and the same command is accepted, and emptying `schedules` makes the scheduler refused in turn. Any other command is passed through as-is. Production auth should schedule `auth:sessions:cleanup`; it removes revoked sessions and sessions past either sliding or absolute lifetime only after `SESSION_RETENTION_DAYS`, and removes expired password-reset tokens. Keep every schedule at DigitalOcean's supported cadence of at least 15 minutes.
+Use worker components only after the process has work to do. `schedules` ships with the outbox drain, so `bun run start:scheduler` is deployable as-is; `workerLoops` ships empty, so give it a loop before pointing a worker component at `bun run start:worker` - that process would exit immediately and App Platform would restart it forever. Any command is passed through as-is. Production auth should schedule `auth:sessions:cleanup`; it removes revoked sessions and sessions past either sliding or absolute lifetime only after `SESSION_RETENTION_DAYS`, and removes expired password-reset tokens. Keep every schedule at DigitalOcean's supported cadence of at least 15 minutes.
 
 An install that sends email exports the `EMAIL_*` group before generating the spec:
 

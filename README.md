@@ -208,11 +208,6 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
 - `bun run typecheck` - run TypeScript checks across workspaces.
 - `bun run lint` - run ESLint over the webapp, the only workspace with a lint script.
 - `bun run architecture:check` - enforce the module/feature dependency boundaries.
-- `bun run deps:drift:check` - check that `master` and `mobile` declare the same dependency
-  versions, and that `node_modules` holds exactly what this branch's lockfile resolves rather
-  than what the branch you were on before installed. Runs inside `mobile:template:check`. The
-  branch half needs a counterpart branch and skips itself without one; the local half runs
-  everywhere, including inside `bun run test`, and `--installed-only` runs it alone.
 - `bun run build` - run production build/typecheck/export scripts for workspaces that define them.
 - `bun run test` - run contract, backend, and webapp unit/integration tests.
 - `bun run test:contracts` - run shared Zod contract tests.
@@ -255,7 +250,7 @@ API contracts live in `packages/contracts` and are imported by every active laye
 
 The backend API flow is `route -> validation -> auth/session guard -> service -> Prisma -> DTO`. Routes stay thin, auth business logic lives in the feature service, and API, worker, and cron entrypoints share `src/runtime.ts` for env and Prisma setup.
 
-Keep the default architecture monolithic. For DigitalOcean production, the backend/API default is one `apps-s-1vcpu-1gb` App Platform container so a new project starts inside the expected low-cost budget with Managed PostgreSQL while retaining a clear scale-up path. Add backend worker or scheduled-job components from the same Docker image only when a concrete background job exists; the deployment generator refuses to deploy the loop worker while its list is still empty, and accepts the scheduler, which ships with the outbox drain. For real-time features, a single backend instance can own its local WebSocket connections. If the backend is horizontally scaled and users connected to different instances must receive the same chat, presence, or live events, add a managed Redis-compatible Pub/Sub broker between instances, using DigitalOcean Managed Valkey or Yandex Managed Service for Valkey, whichever hosting the checklist records.
+Keep the default architecture monolithic. For DigitalOcean production, the backend/API default is one `apps-s-1vcpu-1gb` App Platform container so a new project starts inside the expected low-cost budget with Managed PostgreSQL while retaining a clear scale-up path. Add backend worker or scheduled-job components from the same Docker image only when a concrete background job exists; the scheduler ships with the outbox drain and is deployable as-is. For real-time features, a single backend instance can own its local WebSocket connections. If the backend is horizontally scaled and users connected to different instances must receive the same chat, presence, or live events, add a managed Redis-compatible Pub/Sub broker between instances, using DigitalOcean Managed Valkey or Yandex Managed Service for Valkey, whichever hosting the checklist records.
 
 Ongoing engineering guidance lives in [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/TESTING.md](docs/TESTING.md), and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). First-run download and product setup instructions live in this README.
 

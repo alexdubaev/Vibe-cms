@@ -92,7 +92,7 @@ The backend is one workspace with one Prisma schema and one Dockerfile, but it h
 - Jobs: declared once in `src/jobs.ts` and shared by the three runners below. `noop`, `db:ping`, `auth:sessions:cleanup`, `uploads:pending:cleanup`, and `outbox:drain` ship with the template; see [../docs/BACKGROUND_JOBS.md](../docs/BACKGROUND_JOBS.md).
 - Cron: `bun run start:cron -- <job>`, backed by `src/cron.ts`. Runs one job and exits, for a provider timer to call.
 - Scheduler: `bun run start:scheduler`, backed by `src/scheduler.ts`. Keeps schedules in the repository instead of a cloud console. `bun run dev` runs it next to the API, so a queued email leaves in development without a second terminal.
-- Worker: `bun run start:worker`, backed by `src/worker.ts`. A loop, for work that must run more often than once a minute. The scheduler ships with one entry, `outbox:drain` every minute, and `bun run dev` starts it alongside the API; the worker ships empty, and deployment generation refuses to deploy it as an App Platform worker until it has entries.
+- Worker: `bun run start:worker`, backed by `src/worker.ts`. A loop, for work that must run more often than once a minute. The scheduler ships with one entry, `outbox:drain` every minute, and `bun run dev` starts it alongside the API; the worker ships empty, so give it a loop before deploying it as an App Platform worker - a process that exits immediately gets restarted forever.
 
 All entrypoints use `src/runtime.ts` for env loading, Prisma creation, and cleanup, so backend services can be shared without duplicating Prisma schema or database setup.
 

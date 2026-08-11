@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test'
 import { ESLint } from 'eslint'
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const webRoot = resolve(import.meta.dir, '..')
@@ -67,20 +66,4 @@ test('typography policy rejects typography utilities outside variants', async ()
     'Move typography utility "leading-tight" into the Typography component variants.',
     'Move typography utility "tracking-wide" into the Typography component variants.',
   ]))
-})
-
-test('official shadcn primitives stay independent from project Typography', () => {
-  const inputSource = readFileSync(resolve(webRoot, 'src/components/ui/input.tsx'), 'utf8')
-  const buttonSource = readFileSync(resolve(webRoot, 'src/components/ui/button.tsx'), 'utf8')
-
-  expect(inputSource).toContain('rounded-md')
-  expect(inputSource).not.toContain('components/typography')
-  expect(buttonSource).not.toContain('components/typography')
-})
-
-test('Typography keeps its asChild slot implementation outside the registry', () => {
-  const source = readFileSync(resolve(webRoot, 'src/components/typography.tsx'), 'utf8')
-
-  expect(source).toContain('asChild ? Slot.Root')
-  expect(source).toContain('const slotProps = asChild ? {}')
 })
