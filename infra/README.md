@@ -6,11 +6,13 @@ Terraform state is split at operational boundaries, not merely across files:
 infra/
 ├── digitalocean/
 │   ├── bootstrap/   # remote-state Space and scoped key
+│   ├── operations/  # provider-wide production mutation lease
 │   ├── production/  # stateful foundation: VPC, PostgreSQL, registry, media
 │   ├── runtime/     # API, scheduler, and PRE_DEPLOY migration
 │   └── static/      # webapp and website, applied only after runtime succeeds
 └── yandex/
     ├── bootstrap/   # remote-state Object Storage bucket and scoped key
+    ├── operations/  # provider-wide production mutation lease
     ├── production/  # stateful foundation: network, DB, secrets, buckets, IAM
     ├── migration/   # isolated one-shot migration container
     └── runtime/     # API, gateway, jobs, DNS, and optional CDN
@@ -24,7 +26,10 @@ cannot partially publish the frontend or mutate the old runtime configuration.
 
 Every root has a separate locked S3-compatible state key. The bootstrap state remains separate
 because a bucket cannot store its own state before it exists. Provider versions and dependency
-checksums are pinned per root.
+checksums are pinned per root. Non-dry foundation applies, releases, and production imports also
+hold the provider's `operations` state lock for their complete multi-root sequence, so two wrappers
+cannot interleave migration, runtime, static, or foundation changes. The wrapper rechecks the lease
+between every mutating phase and stops the sequence if ownership is lost.
 
 ## Commands
 

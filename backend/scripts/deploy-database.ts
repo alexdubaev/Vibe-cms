@@ -23,7 +23,7 @@ type DatabaseDeployDependencies = {
   createDatabase(databaseUrl: string): DbClient
   grantRuntimeAccess(
     db: DbClient,
-    input: { databaseName: string; username: string },
+    input: { databaseName: string; username: string | null },
   ): Promise<void>
   log(message: string): void
   migrate(
@@ -66,12 +66,10 @@ export async function deployDatabase(
       expectedOwner: config.migrationDatabaseUser,
     })
     await dependencies.migrate(config.databaseUrl, source)
-    if (config.runtimeDatabaseUser !== null) {
-      await dependencies.grantRuntimeAccess(prisma, {
-        databaseName: config.databaseName,
-        username: config.runtimeDatabaseUser,
-      })
-    }
+    await dependencies.grantRuntimeAccess(prisma, {
+      databaseName: config.databaseName,
+      username: config.runtimeDatabaseUser,
+    })
     if (config.seed !== null) {
       await dependencies.bootstrap(prisma, config.seed)
     }
@@ -151,42 +149,70 @@ function databaseNameFromUrl(databaseUrl: string) {
 }
 
 export async function grantRuntimeDatabaseAccess(
-  db: Pick<DbClient, '$executeRawUnsafe' | '$queryRawUnsafe'>,
-  { databaseName, username }: { databaseName: string; username: string },
+  db: Pick<DbClient, '$transaction'>,
+  {
+    databaseName,
+    username,
+  }: { databaseName: string; username: string | null },
 ) {
   const database = quoteIdentifier(databaseName)
-  const role = quoteIdentifier(username)
-  const roleProblems = await runtimeRolePrivilegeProblems(db, { username })
-  if (roleProblems.length > 0) {
-    throw new Error(
-      `Runtime database role ${username} is not safely reconcilable: ${roleProblems
-        .map(({ problem }) => problem)
-        .join('; ')}. Remove inherited/elevated roles and transfer owned objects before deployment.`,
-    )
-  }
-  const statements = [
-    `REVOKE ALL PRIVILEGES ON DATABASE ${database} FROM ${role}`,
-    `REVOKE ALL PRIVILEGES ON SCHEMA public FROM ${role}`,
-    `REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM ${role}`,
-    `REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM ${role}`,
-    `REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM ${role}`,
-    `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL PRIVILEGES ON TABLES FROM ${role}`,
-    `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL PRIVILEGES ON SEQUENCES FROM ${role}`,
-    `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL PRIVILEGES ON FUNCTIONS FROM ${role}`,
-    `GRANT CONNECT ON DATABASE ${database} TO ${role}`,
-    `GRANT USAGE ON SCHEMA public TO ${role}`,
-    `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${role}`,
-    `GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO ${role}`,
-    `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${role}`,
-    `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO ${role}`,
+  const publicStatements = [
+    `REVOKE TEMPORARY ON DATABASE ${database} FROM PUBLIC`,
+    'REVOKE CREATE ON SCHEMA public FROM PUBLIC',
+    'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM PUBLIC',
+    'REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC',
+    'REVOKE ALL PRIVILEGES ON ALL ROUTINES IN SCHEMA public FROM PUBLIC',
+    'ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL PRIVILEGES ON TABLES FROM PUBLIC',
+    'ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL PRIVILEGES ON SEQUENCES FROM PUBLIC',
+    // PostgreSQL's built-in PUBLIC function EXECUTE grant is global. A schema-scoped REVOKE can
+    // only undo an earlier schema-scoped GRANT, so this one must also be global for future routines.
+    'ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC',
   ]
+  const role = username === null ? null : quoteIdentifier(username)
+  const runtimeStatements =
+    role === null
+      ? []
+      : [
+          `REVOKE ALL PRIVILEGES ON DATABASE ${database} FROM ${role}`,
+          `REVOKE ALL PRIVILEGES ON SCHEMA public FROM ${role}`,
+          `REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM ${role}`,
+          `REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM ${role}`,
+          `REVOKE ALL PRIVILEGES ON ALL ROUTINES IN SCHEMA public FROM ${role}`,
+          `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL PRIVILEGES ON TABLES FROM ${role}`,
+          `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL PRIVILEGES ON SEQUENCES FROM ${role}`,
+          `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL PRIVILEGES ON FUNCTIONS FROM ${role}`,
+          `GRANT CONNECT ON DATABASE ${database} TO ${role}`,
+          `GRANT USAGE ON SCHEMA public TO ${role}`,
+          `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${role}`,
+          `GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO ${role}`,
+          `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${role}`,
+          `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO ${role}`,
+        ]
 
-  // DigitalOcean can create the runtime login but cannot express object privileges through its
-  // Terraform provider. The migration owner first removes direct drift, then reapplies this
-  // least-privilege contract after every migration for current and future Prisma objects.
-  for (const statement of statements) {
-    await db.$executeRawUnsafe(statement)
-  }
+  // PUBLIC is inherited by every login, so harden its current and default ACLs for both providers.
+  // DigitalOcean additionally needs explicit DML grants because its Terraform provider cannot
+  // express object privileges. Keep the preflight and every ACL change atomic so a failed
+  // deployment cannot strand the active runtime after its old grants were revoked.
+  await db.$transaction(
+    async (transaction) => {
+      if (username !== null) {
+        const roleProblems = await runtimeRolePrivilegeProblems(transaction, {
+          username,
+        })
+        if (roleProblems.length > 0) {
+          throw new Error(
+            `Runtime database role ${username} is not safely reconcilable: ${roleProblems
+              .map(({ problem }) => problem)
+              .join('; ')}. Remove inherited/elevated roles and transfer owned objects before deployment.`,
+          )
+        }
+      }
+      for (const statement of [...publicStatements, ...runtimeStatements]) {
+        await transaction.$executeRawUnsafe(statement)
+      }
+    },
+    { timeout: 60_000 },
+  )
 }
 
 export async function runtimeRolePrivilegeProblems(
@@ -269,7 +295,10 @@ export async function migrationSchemaOwnershipMismatches(
      UNION ALL
      SELECT 'schema privilege' AS kind, 'public' AS identity, current_user AS owner
        WHERE $2::boolean
-         AND NOT has_schema_privilege(current_user, 'public', 'USAGE,CREATE')
+         AND (
+           NOT has_schema_privilege(current_user, 'public', 'USAGE')
+           OR NOT has_schema_privilege(current_user, 'public', 'CREATE')
+         )
      UNION ALL
      SELECT 'schema' AS kind,
             format('%I', namespace.nspname) AS identity,
@@ -391,7 +420,7 @@ export async function transferMigrationSchemaOwnership(
             format('%I', namespace.nspname) AS identity,
             pg_get_userbyid(namespace.nspowner) AS owner,
             format('ALTER SCHEMA %I OWNER TO %I', namespace.nspname, $2::text) AS statement,
-            40 AS sort_order
+            50 AS sort_order
        FROM pg_namespace namespace
       WHERE namespace.nspname = 'public'
         AND pg_get_userbyid(namespace.nspowner) = $1
@@ -417,7 +446,7 @@ export async function transferMigrationSchemaOwnership(
               relation.relname,
               $2::text
             ) AS statement,
-            10 AS sort_order
+            CASE relation.relkind WHEN 'S' THEN 20 ELSE 10 END AS sort_order
        FROM pg_class relation
        JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
       WHERE namespace.nspname = 'public'
@@ -443,7 +472,7 @@ export async function transferMigrationSchemaOwnership(
               routine.oid::regprocedure,
               $2::text
             ) AS statement,
-            20 AS sort_order
+            30 AS sort_order
        FROM pg_proc routine
        JOIN pg_namespace namespace ON namespace.oid = routine.pronamespace
       WHERE namespace.nspname = 'public'
@@ -460,7 +489,7 @@ export async function transferMigrationSchemaOwnership(
             format('%I.%I', namespace.nspname, owned_type.typname) AS identity,
             pg_get_userbyid(owned_type.typowner) AS owner,
             format('ALTER TYPE %I.%I OWNER TO %I', namespace.nspname, owned_type.typname, $2::text) AS statement,
-            30 AS sort_order
+            40 AS sort_order
        FROM pg_type owned_type
        JOIN pg_namespace namespace ON namespace.oid = owned_type.typnamespace
       WHERE namespace.nspname = 'public'

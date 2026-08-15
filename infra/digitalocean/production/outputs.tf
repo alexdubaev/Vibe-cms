@@ -14,6 +14,14 @@ output "image_repository" {
   value = "${digitalocean_container_registry.production.endpoint}/${var.backend_image_repository}"
 }
 
+output "release_source" {
+  description = "Effective source identity consumed by the guarded release wrapper."
+  value = {
+    git_branch  = var.git_branch
+    github_repo = var.github_repo
+  }
+}
+
 output "runtime_inputs" {
   description = "Sensitive cross-state inputs written only to the ignored runtime root by scripts/infra.mjs."
   sensitive   = true

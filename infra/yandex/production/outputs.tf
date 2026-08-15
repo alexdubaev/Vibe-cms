@@ -6,6 +6,13 @@ output "image_repository" {
   value = "cr.yandex/${yandex_container_registry.production.id}/${var.backend_image_name}"
 }
 
+output "release_source" {
+  description = "Effective source identity consumed by the guarded release wrapper."
+  value = {
+    git_branch = var.git_branch
+  }
+}
+
 output "media_bucket" {
   value = yandex_storage_bucket.media.bucket
 }
@@ -56,18 +63,18 @@ output "migration_inputs" {
   description = "Sensitive cross-state inputs written only to the ignored migration root by scripts/infra.mjs."
   sensitive   = true
   value = {
-    cloud_id                = var.cloud_id
-    folder_id               = var.folder_id
-    primary_zone            = var.primary_zone
-    project_slug            = var.project_slug
-    network_id              = yandex_vpc_network.production.id
-    registry_id             = yandex_container_registry.production.id
-    backend_image_name      = var.backend_image_name
-    runtime_service_account = yandex_iam_service_account.runtime.id
-    logging_group_id        = yandex_logging_group.production.id
-    runtime_environment     = local.runtime_environment
-    runtime_secret_bindings = local.migration_secret_bindings
-    api_memory_mb           = var.api_memory_mb
+    cloud_id                  = var.cloud_id
+    folder_id                 = var.folder_id
+    primary_zone              = var.primary_zone
+    project_slug              = var.project_slug
+    network_id                = yandex_vpc_network.production.id
+    registry_id               = yandex_container_registry.production.id
+    backend_image_name        = var.backend_image_name
+    migration_service_account = yandex_iam_service_account.migration.id
+    logging_group_id          = yandex_logging_group.production.id
+    migration_environment     = { NODE_ENV = "production" }
+    migration_secret_bindings = local.migration_secret_bindings
+    api_memory_mb             = var.api_memory_mb
   }
 }
 

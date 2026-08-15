@@ -222,6 +222,24 @@ resource "yandex_resourcemanager_folder_iam_member" "runtime_roles" {
   member    = "serviceAccount:${yandex_iam_service_account.runtime.id}"
 }
 
+resource "yandex_iam_service_account" "migration" {
+  folder_id   = var.folder_id
+  name        = "${local.name_prefix}-migration"
+  description = "One-shot database migration identity isolated from the API runtime."
+}
+
+resource "yandex_resourcemanager_folder_iam_member" "migration_roles" {
+  for_each = toset([
+    "container-registry.images.puller",
+    "logging.writer",
+    "vpc.user",
+  ])
+
+  folder_id = var.folder_id
+  role      = each.value
+  member    = "serviceAccount:${yandex_iam_service_account.migration.id}"
+}
+
 resource "yandex_iam_service_account" "gateway" {
   folder_id   = var.folder_id
   name        = "${local.name_prefix}-gateway"

@@ -39,6 +39,18 @@ override_resource {
   values          = { id = "media-id" }
 }
 
+override_resource {
+  target          = yandex_iam_service_account.runtime
+  override_during = plan
+  values          = { id = "runtime-service-account" }
+}
+
+override_resource {
+  target          = yandex_iam_service_account.migration
+  override_during = plan
+  values          = { id = "migration-service-account" }
+}
+
 variables {
   cloud_id                        = "cloud-test"
   folder_id                       = "folder-test"
@@ -220,8 +232,23 @@ run "steady_state_foundation" {
   }
 
   assert {
+    condition = (
+      yandex_lockbox_secret_iam_member.runtime_migration_database.member == "serviceAccount:${yandex_iam_service_account.migration.id}" &&
+      yandex_lockbox_secret_iam_member.runtime_migration_database.member != "serviceAccount:${yandex_iam_service_account.runtime.id}" &&
+      output.migration_inputs.migration_service_account == yandex_iam_service_account.migration.id &&
+      toset(keys(output.migration_inputs.migration_secret_bindings)) == toset(["DATABASE_URL"])
+    )
+    error_message = "The migration owner secret must be available only to a dedicated migration identity and migration input."
+  }
+
+  assert {
     condition     = !contains(keys(yandex_resourcemanager_folder_iam_member.runtime_roles), "lockbox.payloadViewer")
     error_message = "The runtime must receive per-secret Lockbox grants, never folder-wide payload access."
+  }
+
+  assert {
+    condition     = output.release_source.git_branch == var.git_branch
+    error_message = "The guarded release wrapper must read the effective branch from foundation state."
   }
 }
 

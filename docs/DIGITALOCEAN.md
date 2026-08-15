@@ -22,18 +22,24 @@ digest and must succeed before App Platform promotes the API.
 
 ## Account preparation
 
-Install and authenticate `doctl`, authorize App Platform to read the configured GitHub repository,
-and create one account-level Spaces access key for Terraform to manage buckets. The bootstrap then
-creates a narrower key used only by the Terraform state backend.
+Install and authenticate `doctl` 1.164 or newer, authorize App Platform to read the configured
+GitHub repository, and create one account-level Spaces access key for Terraform to manage buckets.
+The bootstrap then creates a narrower key used only by the Terraform state backend.
 
 Set the account guard and credentials without printing them:
 
 ```bash
-export DO_EXPECTED_TEAM='<exact team name from doctl account get>'
+export DO_EXPECTED_TEAM_UUID='<immutable Team UUID from doctl account get --output json>'
 export DIGITALOCEAN_TOKEN='<API token>'
 export SPACES_ACCESS_KEY_ID='<account Spaces key id>'
 export SPACES_SECRET_ACCESS_KEY='<account Spaces secret>'
 ```
+
+The API token needs `spaces_key:read` in addition to the scopes required by Terraform. The wrapper
+passes `DIGITALOCEAN_TOKEN` to both Terraform and `doctl`, forces `doctl` to its default context,
+verifies the immutable `DO_EXPECTED_TEAM_UUID`, and checks that this token can read the exact
+`SPACES_ACCESS_KEY_ID`. A duplicate/renamed team, saved CLI context, or Spaces key from another
+team therefore cannot redirect Terraform silently.
 
 The account Spaces key remains necessary for bucket administration; it is not reused by the app.
 Terraform creates a separate key restricted to the media Space and injects that key into the API
@@ -91,10 +97,11 @@ The App Platform spec binds the managed cluster twice without copying either pas
 scheduler use the restricted application user, while only the `PRE_DEPLOY` job uses the cluster's
 administrative connection for Prisma DDL. After every migration, `db:deploy` grants the runtime user
 database/schema access, DML on current tables, sequence use, and matching owner default privileges
-for future tables and sequences. Before granting, it removes direct database/schema/table/sequence
-and default-ACL drift; it fails closed if the runtime role has inherited/elevated roles or owns
-objects. DigitalOcean creates database users with minimal privileges, so this deterministic
-reconciliation is part of the migration gate rather than an undocumented console task.
+for future tables and sequences. Before granting, it removes unsafe schema/object/routine/default
+privileges inherited through PostgreSQL `PUBLIC` plus direct database/schema/table/sequence and
+default-ACL drift; it fails closed if the runtime role has inherited/elevated roles or owns objects.
+DigitalOcean creates database users with minimal privileges, so this deterministic reconciliation
+is part of the migration gate rather than an undocumented console task.
 
 For an imported cluster, `db:deploy` also inventories public-schema ownership before Prisma. If a
 legacy role owns objects, use the reviewed `db:adopt-owner` inventory/apply sequence in

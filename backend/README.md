@@ -68,8 +68,8 @@ and revokes stale authentication authority. The committed values are public
 local defaults and must never be reused in a deployed environment.
 
 Production remains a separate path. `bun run db:deploy` checks migration ownership before Prisma,
-applies migrations, reconciles a separate DigitalOcean runtime role back to DML-only access, and
-optionally bootstraps only the first administrator from paired
+applies migrations, removes unsafe PostgreSQL `PUBLIC` privileges for both cloud paths, reconciles a
+separate DigitalOcean runtime role back to DML-only access, and optionally bootstraps only the first administrator from paired
 `ADMIN_SEED_EMAIL` and `ADMIN_SEED_PASSWORD`, then fails unless at least one
 administrator has a password credential. Production bootstrap rejects blank,
 known-placeholder, and repeated-pattern passwords in addition to enforcing the

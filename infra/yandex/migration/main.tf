@@ -13,7 +13,7 @@ locals {
     }
   }
   migration_secret_bindings = merge(
-    var.runtime_secret_bindings,
+    var.migration_secret_bindings,
     local.admin_secret_bindings,
   )
 }
@@ -49,7 +49,7 @@ resource "yandex_lockbox_secret_iam_member" "admin_seed" {
 
   secret_id = yandex_lockbox_secret.admin_seed[0].id
   role      = "lockbox.payloadViewer"
-  member    = "serviceAccount:${var.runtime_service_account}"
+  member    = "serviceAccount:${var.migration_service_account}"
 }
 
 resource "yandex_serverless_container" "migration" {
@@ -59,7 +59,7 @@ resource "yandex_serverless_container" "migration" {
   cores              = 1
   core_fraction      = 100
   execution_timeout  = "900s"
-  service_account_id = var.runtime_service_account
+  service_account_id = var.migration_service_account
 
   runtime { type = "task" }
   connectivity { network_id = var.network_id }
@@ -68,7 +68,7 @@ resource "yandex_serverless_container" "migration" {
     url         = "cr.yandex/${var.registry_id}/${var.backend_image_name}@${var.migration_image_digest}"
     command     = ["bun"]
     args        = ["scripts/deploy-database.ts"]
-    environment = var.runtime_environment
+    environment = var.migration_environment
   }
 
   dynamic "secrets" {

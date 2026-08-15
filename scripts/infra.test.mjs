@@ -7,6 +7,9 @@ import {
   activeDeploymentCommitProblems,
   backendEnvironment,
   bootstrapStateMode,
+  digitalOceanCliEnvironment,
+  digitalOceanSpacesKeyProblems,
+  digitalOceanTeamIdentityProblems,
   digestFromRepoDigests,
   executePromotionPipeline,
   githubRepositoryFromRemoteUrl,
@@ -17,6 +20,9 @@ import {
   parseSimpleAssignments,
   planSafetyProblems,
   prepareBootstrapBackend,
+  finalizeStateRecovery,
+  prepareStateRecoveryAccess,
+  productionMutationNeedsLease,
   redactArguments,
   releaseGitProblems,
   renderBackendConfig,
@@ -25,10 +31,12 @@ import {
   safeYandexMigrationSeedDestroyAddresses,
   sanitizedBuildEnvironment,
   safeYandexSecretVersionDestroyAddresses,
+  s3CredentialEnvironment,
   seedVariables,
   stateKeyForRoot,
   stateRecoveryOutputs,
   staticUploadSteps,
+  withProductionMutationLease,
   yandexDatabaseRotationProblems,
 } from './infra.mjs'
 
@@ -347,6 +355,79 @@ describe('Terraform configuration helpers', () => {
     ).toThrow('TF_STATE_RECOVERY_SECRET_ACCESS_KEY')
   })
 
+  test('keeps temporary recovery credentials in memory so an interrupted reattach can retry', () => {
+    const outputs = {
+      state_bucket: 'existing-state',
+      state_region: 'fra1',
+      state_access_key_id: 'temporary-id',
+      state_secret_access_key: 'temporary-secret',
+    }
+    const events = []
+    const prepare = () =>
+      prepareStateRecoveryAccess(
+        {
+          provider: 'digitalocean',
+          outputs,
+          paths: { roots: { foundation: '/foundation' } },
+          baseEnvironment: { KEEP_ME: 'yes' },
+        },
+        {
+          writeConfiguration: () => events.push('write-backend-config'),
+        },
+      )
+
+    expect(prepare()).toEqual({
+      KEEP_ME: 'yes',
+      AWS_ACCESS_KEY_ID: 'temporary-id',
+      AWS_SECRET_ACCESS_KEY: 'temporary-secret',
+    })
+    expect(prepare()).toEqual(prepare())
+    expect(events).toEqual([
+      'write-backend-config',
+      'write-backend-config',
+      'write-backend-config',
+    ])
+  })
+
+  test('writes the managed recovery marker only after every backend accepts the managed key', () => {
+    const events = []
+    const input = {
+      provider: 'yandex',
+      paths: { bootstrapRoot: '/bootstrap', roots: { runtime: '/runtime' } },
+      managedOutputs: {
+        state_bucket: 'state-bucket',
+        state_region: 'ru-central1',
+        state_access_key_id: 'managed-id',
+        state_secret_access_key: 'managed-secret',
+      },
+      expectedStateBucket: 'state-bucket',
+      baseEnvironment: {},
+    }
+    const operations = {
+      verifyBootstrap: () => events.push('verify-bootstrap'),
+      initializeRoot: (rootName) => events.push(`init-${rootName}`),
+      writeArtifacts: () => events.push('write-marker'),
+    }
+
+    finalizeStateRecovery(input, operations)
+    expect(events).toEqual([
+      'verify-bootstrap',
+      'init-runtime',
+      'write-marker',
+    ])
+
+    events.length = 0
+    expect(() =>
+      finalizeStateRecovery(input, {
+        ...operations,
+        initializeRoot: () => {
+          throw new Error('runtime backend rejected managed key')
+        },
+      }),
+    ).toThrow('runtime backend rejected managed key')
+    expect(events).toEqual(['verify-bootstrap'])
+  })
+
   test('verifies migrated state before deleting local recovery state', () => {
     const events = []
     const outputs = {
@@ -443,7 +524,11 @@ describe('Terraform configuration helpers', () => {
           TF_STATE_ACCESS_KEY_ID: 'scoped-id',
           TF_STATE_SECRET_ACCESS_KEY: 'scoped-secret',
         },
-        { KEEP_ME: 'yes' },
+        {
+          KEEP_ME: 'yes',
+          AWS_SESSION_TOKEN: 'stale-session',
+          AWS_SECURITY_TOKEN: 'stale-security-token',
+        },
       ),
     ).toEqual({
       KEEP_ME: 'yes',
@@ -453,10 +538,174 @@ describe('Terraform configuration helpers', () => {
     expect(() =>
       backendEnvironment({ TF_STATE_ACCESS_KEY_ID: 'only-one' }),
     ).toThrow('state backend credentials')
+
+    expect(
+      s3CredentialEnvironment(
+        { accessKey: 'publisher-id', secretKey: 'publisher-secret' },
+        {
+          AWS_SESSION_TOKEN: 'stale-session',
+          AWS_SECURITY_TOKEN: 'stale-security-token',
+        },
+      ),
+    ).toEqual({
+      AWS_ACCESS_KEY_ID: 'publisher-id',
+      AWS_SECRET_ACCESS_KEY: 'publisher-secret',
+    })
   })
 })
 
 describe('release safety', () => {
+  test('forces doctl to use the same token and default context as Terraform', () => {
+    expect(
+      digitalOceanCliEnvironment({
+        DIGITALOCEAN_TOKEN: 'terraform-token',
+        DIGITALOCEAN_ACCESS_TOKEN: 'stale-doctl-token',
+        DIGITALOCEAN_CONTEXT: 'another-team',
+        KEEP_ME: 'yes',
+      }),
+    ).toEqual({
+      DIGITALOCEAN_TOKEN: 'terraform-token',
+      DIGITALOCEAN_ACCESS_TOKEN: 'terraform-token',
+      DIGITALOCEAN_CONTEXT: 'default',
+      KEEP_ME: 'yes',
+    })
+    expect(() => digitalOceanCliEnvironment({})).toThrow(
+      'DIGITALOCEAN_TOKEN',
+    )
+  })
+
+  test('requires the account token to see the exact Spaces administration key', () => {
+    expect(
+      digitalOceanSpacesKeyProblems(
+        JSON.stringify({ access_key: 'spaces-key-id' }),
+        'spaces-key-id',
+      ),
+    ).toEqual([])
+    expect(
+      digitalOceanSpacesKeyProblems(
+        JSON.stringify({ access_key: 'key-from-another-team' }),
+        'spaces-key-id',
+      ),
+    ).toEqual(['the returned Spaces key does not match SPACES_ACCESS_KEY_ID'])
+    expect(
+      digitalOceanSpacesKeyProblems('{"unexpected":true}', 'spaces-key-id'),
+    ).toEqual(['the DigitalOcean response contains no Spaces access key'])
+  })
+
+  test('pins DigitalOcean mutations to the immutable expected team UUID', () => {
+    expect(
+      digitalOceanTeamIdentityProblems(
+        JSON.stringify({ team: { uuid: 'team-uuid', name: 'Production' } }),
+        'team-uuid',
+      ),
+    ).toEqual([])
+    expect(
+      digitalOceanTeamIdentityProblems(
+        JSON.stringify({ team: { uuid: 'other-team', name: 'Production' } }),
+        'team-uuid',
+      ),
+    ).toEqual([
+      'DigitalOcean token belongs to team UUID other-team, expected team-uuid',
+    ])
+  })
+
+  test('holds one production lease until the complete mutation settles', async () => {
+    const events = []
+    await expect(
+      withProductionMutationLease(
+        async () => ({
+          assertHeld: () => events.push('assert-held'),
+          release: () => events.push('release'),
+        }),
+        async ({ assertHeld }) => {
+          events.push('runtime')
+          assertHeld()
+          events.push('static')
+          return 'complete'
+        },
+      ),
+    ).resolves.toBe('complete')
+    expect(events).toEqual([
+      'assert-held',
+      'runtime',
+      'assert-held',
+      'static',
+      'assert-held',
+      'release',
+    ])
+
+    events.length = 0
+    await expect(
+      withProductionMutationLease(
+        async () => ({ release: () => events.push('release') }),
+        async () => {
+          throw new Error('mutation failed')
+        },
+      ),
+    ).rejects.toThrow('mutation failed')
+    expect(events).toEqual(['release'])
+  })
+
+  test('serializes competing production mutations and releases the scope for retry', async () => {
+    let held = false
+    const acquire = async () => {
+      if (held) throw new Error('lease already held')
+      held = true
+      return {
+        assertHeld: () => {
+          if (!held) throw new Error('lease lost')
+        },
+        release: () => {
+          held = false
+        },
+      }
+    }
+    let finishFirst
+    const first = withProductionMutationLease(
+      acquire,
+      () => new Promise((resolve) => (finishFirst = resolve)),
+    )
+    await Promise.resolve()
+
+    await expect(
+      withProductionMutationLease(acquire, async () => 'second'),
+    ).rejects.toThrow('lease already held')
+    finishFirst('first')
+    await expect(first).resolves.toBe('first')
+    await expect(
+      withProductionMutationLease(acquire, async () => 'retry'),
+    ).resolves.toBe('retry')
+  })
+
+  test('locks only commands that mutate provider production state', () => {
+    expect(
+      productionMutationNeedsLease({ command: 'apply', dryRun: false }),
+    ).toBe(true)
+    expect(
+      productionMutationNeedsLease({ command: 'release', dryRun: false }),
+    ).toBe(true)
+    expect(
+      productionMutationNeedsLease({
+        command: 'import',
+        rootName: 'runtime',
+        dryRun: false,
+      }),
+    ).toBe(true)
+    expect(
+      productionMutationNeedsLease({
+        command: 'import',
+        rootName: 'bootstrap',
+        dryRun: false,
+      }),
+    ).toBe(false)
+    expect(
+      productionMutationNeedsLease({ command: 'apply', dryRun: true }),
+    ).toBe(false)
+    expect(
+      productionMutationNeedsLease({ command: 'plan', dryRun: true }),
+    ).toBe(false)
+  })
+
   test('normalizes supported GitHub remote URLs to the App Platform repository form', () => {
     expect(
       githubRepositoryFromRemoteUrl('git@github.com:Owner/Repository.git'),
@@ -515,6 +764,37 @@ describe('release safety', () => {
       }),
     ).toEqual([
       'release source changed after preflight: expected captured-commit, found new-commit',
+    ])
+
+    expect(
+      releaseGitProblems({
+        currentBranch: 'master',
+        configuredBranch: 'master',
+        upstreamRef: 'origin/master',
+        headCommit: 'captured-commit',
+        upstreamCommit: 'newer-upstream-commit',
+        expectedCommit: 'captured-commit',
+        configuredGithubRepo: 'owner/product',
+        upstreamGithubRepo: 'owner/product',
+        dirtyLines: [],
+      }),
+    ).toEqual([])
+
+    expect(
+      releaseGitProblems({
+        currentBranch: 'feature',
+        configuredBranch: undefined,
+        upstreamRef: 'origin/feature',
+        headCommit: 'same-commit',
+        upstreamCommit: 'same-commit',
+        configuredGithubRepo: undefined,
+        upstreamGithubRepo: 'owner/product',
+        githubRepositoryRequired: true,
+        dirtyLines: [],
+      }),
+    ).toEqual([
+      'Terraform foundation state does not identify the configured release branch; run bun run infra:apply for the selected provider',
+      'Terraform foundation state does not identify the configured GitHub repository; run bun run infra:apply for digitalocean',
     ])
   })
 
@@ -648,6 +928,31 @@ describe('release safety', () => {
       'static',
       'verify',
     ])
+  })
+
+  test('stops promotion before the next phase when the production lease is lost', async () => {
+    const events = []
+    let held = true
+
+    await expect(
+      executePromotionPipeline(
+        'digitalocean',
+        {
+          deployRuntime: async () => {
+            events.push('runtime')
+            held = false
+          },
+          tightenFoundation: async () => events.push('tighten'),
+          deployStatic: async () => events.push('static'),
+          verify: async () => events.push('verify'),
+        },
+        () => {
+          events.push('assert-held')
+          if (!held) throw new Error('production mutation lease was lost')
+        },
+      ),
+    ).rejects.toThrow('production mutation lease was lost')
+    expect(events).toEqual(['assert-held', 'runtime', 'assert-held'])
   })
 
   test('pins DigitalOcean static source to one immutable commit branch', () => {

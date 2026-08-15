@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
-import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { spawn, spawnSync } from 'node:child_process'
+import { createHash, randomUUID } from 'node:crypto'
 import {
   chmodSync,
   existsSync,
@@ -45,6 +45,7 @@ function providerPaths(provider) {
   const roots = {
     bootstrap: resolve(providerRoot, 'bootstrap'),
     foundation: productionRoot,
+    operations: resolve(providerRoot, 'operations'),
     runtime: resolve(providerRoot, 'runtime'),
     ...(provider === 'digitalocean'
       ? { static: resolve(providerRoot, 'static') }
@@ -149,8 +150,24 @@ export function backendEnvironment(stateConfig, baseEnvironment = process.env) {
     )
   }
 
+  return s3CredentialEnvironment(
+    { accessKey, secretKey },
+    baseEnvironment,
+  )
+}
+
+export function s3CredentialEnvironment(
+  { accessKey, secretKey },
+  baseEnvironment = process.env,
+) {
+  const {
+    AWS_SESSION_TOKEN: _sessionToken,
+    AWS_SECURITY_TOKEN: _securityToken,
+    ...environment
+  } = baseEnvironment
+
   return {
-    ...baseEnvironment,
+    ...environment,
     AWS_ACCESS_KEY_ID: accessKey,
     AWS_SECRET_ACCESS_KEY: secretKey,
   }
@@ -197,13 +214,18 @@ export function releaseGitProblems({
   upstreamCommit,
   configuredGithubRepo,
   upstreamGithubRepo,
+  githubRepositoryRequired = false,
   expectedCommit,
 }) {
   const problems = []
 
-  if (!currentBranch) {
+  if (!configuredBranch) {
+    problems.push(
+      'Terraform foundation state does not identify the configured release branch; run bun run infra:apply for the selected provider',
+    )
+  } else if (!currentBranch) {
     problems.push('release requires a named branch, not a detached checkout')
-  } else if (configuredBranch && currentBranch !== configuredBranch) {
+  } else if (currentBranch !== configuredBranch) {
     problems.push(
       `current checkout is ${currentBranch}, but Terraform deploys ${configuredBranch}`,
     )
@@ -220,7 +242,10 @@ export function releaseGitProblems({
     )
   }
 
-  if (!headCommit || !upstreamCommit || headCommit !== upstreamCommit) {
+  if (
+    !expectedCommit &&
+    (!headCommit || !upstreamCommit || headCommit !== upstreamCommit)
+  ) {
     problems.push(
       'release HEAD must exactly match the freshly fetched upstream commit',
     )
@@ -231,7 +256,11 @@ export function releaseGitProblems({
     )
   }
 
-  if (configuredGithubRepo) {
+  if (githubRepositoryRequired && !configuredGithubRepo) {
+    problems.push(
+      'Terraform foundation state does not identify the configured GitHub repository; run bun run infra:apply for digitalocean',
+    )
+  } else if (configuredGithubRepo) {
     if (!upstreamGithubRepo) {
       problems.push('release upstream must be a supported GitHub remote')
     } else if (
@@ -251,6 +280,37 @@ export function releaseGitProblems({
   }
 
   return problems
+}
+
+export async function withProductionMutationLease(acquire, operation) {
+  const lease = await acquire()
+  let result
+  let operationError
+  try {
+    lease.assertHeld?.()
+    result = await operation(lease)
+    lease.assertHeld?.()
+  } catch (error) {
+    operationError = error
+  }
+
+  try {
+    await lease.release()
+  } catch (releaseError) {
+    if (!operationError) throw releaseError
+  }
+  if (operationError) throw operationError
+  return result
+}
+
+export function productionMutationNeedsLease(options) {
+  if (options.dryRun) return false
+  if (options.command === 'apply' || options.command === 'release') return true
+  return options.command === 'import' && options.rootName !== 'bootstrap'
+}
+
+function assertProductionMutationLease(options) {
+  options.mutationLease?.assertHeld?.()
 }
 
 export function bootstrapStateMode({
@@ -451,6 +511,7 @@ export function redactArguments(args) {
     '--secret',
     '--secret-key',
     '--access-key',
+    '--access-token',
   ])
   let redactNext = false
 
@@ -469,6 +530,85 @@ export function redactArguments(args) {
     }
     return argument
   })
+}
+
+export function digitalOceanCliEnvironment(source = process.env) {
+  const token = source.DIGITALOCEAN_TOKEN?.trim()
+  if (!token) {
+    throw new Error(
+      'DIGITALOCEAN_TOKEN is required for both Terraform and doctl',
+    )
+  }
+
+  return {
+    ...source,
+    // doctl otherwise prefers the currently selected saved context. Force its documented default
+    // context and map Terraform's token into doctl's own environment variable so every provider
+    // and CLI operation is authorized by the same credential.
+    DIGITALOCEAN_ACCESS_TOKEN: token,
+    DIGITALOCEAN_CONTEXT: 'default',
+  }
+}
+
+export function digitalOceanSpacesKeyProblems(rawResponse, expectedAccessKey) {
+  let parsed
+  try {
+    parsed = JSON.parse(rawResponse)
+  } catch {
+    return ['DigitalOcean returned invalid JSON for the Spaces key']
+  }
+
+  const candidates = [
+    ...(Array.isArray(parsed) ? parsed : []),
+    ...(Array.isArray(parsed?.keys) ? parsed.keys : []),
+    parsed?.key,
+    parsed,
+  ].filter((candidate) => candidate && typeof candidate === 'object')
+  const returnedAccessKey = candidates
+    .map(
+      (candidate) =>
+        candidate.access_key ??
+        candidate.accessKey ??
+        candidate.AccessKey ??
+        candidate['Access Key'] ??
+        candidate['Access Key ID'],
+    )
+    .find((value) => typeof value === 'string' && value.length > 0)
+
+  if (!returnedAccessKey) {
+    return ['the DigitalOcean response contains no Spaces access key']
+  }
+  if (returnedAccessKey !== expectedAccessKey) {
+    return ['the returned Spaces key does not match SPACES_ACCESS_KEY_ID']
+  }
+  return []
+}
+
+export function digitalOceanTeamIdentityProblems(
+  rawResponse,
+  expectedTeamUuid,
+) {
+  let parsed
+  try {
+    parsed = JSON.parse(rawResponse)
+  } catch {
+    return ['DigitalOcean returned invalid JSON for the account identity']
+  }
+  const account = Array.isArray(parsed) ? parsed[0] : parsed
+  const actualTeamUuid =
+    account?.team?.uuid ??
+    account?.Team?.UUID ??
+    account?.team_uuid ??
+    account?.TeamUUID
+  if (!actualTeamUuid) {
+    return ['DigitalOcean account response contains no immutable team UUID']
+  }
+  if (actualTeamUuid !== expectedTeamUuid) {
+    return [
+      `DigitalOcean token belongs to team UUID ${actualTeamUuid}, expected ${expectedTeamUuid}`,
+    ]
+  }
+  return []
 }
 
 export function staticUploadSteps({
@@ -584,6 +724,13 @@ function runCommand(
   }
 
   return capture ? String(result.stdout ?? '') : ''
+}
+
+function runDigitalOceanCli(args, options = {}) {
+  return runCommand('doctl', ['--context', 'default', ...args], {
+    ...options,
+    env: digitalOceanCliEnvironment(options.env ?? process.env),
+  })
 }
 
 function gitArchive(commit) {
@@ -752,23 +899,46 @@ function assertProviderIdentity(provider, tfvars) {
   if (provider === 'digitalocean') {
     assertEnvironmentKeys([
       'DIGITALOCEAN_TOKEN',
+      'DO_EXPECTED_TEAM_UUID',
       'SPACES_ACCESS_KEY_ID',
       'SPACES_SECRET_ACCESS_KEY',
     ])
-    const currentTeam = runCommand(
-      'doctl',
-      ['account', 'get', '--format', 'Team', '--no-header'],
-      { capture: true },
-    ).trim()
-    const expectedTeam = process.env.DO_EXPECTED_TEAM?.trim()
-    if (!expectedTeam) {
+    const rawAccount = runDigitalOceanCli(
+      ['account', 'get', '--output', 'json'],
+      { capture: true, sensitiveOutput: true, log: false },
+    )
+    const teamProblems = digitalOceanTeamIdentityProblems(
+      rawAccount,
+      process.env.DO_EXPECTED_TEAM_UUID.trim(),
+    )
+    if (teamProblems.length > 0) {
       throw new Error(
-        `Set DO_EXPECTED_TEAM to the intended DigitalOcean team. Current token: ${currentTeam}`,
+        `DigitalOcean account verification failed: ${teamProblems.join('; ')}`,
       )
     }
-    if (currentTeam !== expectedTeam) {
+    const spacesAccessKey = process.env.SPACES_ACCESS_KEY_ID.trim()
+    let rawSpacesKey
+    try {
+      rawSpacesKey = runDigitalOceanCli(
+        ['spaces', 'keys', 'get', spacesAccessKey, '--output', 'json'],
+        {
+          capture: true,
+          sensitiveOutput: true,
+          log: false,
+        },
+      )
+    } catch {
       throw new Error(
-        `DigitalOcean token belongs to ${currentTeam}, expected ${expectedTeam}`,
+        'DIGITALOCEAN_TOKEN cannot read SPACES_ACCESS_KEY_ID in the expected team; use matching credentials and grant spaces_key:read',
+      )
+    }
+    const spacesKeyProblems = digitalOceanSpacesKeyProblems(
+      rawSpacesKey,
+      spacesAccessKey,
+    )
+    if (spacesKeyProblems.length > 0) {
+      throw new Error(
+        `DigitalOcean Spaces credential verification failed: ${spacesKeyProblems.join('; ')}`,
       )
     }
     return
@@ -813,11 +983,9 @@ function assertBackendOutputs(outputs) {
   }
 }
 
-function writeBackendArtifacts(provider, outputs, paths) {
+function writeBackendConfiguration(provider, outputs, paths) {
   assertBackendOutputs(outputs)
 
-  // Backend files must exist before the credential marker: an interrupted write can then safely
-  // rerun locally, whereas credentials without configuration used to look like a ready backend.
   for (const [rootName, root] of Object.entries(paths.roots)) {
     writePrivateFile(
       resolve(root, 'backend.backend.hcl'),
@@ -828,6 +996,12 @@ function writeBackendArtifacts(provider, outputs, paths) {
       }),
     )
   }
+}
+
+function writeBackendArtifacts(provider, outputs, paths) {
+  // Backend files must exist before the credential marker: an interrupted write can then safely
+  // rerun locally, whereas credentials without configuration used to look like a ready backend.
+  writeBackendConfiguration(provider, outputs, paths)
 
   writePrivateFile(
     paths.stateEnvironment,
@@ -838,6 +1012,243 @@ function writeBackendArtifacts(provider, outputs, paths) {
       '',
     ].join('\n'),
   )
+}
+
+function writeOperationsBackendConfiguration(paths) {
+  const foundationConfiguration = resolve(
+    paths.productionRoot,
+    'backend.backend.hcl',
+  )
+  if (!existsSync(foundationConfiguration)) {
+    throw new Error(
+      `Remote backend configuration is missing at ${foundationConfiguration}; run infra:bootstrap first`,
+    )
+  }
+
+  const current = readFileSync(foundationConfiguration, 'utf8')
+  const operations = current.replace(
+    /^key\s*=\s*.+$/m,
+    `key    = ${JSON.stringify(stateKeyForRoot('operations'))}`,
+  )
+  if (operations === current) {
+    throw new Error(
+      `Remote backend configuration at ${foundationConfiguration} contains no state key`,
+    )
+  }
+  writePrivateFile(
+    resolve(paths.roots.operations, 'backend.backend.hcl'),
+    operations,
+  )
+}
+
+function shellSingleQuote(value) {
+  return `'${String(value).replaceAll("'", `'"'"'`)}'`
+}
+
+function boundedProcessOutput(current, chunk) {
+  return `${current}${String(chunk)}`.slice(-16_000)
+}
+
+async function acquireProductionMutationLease(provider) {
+  const paths = providerPaths(provider)
+  const scratchParent = resolve(repoRoot, '.scratch', 'infra-leases')
+  mkdirSync(scratchParent, { recursive: true })
+  const leaseDirectory = mkdtempSync(resolve(scratchParent, `${provider}-`))
+  const readySignal = resolve(leaseDirectory, 'ready')
+  const releaseSignal = resolve(leaseDirectory, 'release')
+  const terraformDataDirectory = resolve(leaseDirectory, 'terraform-data')
+  const owner = randomUUID()
+  let child
+
+  try {
+    writeOperationsBackendConfiguration(paths)
+    const env = {
+      ...backendEnvironment(
+        readStateEnvironment(paths.stateEnvironment),
+        terraformEnvironment,
+      ),
+      TF_DATA_DIR: terraformDataDirectory,
+    }
+    terraformInit(paths.roots.operations, env, [
+      '-reconfigure',
+      '-backend-config=backend.backend.hcl',
+    ])
+
+    const holderCommand = [
+      process.execPath,
+      resolve(repoRoot, 'scripts', 'infra-lease-holder.mjs'),
+    ]
+      .map(shellSingleQuote)
+      .join(' ')
+    child = spawn(
+      'terraform',
+      [
+        'apply',
+        '-auto-approve',
+        '-input=false',
+        '-lock-timeout=1s',
+        `-var=owner_token=${owner}`,
+        `-var=holder_command=${holderCommand}`,
+        `-var=ready_signal=${readySignal}`,
+        `-var=release_signal=${releaseSignal}`,
+        `-var=parent_pid=${process.pid}`,
+      ],
+      {
+        cwd: paths.roots.operations,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    )
+
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => {
+      stdout = boundedProcessOutput(stdout, chunk)
+    })
+    child.stderr.on('data', (chunk) => {
+      stderr = boundedProcessOutput(stderr, chunk)
+    })
+
+    let settled = false
+    const completion = new Promise((resolveCompletion) => {
+      const settle = (value) => {
+        if (settled) return
+        settled = true
+        resolveCompletion(value)
+      }
+      child.once('error', (error) => settle({ error }))
+      child.once('close', (code, signal) => settle({ code, signal }))
+    })
+
+    const deadline = Date.now() + 30_000
+    while (!existsSync(readySignal)) {
+      const outcome = await Promise.race([
+        completion,
+        new Promise((resolveWait) =>
+          setTimeout(() => resolveWait(null), 100),
+        ),
+      ])
+      if (outcome) {
+        const detail = String(stderr || stdout).trim().slice(-4_000)
+        throw new Error(
+          `Could not acquire the ${provider} production mutation lease${detail ? `:\n${detail}` : ''}\nAnother mutation may be active. Use the Terraform Lock Info ID for infra/${provider}/operations only after confirming its holder is no longer running.`,
+        )
+      }
+      if (Date.now() >= deadline) {
+        child.kill('SIGTERM')
+        await completion
+        throw new Error(
+          `Timed out while acquiring the ${provider} production mutation lease`,
+        )
+      }
+    }
+    if (readFileSync(readySignal, 'utf8') !== owner) {
+      child.kill('SIGTERM')
+      await completion
+      throw new Error(
+        `The ${provider} production mutation lease returned an invalid owner token`,
+      )
+    }
+
+    const assertHeld = () => {
+      if (settled) {
+        throw new Error(
+          `The ${provider} production mutation lease was lost before the operation completed`,
+        )
+      }
+    }
+    return {
+      assertHeld,
+      async release() {
+        try {
+          assertHeld()
+          writePrivateFile(releaseSignal, owner)
+          const outcome = await completion
+          if (outcome.error || outcome.code !== 0) {
+            const detail = String(stderr || stdout).trim().slice(-4_000)
+            throw new Error(
+              `Could not release the ${provider} production mutation lease${detail ? `:\n${detail}` : ''}`,
+            )
+          }
+        } finally {
+          rmSync(leaseDirectory, { recursive: true, force: true })
+        }
+      },
+    }
+  } catch (error) {
+    if (child && !child.killed) child.kill('SIGTERM')
+    rmSync(leaseDirectory, { recursive: true, force: true })
+    throw error
+  }
+}
+
+export function prepareStateRecoveryAccess(
+  { provider, outputs, paths, baseEnvironment = terraformEnvironment },
+  operations = {},
+) {
+  const writeConfiguration =
+    operations.writeConfiguration ?? writeBackendConfiguration
+  writeConfiguration(provider, outputs, paths)
+
+  // Temporary recovery credentials deliberately stay in process memory. Persisting them in the
+  // ready-marker file would make an interrupted recovery look complete and block the documented
+  // retry path before Terraform has reconciled the managed state key.
+  return backendEnvironment(
+    {
+      TF_STATE_ACCESS_KEY_ID: outputs.state_access_key_id,
+      TF_STATE_SECRET_ACCESS_KEY: outputs.state_secret_access_key,
+    },
+    baseEnvironment,
+  )
+}
+
+export function finalizeStateRecovery(
+  {
+    provider,
+    paths,
+    managedOutputs,
+    expectedStateBucket,
+    baseEnvironment = terraformEnvironment,
+  },
+  operations = {},
+) {
+  const managedEnvironment = backendEnvironment(
+    {
+      TF_STATE_ACCESS_KEY_ID: managedOutputs.state_access_key_id,
+      TF_STATE_SECRET_ACCESS_KEY: managedOutputs.state_secret_access_key,
+    },
+    baseEnvironment,
+  )
+  const verifyBootstrap =
+    operations.verifyBootstrap ??
+    (() =>
+      prepareBootstrapBackend({
+        provider,
+        paths,
+        stateMode: 'remote',
+        dryRun: false,
+        remoteEnvironment: managedEnvironment,
+        expectedStateBucket,
+      }))
+  const initializeRoot =
+    operations.initializeRoot ??
+    ((_rootName, root) =>
+      terraformInit(root, managedEnvironment, [
+        '-reconfigure',
+        '-backend-config=backend.backend.hcl',
+      ]))
+  const writeArtifacts = operations.writeArtifacts ?? writeBackendArtifacts
+
+  verifyBootstrap()
+  for (const [rootName, root] of Object.entries(paths.roots)) {
+    if (rootName === 'bootstrap') continue
+    initializeRoot(rootName, root)
+  }
+  // This file is the ready marker used by bootstrapStateMode. Persist it only after the managed
+  // credentials have successfully opened every backend, so any earlier interruption remains
+  // safely retryable with --recover-state-*.
+  writeArtifacts(provider, managedOutputs, paths)
+  return managedEnvironment
 }
 
 export function prepareBootstrapBackend(
@@ -948,11 +1359,11 @@ async function bootstrap(provider, options) {
       bucket: options.recoverStateBucket,
       region: options.recoverStateRegion,
     })
-    writeBackendArtifacts(provider, recoveryOutputs, paths)
-    const recoveryEnvironment = backendEnvironment(
-      readStateEnvironment(paths.stateEnvironment),
-      terraformEnvironment,
-    )
+    const recoveryEnvironment = prepareStateRecoveryAccess({
+      provider,
+      outputs: recoveryOutputs,
+      paths,
+    })
     prepareBootstrapBackend({
       provider,
       paths,
@@ -973,25 +1384,12 @@ async function bootstrap(provider, options) {
       paths.bootstrapRoot,
       recoveryEnvironment,
     )
-    writeBackendArtifacts(provider, managedOutputs, paths)
-    const managedEnvironment = backendEnvironment(
-      readStateEnvironment(paths.stateEnvironment),
-      terraformEnvironment,
-    )
-    prepareBootstrapBackend({
+    finalizeStateRecovery({
       provider,
       paths,
-      stateMode: 'remote',
-      dryRun: false,
-      remoteEnvironment: managedEnvironment,
+      managedOutputs,
       expectedStateBucket: recoveryOutputs.state_bucket,
     })
-    for (const rootName of providerRootNames[provider]) {
-      terraformInit(paths.roots[rootName], managedEnvironment, [
-        '-reconfigure',
-        '-backend-config=backend.backend.hcl',
-      ])
-    }
     console.log(
       `[infra] ${provider}: existing remote state reattached and managed backend credentials verified. Revoke the temporary recovery key now.`,
     )
@@ -1379,35 +1777,39 @@ async function applyFoundation(provider, options) {
     rmSync(bootstrapAccessPath)
   }
 
-  terraformPlan({
-    root: context.paths.productionRoot,
-    env: context.env,
-    apply: !options.dryRun,
-    allowedDestroyAddresses: [
-      ...options.allowedDestroyAddresses,
-      ...safeSecretVersionDestroyAddresses,
-      ...safeFoundationCleanupAddresses,
-    ],
-    label: `${provider}-foundation`,
-  })
-  if (options.dryRun) {
-    if (existsSync(bootstrapAccessPath)) rmSync(bootstrapAccessPath)
-    return
-  }
-  if (!firstYandexBucketApply) return
+  try {
+    assertProductionMutationLease(options)
+    terraformPlan({
+      root: context.paths.productionRoot,
+      env: context.env,
+      apply: !options.dryRun,
+      allowedDestroyAddresses: [
+        ...options.allowedDestroyAddresses,
+        ...safeSecretVersionDestroyAddresses,
+        ...safeFoundationCleanupAddresses,
+      ],
+      label: `${provider}-foundation`,
+    })
+    assertProductionMutationLease(options)
+    if (options.dryRun || !firstYandexBucketApply) return
 
-  rmSync(bootstrapAccessPath)
-  terraformPlan({
-    root: context.paths.productionRoot,
-    env: context.env,
-    apply: true,
-    allowedDestroyAddresses: [
-      ...options.allowedDestroyAddresses,
-      ...safeSecretVersionDestroyAddresses,
-      ...safeFoundationCleanupAddresses,
-    ],
-    label: 'yandex-foundation-tighten-storage-access',
-  })
+    rmSync(bootstrapAccessPath)
+    assertProductionMutationLease(options)
+    terraformPlan({
+      root: context.paths.productionRoot,
+      env: context.env,
+      apply: true,
+      allowedDestroyAddresses: [
+        ...options.allowedDestroyAddresses,
+        ...safeSecretVersionDestroyAddresses,
+        ...safeFoundationCleanupAddresses,
+      ],
+      label: 'yandex-foundation-tighten-storage-access',
+    })
+    assertProductionMutationLease(options)
+  } finally {
+    if (existsSync(bootstrapAccessPath)) rmSync(bootstrapAccessPath)
+  }
 }
 
 function showOutputs(provider) {
@@ -1567,6 +1969,7 @@ function importResource(
     )
   }
 
+  assertProductionMutationLease(options)
   runCommand(
     'terraform',
     ['import', '-input=false', resourceAddress, resourceId],
@@ -1575,6 +1978,7 @@ function importResource(
       env: { ...terraformEnvironment, ...context.env },
     },
   )
+  assertProductionMutationLease(options)
   terraformPlan({
     root,
     env: context.env,
@@ -1587,7 +1991,7 @@ function importResource(
   )
 }
 
-function assertCleanReleaseSource(tfvars, provider, expectedCommit = null) {
+function assertCleanReleaseSource(releaseSource, provider, expectedCommit = null) {
   const currentBranch = runCommand('git', ['branch', '--show-current'], {
     capture: true,
     log: false,
@@ -1635,13 +2039,14 @@ function assertCleanReleaseSource(tfvars, provider, expectedCommit = null) {
   const problems = releaseGitProblems({
     dirtyLines,
     currentBranch,
-    configuredBranch: tfvars.git_branch,
+    configuredBranch: releaseSource?.git_branch,
     upstreamRef,
     headCommit,
     upstreamCommit,
     configuredGithubRepo:
-      provider === 'digitalocean' ? tfvars.github_repo : null,
+      provider === 'digitalocean' ? releaseSource?.github_repo : null,
     upstreamGithubRepo,
+    githubRepositoryRequired: provider === 'digitalocean',
     expectedCommit,
   })
   if (problems.length > 0)
@@ -1690,20 +2095,15 @@ function ensureDigitalOceanReleaseBranch(source) {
   return branch
 }
 
-function repositoryForImage(provider, outputs, tfvars) {
-  if (provider === 'digitalocean') {
-    if (!outputs.registry)
-      throw new Error('Terraform did not return the DigitalOcean registry')
-    return `${String(outputs.registry).replace(/\/$/, '')}/${tfvars.backend_image_repository ?? 'backend'}`
-  }
+function repositoryForImage(provider, outputs) {
   if (!outputs.image_repository)
-    throw new Error('Terraform did not return the Yandex image repository')
+    throw new Error(`Terraform did not return the ${provider} image repository`)
   return outputs.image_repository
 }
 
 function buildAndPushImage(provider, repository, commit) {
   if (provider === 'digitalocean') {
-    runCommand('doctl', ['registry', 'login', '--expiry-seconds', '1200'])
+    runDigitalOceanCli(['registry', 'login', '--expiry-seconds', '1200'])
   } else {
     runCommand('yc', ['container', 'registry', 'configure-docker'])
   }
@@ -1820,9 +2220,7 @@ function publishYandexStatic(outputs, env, artifactRoot) {
     throw new Error('Terraform did not return static publisher credentials')
 
   const uploadEnvironment = {
-    ...env,
-    AWS_ACCESS_KEY_ID: accessKey,
-    AWS_SECRET_ACCESS_KEY: secretKey,
+    ...s3CredentialEnvironment({ accessKey, secretKey }, env),
     AWS_DEFAULT_REGION: 'ru-central1',
     AWS_REGION: 'ru-central1',
   }
@@ -1897,8 +2295,7 @@ async function verifyDigitalOceanStaticCommit(outputs, commit) {
     if (!appId) throw new Error(`Terraform did not return ${name} App ID`)
     let problems = ['deployment has not been checked']
     for (let attempt = 1; attempt <= 12; attempt += 1) {
-      const raw = runCommand(
-        'doctl',
+      const raw = runDigitalOceanCli(
         ['apps', 'list-deployments', appId, '--output', 'json'],
         { capture: true, log: false },
       )
@@ -1923,21 +2320,31 @@ async function verifyDeployment(outputs) {
   await verifyUrl('website', outputs.website_url)
 }
 
-export async function executePromotionPipeline(provider, operations) {
+export async function executePromotionPipeline(
+  provider,
+  operations,
+  assertLeaseHeld = () => {},
+) {
+  const runPhase = async (operation, ...args) => {
+    await assertLeaseHeld()
+    const result = await operation(...args)
+    await assertLeaseHeld()
+    return result
+  }
   if (provider === 'digitalocean') {
-    const runtime = await operations.deployRuntime()
-    await operations.tightenFoundation(runtime)
-    const staticDeployment = await operations.deployStatic(runtime)
-    await operations.verify({ runtime, staticDeployment })
+    const runtime = await runPhase(operations.deployRuntime)
+    await runPhase(operations.tightenFoundation, runtime)
+    const staticDeployment = await runPhase(operations.deployStatic, runtime)
+    await runPhase(operations.verify, { runtime, staticDeployment })
     return { runtime, staticDeployment }
   }
   if (provider === 'yandex') {
-    const migration = await operations.deployMigration()
-    await operations.invokeMigration(migration)
-    await operations.removeMigrationSeed(migration)
-    const runtime = await operations.deployRuntime(migration)
-    const staticDeployment = await operations.publishStatic(runtime)
-    await operations.verify({ migration, runtime, staticDeployment })
+    const migration = await runPhase(operations.deployMigration)
+    await runPhase(operations.invokeMigration, migration)
+    await runPhase(operations.removeMigrationSeed, migration)
+    const runtime = await runPhase(operations.deployRuntime, migration)
+    const staticDeployment = await runPhase(operations.publishStatic, runtime)
+    await runPhase(operations.verify, { migration, runtime, staticDeployment })
     return { migration, runtime, staticDeployment }
   }
   throw new Error(`Unsupported provider: ${provider}`)
@@ -1947,7 +2354,7 @@ async function release(provider, options) {
   const context = contextWithProvider(provider)
   const source = options.dryRun
     ? null
-    : assertCleanReleaseSource(context.tfvars, provider)
+    : assertCleanReleaseSource(context.outputs.release_source, provider)
   const seed = seedVariables()
 
   terraformPlan({
@@ -1971,18 +2378,18 @@ async function release(provider, options) {
     return
   }
 
-  assertCleanReleaseSource(context.tfvars, provider, source.commit)
+  assertCleanReleaseSource(context.outputs.release_source, provider, source.commit)
   const commit = source.commit
-  const repository = repositoryForImage(
-    provider,
-    context.outputs,
-    context.tfvars,
-  )
+  const repository = repositoryForImage(provider, context.outputs)
+  assertProductionMutationLease(options)
   const digest = buildAndPushImage(provider, repository, commit)
-  assertCleanReleaseSource(context.tfvars, provider, commit)
+  assertProductionMutationLease(options)
+  assertCleanReleaseSource(context.outputs.release_source, provider, commit)
 
   if (provider === 'digitalocean') {
+    assertProductionMutationLease(options)
     const sourceBranch = ensureDigitalOceanReleaseBranch(source)
+    assertProductionMutationLease(options)
     return executePromotionPipeline(provider, {
       async deployRuntime() {
         const runtimeRoot = writeManagedRootInputs(context, 'runtime', {
@@ -1997,6 +2404,7 @@ async function release(provider, options) {
           allowedDestroyAddresses: options.allowedDestroyAddresses,
           label: 'digitalocean-runtime-migration-gated',
         })
+        assertProductionMutationLease(options)
 
         if (seed) {
           writeManagedRootInputs(context, 'runtime', {
@@ -2011,6 +2419,7 @@ async function release(provider, options) {
             allowedDestroyAddresses: options.allowedDestroyAddresses,
             label: 'digitalocean-remove-bootstrap-secret',
           })
+          assertProductionMutationLease(options)
         }
         return terraformOutputs(runtimeRoot, context.env)
       },
@@ -2025,7 +2434,7 @@ async function release(provider, options) {
         })
       },
       async deployStatic() {
-        assertCleanReleaseSource(context.tfvars, provider, commit)
+        assertCleanReleaseSource(context.outputs.release_source, provider, commit)
         const staticRoot = writeManagedRootInputs(context, 'static', {
           release_revision: commit,
           source_branch: sourceBranch,
@@ -2037,8 +2446,11 @@ async function release(provider, options) {
           allowedDestroyAddresses: options.allowedDestroyAddresses,
           label: 'digitalocean-static-after-migration',
         })
-        assertCleanReleaseSource(context.tfvars, provider, commit)
+        assertProductionMutationLease(options)
+        assertCleanReleaseSource(context.outputs.release_source, provider, commit)
+        assertProductionMutationLease(options)
         ensureDigitalOceanReleaseBranch(source)
+        assertProductionMutationLease(options)
         return terraformOutputs(staticRoot, context.env)
       },
       async verify({ runtime, staticDeployment }) {
@@ -2053,7 +2465,7 @@ async function release(provider, options) {
           `[infra] ${provider}: release ${commit} completed and verified.`,
         )
       },
-    })
+    }, () => assertProductionMutationLease(options))
   }
 
   return executePromotionPipeline(provider, {
@@ -2111,10 +2523,10 @@ async function release(provider, options) {
     },
     async publishStatic(runtimeOutputs) {
       const promotedOutputs = { ...context.outputs, ...runtimeOutputs }
-      assertCleanReleaseSource(context.tfvars, provider, commit)
+      assertCleanReleaseSource(context.outputs.release_source, provider, commit)
       const artifactRoot = buildYandexStaticArtifacts(commit, promotedOutputs)
       try {
-        assertCleanReleaseSource(context.tfvars, provider, commit)
+        assertCleanReleaseSource(context.outputs.release_source, provider, commit)
         publishYandexStatic(promotedOutputs, context.env, artifactRoot)
       } finally {
         rmSync(artifactRoot, { recursive: true, force: true })
@@ -2122,13 +2534,13 @@ async function release(provider, options) {
       return promotedOutputs
     },
     async verify({ staticDeployment }) {
-      assertCleanReleaseSource(context.tfvars, provider, commit)
+      assertCleanReleaseSource(context.outputs.release_source, provider, commit)
       await verifyDeployment(staticDeployment)
       console.log(
         `[infra] ${provider}: release ${commit} completed and verified.`,
       )
     },
-  })
+  }, () => assertProductionMutationLease(options))
 }
 
 export function parseArguments(argv) {
@@ -2240,6 +2652,16 @@ export function parseArguments(argv) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2))
+  if (productionMutationNeedsLease(options)) {
+    return withProductionMutationLease(
+      () => acquireProductionMutationLease(options.provider),
+      (mutationLease) => executeCommand({ ...options, mutationLease }),
+    )
+  }
+  return executeCommand(options)
+}
+
+async function executeCommand(options) {
   if (options.command === 'bootstrap')
     return bootstrap(options.provider, options)
   if (options.command === 'apply')

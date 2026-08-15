@@ -15,7 +15,8 @@ data-residency requirement. Common safety and release rules live in
 - one migration task container plus three HTTP job containers invoked by timer triggers;
 - public Object Storage website buckets for `webapp` and `website`;
 - a separate private media bucket and bucket-scoped runtime credentials stored in Lockbox;
-- runtime, gateway, trigger, publisher, and storage-management service accounts with narrow roles;
+- separate migration, runtime, gateway, trigger, publisher, and storage-management service
+  accounts with narrow roles;
 - an optional Postbox sender and optional Cloud CDN resources;
 - a private versioned Object Storage bucket and scoped key for Terraform state.
 
@@ -128,13 +129,18 @@ process. Its exact-key bucket policies cover only the two public static buckets 
 bucket or a noncurrent object version. The API runtime uses a different exact-key policy scoped to
 ordinary objects in the private media bucket, and its credentials are delivered through Lockbox.
 Runtime access to Lockbox is also granted per referenced secret, including every
-`extra_secret_bindings` entry; the runtime identity is not a folder-wide payload viewer.
+`extra_secret_bindings` entry; the runtime identity is not a folder-wide payload viewer and cannot
+read the database-owner migration secret.
 
 Migrations connect as the dedicated database owner, which owns the schema objects Prisma creates.
 The API and jobs connect as the selected blue/green user and receive only Yandex's managed read and
-write roles plus database `CONNECT`; they do not get schema DDL. The owner URL is held in a separate
-migration-only Lockbox secret, while each runtime slot has a persistent exact secret version so an
-inactive-slot rotation cannot schedule destruction of the live runtime's version.
+write roles plus database `CONNECT`; after each migration, `db:deploy` also removes unsafe schema,
+temporary-table, object, routine, and default privileges inherited through PostgreSQL `PUBLIC`.
+The runtime users therefore do not get schema DDL or routine execution. The owner URL is held in a
+separate migration-only Lockbox secret readable only by a dedicated one-shot migration identity.
+That task receives only the owner URL and optional administrator seed, never the runtime JWT, media,
+email, or blue/green database credentials. Each runtime slot has a persistent exact secret version
+so an inactive-slot rotation cannot schedule destruction of the live runtime's version.
 
 Importing a legacy database does not transfer its tables, sequences, routines, or enum/domain
 types. Before the first migration, run the inventory and confirmed `db:adopt-owner -- --apply`

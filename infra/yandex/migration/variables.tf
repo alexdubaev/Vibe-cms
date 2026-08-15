@@ -5,10 +5,10 @@ variable "project_slug" { type = string }
 variable "network_id" { type = string }
 variable "registry_id" { type = string }
 variable "backend_image_name" { type = string }
-variable "runtime_service_account" { type = string }
+variable "migration_service_account" { type = string }
 variable "logging_group_id" { type = string }
-variable "runtime_environment" { type = map(string) }
-variable "runtime_secret_bindings" {
+variable "migration_environment" { type = map(string) }
+variable "migration_secret_bindings" {
   type = map(object({
     secret_id  = string
     version_id = string

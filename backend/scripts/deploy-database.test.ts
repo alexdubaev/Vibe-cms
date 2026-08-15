@@ -58,7 +58,13 @@ describe('database deployment command', () => {
     expect(calls.indexOf('migrate')).toBeGreaterThan(
       calls.indexOf('ownership:unused'),
     )
+    expect(calls.indexOf('grant:unused:none')).toBeGreaterThan(
+      calls.indexOf('migrate'),
+    )
     expect(calls.indexOf('bootstrap:admin@example.com')).toBeGreaterThan(calls.indexOf('migrate'))
+    expect(calls.indexOf('bootstrap:admin@example.com')).toBeGreaterThan(
+      calls.indexOf('grant:unused:none'),
+    )
     expect(calls.indexOf('assert')).toBeGreaterThan(calls.indexOf('bootstrap:admin@example.com'))
   })
 
@@ -87,12 +93,16 @@ describe('database deployment command', () => {
     const statements: string[] = []
     await grantRuntimeDatabaseAccess(
       {
-        async $queryRawUnsafe() {
-          return []
-        },
-        async $executeRawUnsafe(statement: string) {
-          statements.push(statement)
-          return 0
+        async $transaction(operation) {
+          return operation({
+            async $queryRawUnsafe() {
+              return []
+            },
+            async $executeRawUnsafe(statement: string) {
+              statements.push(statement)
+              return 0
+            },
+          } as never)
         },
       },
       { databaseName: 'product', username: 'product_app' },
@@ -106,6 +116,18 @@ describe('database deployment command', () => {
     )
     expect(statements).toContain(
       'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "product_app"',
+    )
+    expect(statements).toContain(
+      'REVOKE CREATE ON SCHEMA public FROM PUBLIC',
+    )
+    expect(statements).toContain(
+      'REVOKE ALL PRIVILEGES ON ALL ROUTINES IN SCHEMA public FROM PUBLIC',
+    )
+    expect(statements).toContain(
+      'REVOKE ALL PRIVILEGES ON ALL ROUTINES IN SCHEMA public FROM "product_app"',
+    )
+    expect(statements).toContain(
+      'ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC',
     )
     expect(statements.join('\n')).not.toContain('GRANT CREATE')
     expect(statements.join('\n')).not.toContain('GRANT TRUNCATE')
@@ -203,9 +225,9 @@ function dependenciesRecording(calls: string[]) {
     },
     async grantRuntimeAccess(
       _db: DbClient,
-      input: { databaseName: string; username: string },
+      input: { databaseName: string; username: string | null },
     ) {
-      calls.push(`grant:${input.databaseName}:${input.username}`)
+      calls.push(`grant:${input.databaseName}:${input.username ?? 'none'}`)
     },
     log() {
       calls.push('log')

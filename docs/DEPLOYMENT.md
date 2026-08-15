@@ -49,6 +49,14 @@ stateful foundation resources; `release` requires its saved plan to contain no c
 release-owned roots are then idempotent and safe to resume. A migration failure stops before
 runtime or static promotion.
 
+Every non-dry foundation apply, release, and non-bootstrap import first holds a provider-wide
+distributed lease in the separate `operations` Terraform state. The holder remains alive for the
+whole multi-root sequence and exits if the wrapper dies; a second wrapper therefore fails at the
+state lock instead of interleaving foundation, migration, runtime, or static mutations. The wrapper
+rechecks ownership before and after every mutating phase and aborts the remaining sequence if the
+holder is lost. Plans, outputs, dry runs, and bootstrap keep their existing root-scoped locking
+behavior.
+
 ## Prerequisites
 
 Both providers require:
@@ -117,11 +125,13 @@ unset TF_STATE_RECOVERY_ACCESS_KEY_ID TF_STATE_RECOVERY_SECRET_ACCESS_KEY
 ```
 
 The command reads and verifies the existing bootstrap state, reconciles its managed backend key,
-rewrites the ignored credential file, verifies that managed key against the same bucket, and
-reinitializes every root. Revoke the temporary recovery key immediately after the success message
+verifies that key against the same bucket, reinitializes every root with it, and only then writes
+the ignored credential marker. Revoke the temporary recovery key immediately after the success message
 (`yc iam access-key delete <recovery-access-key-resource-id>` on Yandex). If the process is
-interrupted, revoke that temporary key before creating another one. Recovery intentionally has no
-dry-run mode and requires the provider credentials normally used to apply the bootstrap root.
+interrupted, rerun the same command with the same temporary key: recovery writes backend
+configuration first but keeps temporary credentials only in process memory, so no ready marker can
+block the retry. Recovery intentionally has no dry-run mode and requires the provider credentials
+normally used to apply the bootstrap root.
 
 The Yandex foundation's first apply temporarily grants its storage-management identity
 folder-level `storage.admin` while creating the three application buckets and enabling provider-
@@ -161,11 +171,12 @@ Log in once and change that administrator password immediately. Removing it from
 does not guarantee that provider deployment history, Lockbox version history, or versioned
 Terraform state has forgotten the bootstrap value.
 
-Before a non-dry release, the script fetches the checkout's upstream and refuses:
+Before a non-dry release, the script reads the effective release branch (and DigitalOcean GitHub
+repository) from the applied foundation state, fetches the checkout's upstream, and refuses:
 
 - a detached, dirty, unpushed, behind, or wrong Git branch or upstream ref;
 - on DigitalOcean, an upstream GitHub repository different from `github_repo`;
-- a DigitalOcean token for a team other than `DO_EXPECTED_TEAM`;
+- a DigitalOcean token for a team other than the immutable `DO_EXPECTED_TEAM_UUID`;
 - a Yandex CLI cloud/folder different from `terraform.tfvars`;
 - deletion or replacement of PostgreSQL, the media bucket, registry, Lockbox secrets, or state;
 - any other deletion unless its exact Terraform address is acknowledged with
@@ -174,7 +185,8 @@ Before a non-dry release, the script fetches the checkout's upstream and refuses
 The captured 40-character commit is also the build input: Docker and Yandex static builds consume
 a tracked `git archive`, not the live working directory. DigitalOcean static apps build a
 never-overwritten `infra-release/<sha>` branch, and the release checks App Platform's active
-`source_commit_hash` for both apps before success.
+`source_commit_hash` for both apps before success. A later push advancing the mutable upstream does
+not invalidate the already captured commit or stop a migration-gated promotion halfway through.
 
 `--allow-destroy` is intentionally exact and never overrides stateful-resource protection. Import
 or move an existing resource instead of authorizing its replacement.
@@ -260,9 +272,13 @@ unset DATABASE_URL DATABASE_LEGACY_OWNER DATABASE_MIGRATION_USER CONFIRM_DATABAS
 ```
 
 `db:deploy` runs the same ownership preflight before Prisma and fails closed if adoption was
-skipped. It also rejects runtime users with elevated attributes, inherited roles, or owned objects;
-for DigitalOcean it revokes direct database/schema/table/sequence/default privileges and reapplies
-only CONNECT, schema USAGE, table DML, and sequence use after every migration.
+skipped. After every migration on both providers it removes public-schema creation, temporary-table,
+object, routine, and matching default privileges inherited through PostgreSQL `PUBLIC`. It also
+rejects DigitalOcean runtime users with elevated attributes, inherited roles, or owned objects;
+there it revokes direct database/schema/table/sequence/default privileges and reapplies only
+CONNECT, schema USAGE, table DML, and sequence use. The preflight and the whole ACL reconciliation
+run in one transaction, so a failed grant cannot leave the active runtime with its previous
+privileges already revoked.
 
 ## Rollback and recovery
 
@@ -277,6 +293,11 @@ outputs, never publisher credentials. Do not recreate resources.
 
 If a Terraform apply fails, read the provider error, fix the owning configuration, and rerun plan.
 Never edit state by hand, delete the state lock, or use `-target` as a routine deployment mechanism.
+If an operating-system or machine failure leaves the `operations` lock stale, first confirm that no
+`scripts/infra.mjs`, Terraform, or lease-holder process for that provider remains. Then initialize
+`infra/<provider>/operations` with its generated backend configuration and state-key environment,
+and run `terraform force-unlock <LOCK_ID>` using only the lock ID printed by Terraform for that
+operations state. Never force-unlock an active holder or a different root.
 
 ## Own server
 

@@ -35,6 +35,14 @@ run "foundation_is_runtime_independent" {
     condition     = digitalocean_spaces_bucket.media.acl == "private"
     error_message = "User media must not be publicly readable."
   }
+
+  assert {
+    condition = (
+      output.release_source.git_branch == var.git_branch &&
+      output.release_source.github_repo == var.github_repo
+    )
+    error_message = "The guarded release wrapper must read the effective branch and repository from foundation state."
+  }
 }
 
 run "firewall_tightens_after_api_deployment" {

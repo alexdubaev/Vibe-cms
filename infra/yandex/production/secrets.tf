@@ -58,7 +58,9 @@ resource "yandex_lockbox_secret_version_hashed" "migration_database" {
 resource "yandex_lockbox_secret_iam_member" "runtime_migration_database" {
   secret_id = yandex_lockbox_secret.migration_database.id
   role      = "lockbox.payloadViewer"
-  member    = "serviceAccount:${yandex_iam_service_account.runtime.id}"
+  # The resource name is retained for state compatibility; the runtime identity no longer has
+  # access to this DDL-owner credential.
+  member = "serviceAccount:${yandex_iam_service_account.migration.id}"
 }
 
 locals {
@@ -167,12 +169,12 @@ locals {
     local.postbox_secret_bindings,
   )
 
-  migration_secret_bindings = merge(local.runtime_secret_bindings, {
+  migration_secret_bindings = {
     DATABASE_URL = {
       secret_id  = yandex_lockbox_secret.migration_database.id
       version_id = yandex_lockbox_secret_version_hashed.migration_database.id
       key        = "DATABASE_URL"
     }
-  })
+  }
 
 }
