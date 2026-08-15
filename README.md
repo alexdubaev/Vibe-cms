@@ -8,15 +8,15 @@ A full-stack starter for web and backend products: one repository with a Bun/Hon
 
 ## Agent Intake Checklist Before Installing
 
-[CHECKLIST.md](CHECKLIST.md) is the intake questionnaire and the durable record of what the project needs. Ask its questions in the user's language and in product terms, then write the answers into that file. Do not start feature work until everything through its *First-version capabilities* section and every conditional section activated by those answers is filled in, and keep its *Capability ledger* current whenever a capability is added or removed.
+[CHECKLIST.md](CHECKLIST.md) is the intake questionnaire and the durable record of what the project needs. Ask its questions in the user's language and in product terms, then write the answers into that file. Do not start feature work until everything through its _First-version capabilities_ section and every conditional section activated by those answers is filled in, and keep its _Capability ledger_ current whenever a capability is added or removed.
 
 One question comes before cloning, because it selects the branch: whether a mobile app is needed now. The rest of the intake runs in the fresh checkout, where the checklist can be filled in.
 
-- Do not hand the user the choices listed under *Decided by the agent* in `CHECKLIST.md`. Those are the agent's to make and explain, including the `webapp` vs `website` split described under "Choosing `webapp` vs `website`".
+- Do not hand the user the choices listed under _Decided by the agent_ in `CHECKLIST.md`. Those are the agent's to make and explain, including the `webapp` vs `website` split described under "Choosing `webapp` vs `website`".
 - If `mobile` is active, clone the full repository, switch to `mobile`, fetch both refs, install the locked dependencies, and run `bun run mobile:template:check -- --published` before first-run setup. Stop if the command is missing or fails: the template maintainer must synchronize `master` into the mobile-ready line while preserving its runtime and template capability ledger.
 - If backend/API, full-stack, uploads, or database-backed validation is active, verify Docker Compose and the Docker daemon before local setup.
-- For DigitalOcean deployment, verify App Platform GitHub integration first, then deploy with `bun run deploy:do <api|webapp|website>`; secret values belong in the DigitalOcean console, never in a committed spec.
-- Hosting is decided once from the audience recorded in [CHECKLIST.md](CHECKLIST.md): Russia or data residency means Yandex Cloud ([docs/YANDEX_CLOUD.md](docs/YANDEX_CLOUD.md)), anything else means DigitalOcean, and an explicit wish for full control means an own server. Delete the other paths' tooling during setup rather than leaving two infrastructures in the repository: follow the "If You Chose Another Hosting" list in each document you did not pick, which for an own server means both.
+- Production infrastructure is Terraform under [`infra/`](infra/README.md); create state once with `bun run infra:bootstrap -- <provider> --new`, apply deliberate foundation changes with `bun run infra:apply -- <provider>`, inspect with `bun run infra:plan -- <provider>`, and deploy release-owned surfaces with `bun run release -- <provider>`.
+- Hosting is decided once from the audience recorded in [CHECKLIST.md](CHECKLIST.md): Russia or data residency means Yandex Cloud ([docs/YANDEX_CLOUD.md](docs/YANDEX_CLOUD.md)), anything else means DigitalOcean ([docs/DIGITALOCEAN.md](docs/DIGITALOCEAN.md)), and an explicit wish for full control means an own server. In an installed project, delete the unused provider directory and runbook rather than keeping two possible production states.
 
 ## Agent Repo Download Instructions
 
@@ -25,7 +25,28 @@ When installing this repository from a GitHub URL into a fresh Codex or agent se
 Give the agent this initial prompt:
 
 ```text
-Install this repository into the project. Before cloning from a GitHub URL, ask whether I plan to develop a mobile app now. If yes, clone the full repository with `git clone <repo-url>`, switch to `mobile`, run `git fetch origin`, install dependencies with `bun install --frozen-lockfile`, and then run `bun run mobile:template:check -- --published` before first-run setup; that local template gate must prove the clean, pushed mobile-ready line contains current `origin/master`, the shared agent/payment contract, the Expo/IAP runtime, and its branch-specific `available` capabilities. If the command is missing or fails, stop: do not resolve template-branch conflicts inside the new product checkout; ask the template maintainer to synchronize and publish the mobile line first. If mobile is deferred, use the default branch; it intentionally contains only `mobile/README.md` as a pointer to the mobile template branch. First read README.md, CHECKLIST.md, CLAUDE.md if present, and relevant docs/*.md, including docs/LOCAL_DATABASE.md when backend/API or full-stack work is active, docs/STORAGE.md when uploads, files, images, or media are active, docs/WEB_SURFACES.md before website data, catalog, cart, checkout, order, entitlement, subscription, or payment work, and the hosting document that matches the choice recorded in CHECKLIST.md. Before setup, work through CHECKLIST.md: ask me its questions in my language and in product terms, then record my answers in that file and keep its capability ledger current; do not start feature work until everything through its First-version capabilities section and every conditional section activated by those answers is filled in, and do not ask me anything it lists under Decided by the agent. If mobile is active, follow that branch's README for Expo/EAS, Maestro, IAP, push, and social auth setup only after the template check passes. Prefer the monolithic backend in this repository; do not introduce microservices during setup. If real-time features later need horizontal scaling across multiple backend instances, use managed Redis-compatible Pub/Sub such as DigitalOcean Managed Valkey or Yandex Managed Service for Valkey to fan out events between WebSocket connections. If deployment is needed, ask where my users are and whether the data must stay in Russia, then pick the hosting yourself from that answer and record it in CHECKLIST.md: Russia or data residency means Yandex Cloud, anything else means DigitalOcean App Platform with Managed PostgreSQL and Spaces, and an explicit wish for full control means my own server. Do not ask me to compare cloud providers. Delete the tooling of the paths I did not choose, following the removal list in the hosting document. For DigitalOcean deployment, first verify that App Platform is connected to my GitHub account/organization and has access to the full monorepo branch, then copy the `.do/*.yaml.example` specs I need to `.do/*.yaml`, fill in their identifiers, commit them, and deploy with `bun run deploy:do <target>`; put secret values in the DigitalOcean console, never in a spec, and do not use manual `sed`, `perl`, or shell substitution for CORS origins, `VITE_API_URL`, or `PUBLIC_WEBAPP_URL`. On the Yandex path, use Yandex Serverless Containers, Yandex Managed Service for PostgreSQL, Yandex Object Storage, and Yandex Cloud CDN according to docs/YANDEX_CLOUD.md. If backend/API, full-stack, uploads, or any database-backed validation is active, verify Docker Compose with `docker compose version` and the Docker daemon with `docker info`; if Docker is missing or not running, explain how to install/start it for my OS before continuing. Treat this checkout as a new project by default, not as a pull request back to the template: detach the original template remote unless I explicitly say I am contributing to the template, and add my own GitHub remote only if I provide one or ask you to create/publish it. Rename package.json and other repository-specific identifiers to the chosen project name where applicable. After first-run setup is complete, delete the marked Bootstrap-Only Instructions blocks from AGENTS.md and CLAUDE.md. Use Docker Compose for local PostgreSQL on Windows, macOS, and Linux; do not require native PostgreSQL or cloud credentials for local development.
+Install this repository into the project. Before cloning, ask whether I need the mobile app now;
+use the mobile branch only when I do, and run its published-template gate before setup. Read
+README.md, CHECKLIST.md, CLAUDE.md, and the docs for every active surface. Run the CHECKLIST
+intake in my language and record every durable answer before feature work.
+
+Treat this as a new project unless I explicitly say I am contributing to the template: inspect
+git remotes, detach the template remote, and add my repository only when I provide or request one.
+Use Docker Compose for local PostgreSQL and do not require cloud credentials for local work.
+
+If deployment is requested, ask where users are and whether data must stay in Russia. Choose
+Yandex Cloud for Russia/data residency, DigitalOcean otherwise, or an own server only when I ask
+for full control; record the result rather than asking me to compare providers. Keep the matching
+Terraform stack and delete the unused provider directory/runbook. Copy its bootstrap and
+production terraform.tfvars.example files, fill project values, keep secrets uncommitted, run
+bun run infra:bootstrap -- <provider> --new, apply foundation with bun run infra:apply -- <provider>, inspect bun run infra:plan -- <provider>, and release all
+surfaces with bun run release -- <provider>. Follow docs/DEPLOYMENT.md and the selected provider
+runbook. Never deploy from a dirty, detached, unpushed, or wrong branch.
+
+Prefer the monolithic backend. Use Managed PostgreSQL and private object storage for production
+media; never use a container filesystem for durable uploads. After setup, remove the marked
+Bootstrap-Only Instructions blocks from AGENTS.md and CLAUDE.md, validate the active surfaces,
+and report exact remaining account/domain authorizations without printing secrets.
 ```
 
 - First read `README.md`, [CHECKLIST.md](CHECKLIST.md), `CLAUDE.md` if present, and relevant `docs/*.md`, including [docs/WEB_SURFACES.md](docs/WEB_SURFACES.md) before website data, catalog, cart, checkout, order, entitlement, subscription, or payment work; then inspect package scripts and each active surface's app-local `.env.example` before running setup commands.
@@ -42,14 +63,14 @@ Install this repository into the project. Before cloning from a GitHub URL, ask 
 - Prefer README-level deferred-surface notes over source-code comments. Add code comments only when a dormant code path would otherwise mislead future work.
 - Default to local-only setup when the user does not need deployment yet. Local development must not require DigitalOcean credentials.
 - Use [docs/LOCAL_DATABASE.md](docs/LOCAL_DATABASE.md) and `docker-compose.yml` as the local PostgreSQL source of truth. The default local database path is Docker Compose, not a native PostgreSQL install.
-- If deployment is requested, use DigitalOcean App Platform as the supported production path. Use DigitalOcean Managed PostgreSQL for production databases; do not use App Platform dev databases for production.
-- For the default DigitalOcean production backend/API service, start with one `apps-s-1vcpu-1gb` App Platform container (`instance_count: 1`) plus the smallest DigitalOcean Managed PostgreSQL production cluster. This keeps the initial backend and database infrastructure around $27/month before taxes, traffic overages, storage, and optional add-ons. `webapp` and fully prerendered `website` output are Static Sites and do not need runtime container sizing. A `website` route with SSR/on-demand rendering or server islands needs a runtime service.
+- If deployment is requested, read [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), select the hosting from the recorded audience, and keep the matching Terraform stack as the production source of truth.
+- For the DigitalOcean launch profile, start with one `apps-s-1vcpu-1gb` API container plus the smallest production Managed PostgreSQL cluster. Check current provider pricing before approval; `webapp` and fully prerendered `website` are Static Sites and do not need runtime container sizing. A `website` route with SSR/on-demand rendering or server islands needs a runtime service.
 - Deploy `webapp` and fully prerendered `website` output as DigitalOcean App Platform Static Sites, not App Platform services. They do not get `instance_size_slug` or `instance_count`; static site assets are served through DigitalOcean's global CDN by default. Use an external CDN only when the product needs advanced controls such as bot filtering, custom rate limiting, or geographic traffic rules.
-- For DigitalOcean app specs, copy `.do/*.yaml.example` to `.do/*.yaml`, fill in the identifiers, and commit them; `bun run deploy:do <target>` refuses unresolved placeholders, empty values, wildcard CORS, an unregistered scheduled task, and a dirty or unpushed release source. App Platform machine tiers live in the committed specs; update them and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) together.
+- Copy the selected provider's `terraform.tfvars.example` files, keep real `.tfvars` and state credentials uncommitted, bootstrap remote state once, apply the foundation explicitly, and use the unified release command only after its plan is clean. Machine tiers and service shape live in Terraform; update the provider runbook with material operational changes.
 - Before deployment or cloud-resource updates, verify `git remote -v` and `git status --short --branch`. Deploy only from the intended pushed release branch with a clean worktree; if local changes, untracked files, or branch sync issues are present, stop instead of cleaning, stashing, resetting, or checking out over another session's work.
 - Use DigitalOcean Spaces Standard Storage, or any S3-compatible bucket, for persistent files and uploads. Do not store uploads on the App Platform container filesystem: the backend refuses the filesystem storage driver in production for exactly that reason.
-- If [CHECKLIST.md](CHECKLIST.md) records Yandex Cloud, use [docs/YANDEX_CLOUD.md](docs/YANDEX_CLOUD.md) instead: Serverless Containers for backend/API, Managed Service for PostgreSQL for production data, Object Storage for files/static sites, and Cloud CDN for public static/media delivery. That document provisions the infrastructure once; each release afterwards is `bun run release:yc release`.
-- Explain manual prerequisites only for the active release path: DigitalOcean account, billing/project setup, `doctl auth init`, registry access when using DigitalOcean Container Registry, DigitalOcean Managed PostgreSQL, and production domains/DNS. Expo/EAS/App Store/Google Play setup lives on the `mobile` branch.
+- If [CHECKLIST.md](CHECKLIST.md) records Yandex Cloud, use Serverless Containers, Managed Service for PostgreSQL, Object Storage, and opt-in Cloud CDN exactly as declared under `infra/yandex`. If it records DigitalOcean, use App Platform, Managed PostgreSQL, DOCR, and a private media Space under `infra/digitalocean`.
+- Explain manual prerequisites only for the active release path: cloud account/billing, provider CLI login, production domains/certificates/DNS, and account-level authorization that Terraform cannot portably create. Expo/EAS/App Store/Google Play setup lives on the `mobile` branch.
 - The agent may create uncommitted app-local `.env` files from their matching `.env.example` files and generate a local-only `JWT_SECRET`; never commit secrets or print raw secrets in the final report.
 - After setup, run the smallest meaningful validation for the chosen active surfaces and report local URLs, commands run, and anything the user still needs to authorize manually.
 
@@ -61,7 +82,7 @@ Install this repository into the project. Before cloning from a GitHub URL, ask 
 - `mobile/README.md` - pointer to the runnable Expo mobile template on the `mobile` branch.
 - `packages/contracts` - shared Zod schemas and TypeScript API types.
 - `CHECKLIST.md` - the install intake questionnaire and the durable record of what this project needs, including which capabilities were deliberately removed.
-- `.do` - DigitalOcean App Platform specs: `*.yaml.example` to copy from, `*.yaml` committed per project and applied with `bun run deploy:do <target>`.
+- `infra` - provider-specific Terraform bootstrap, stateful foundation, migration/runtime, and static release roots for DigitalOcean and Yandex Cloud.
 - `docker-compose.yml` - local PostgreSQL 18 through the official `postgres:18-alpine` image on port `54329`; test runners use a repository-derived port by default, or `POSTGRES_TEST_PORT` when set. PostgreSQL 18 is intentional because the backend schema uses strict database-generated UUIDv7 IDs.
 - `docs/BACKGROUND_JOBS.md` - the three ways to work off the request path, the durable task outbox, and how to run them.
 - `docs/TESTING.md` - the backend and Playwright testing contract. Mobile Maestro guidance lives on the `mobile` branch.
@@ -70,6 +91,7 @@ Install this repository into the project. Before cloning from a GitHub URL, ask 
 - `docs/STORAGE.md` - private file storage: the filesystem and S3 drivers, the local S3 container, and the upload contract.
 - `docs/WEB_SURFACES.md` - the mandatory ownership contract for SSG product data, rebuilds, browser cart/checkout, and separate mobile payment paths.
 - `docs/YANDEX_CLOUD.md` - the Yandex Cloud hosting path, chosen when users or data must stay in Russia.
+- `docs/DIGITALOCEAN.md` - the DigitalOcean hosting path for audiences without Russian data residency.
 
 ## Choosing `webapp` vs `website`
 
@@ -78,7 +100,7 @@ This template ships two browser surfaces. Putting a feature in the wrong one is 
 - Build it in **`website`** (Astro, static by default, SSR/hybrid only when needed) when pages must be **public and found by search engines or shared with rich link previews**: marketing/landing pages, content sites, blogs, docs, and the public storefront of a **marketplace**. For a marketplace, this usually means the landing page, category/search landing pages, public listing/product pages, SEO metadata, and rich previews.
 - Build it in **`webapp`** (React, client-side rendered) when screens live **behind sign-in and do not need SEO**: login-adjacent app flows after redirect, buyer account, seller/admin panels, checkout/account workflows, dashboards, settings, and authenticated tools. No crawler needs these, so CSR is the simpler, cheaper choice.
 
-Rule of thumb for the agent: *if a page must rank in search or preview nicely when shared, it belongs in `website`; if it is only reachable after login, it belongs in `webapp`.* Real marketplaces normally use **both**: the public catalog lives in `website`, the authenticated app lives in `webapp`, and both reuse the same `@web-app-demo/contracts` schemas. Do not rebuild SEO pages inside `webapp` to "keep everything in one app"; that loses the SEO the product needs. Do not move the full authenticated app into Astro just because the product has public SEO pages.
+Rule of thumb for the agent: _if a page must rank in search or preview nicely when shared, it belongs in `website`; if it is only reachable after login, it belongs in `webapp`._ Real marketplaces normally use **both**: the public catalog lives in `website`, the authenticated app lives in `webapp`, and both reuse the same `@web-app-demo/contracts` schemas. Do not rebuild SEO pages inside `webapp` to "keep everything in one app"; that loses the SEO the product needs. Do not move the full authenticated app into Astro just because the product has public SEO pages.
 
 For product data, carts, checkout, orders, subscriptions, entitlements, or payments, [docs/WEB_SURFACES.md](docs/WEB_SURFACES.md) is mandatory reading. Browser purchases have one path: `website` may hold an anonymous local selection, but checkout and payment belong to the authenticated `webapp`, with the backend as authority. Mobile owns separate native payment experiences: the `mobile` branch already carries switched-off App Store/Google Play subscription paths and may add policy-compliant card, Apple Pay, or Google Pay flows when the product needs them.
 
@@ -145,10 +167,10 @@ bun run dev:seed
 
 Use these public local demo accounts to inspect both application roles:
 
-| Role | Email | Password | Landing page |
-| --- | --- | --- | --- |
-| Administrator | `admin@example.com` | `local-admin-password` | `/admin` |
-| User | `user@example.com` | `local-user-password` | `/app` |
+| Role          | Email               | Password               | Landing page |
+| ------------- | ------------------- | ---------------------- | ------------ |
+| Administrator | `admin@example.com` | `local-admin-password` | `/admin`     |
+| User          | `user@example.com`  | `local-user-password`  | `/app`       |
 
 The command is idempotent, rejects `NODE_ENV=production`, and accepts only a
 loopback PostgreSQL URL. On the `mobile` branch it also gives the ordinary demo
@@ -210,9 +232,9 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
 - `bun run architecture:check` - enforce the module/feature dependency boundaries.
 - `bun run build` - run production build/typecheck/export scripts for workspaces that define them.
 - `bun run static:precompress` - write `.br` and `.gz` next to the text assets in `webapp/dist` and
-  `website/dist`, after those builds. Deliberately not part of `build`: only a proxy you run
-  yourself reads those files, and DigitalOcean and Yandex compress at their CDN instead. See the
-  hosting document recorded in [CHECKLIST.md](CHECKLIST.md).
+  `website/dist`, after those builds. Deliberately not part of `build`: only the own-server proxy
+  reads those sidecars. Hosted releases upload/build the original assets and let their edge layer
+  negotiate compression when available.
 - `bun audit` - list known vulnerabilities. It reports none today, and the `overrides` block in the
   root `package.json` is why: every entry there is a minimum version that closes an advisory in a
   transitive dependency nothing here imports directly. Treat that block as maintenance, not
@@ -224,18 +246,23 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
   `@prisma/client/runtime/client` import stops resolving and every Prisma type collapses - about
   180 typecheck errors that look nothing like a packaging problem. The published tarball is
   intact, so this is an install-side failure. `bun update` cannot move an exact pin; `bun update
-  --latest` can, so check Prisma after one, and try 7.9.2 when it ships.
-- `bun run test` - run contract, backend, and webapp unit/integration tests.
+--latest` can, so check Prisma after one, and try 7.9.2 when it ships.
+- `bun run test` - run infrastructure, contract, backend, webapp, and website tests.
+- `bun run test:infra` - run release orchestration and infrastructure safety tests (no cloud mutation).
 - `bun run test:contracts` - run shared Zod contract tests.
 - `bun run test:backend` - run backend unit and integration tests.
 - `bun run test:backend:integration` - run DB-backed auth tests through `postgres_test`.
 - `bun run test:webapp` - run webapp client tests.
 - `bun run test:storage:s3` - run the storage contract against a real local S3 server (needs Docker).
 - `bun run --cwd backend start:cron -- <job>` - run one background job once, for example `outbox:drain`; see [docs/BACKGROUND_JOBS.md](docs/BACKGROUND_JOBS.md).
-- `bun run --cwd backend start:scheduler` - run the in-repo scheduler process (ships with the outbox drain every minute; `bun run dev` starts it too).
+- `bun run --cwd backend start:scheduler` - run the in-repo schedule from `job-schedules.json`: outbox every minute, upload cleanup hourly, and auth cleanup daily (`bun run dev` starts it too).
 - `bun run --cwd backend start:worker` - run the loop worker process (empty until you add loops).
-- `bun run deploy:do <api|webapp|website>` - apply a committed DigitalOcean spec, carrying the running app's secrets forward.
-- `bun run release:yc <release|status|...>` - run a phased Yandex Cloud release, resumable from the phase that failed.
+- `bun run infra:bootstrap -- <digitalocean|yandex> --new` - create and migrate the selected provider's remote Terraform state; omit `--new` only when resuming, or use the documented recovery flags to reattach.
+- `bun run infra:apply -- <digitalocean|yandex>` - apply a guarded saved plan to the stateful foundation only.
+- `bun run infra:import -- <provider> <root> <address> <id> [adoption flags]` - import an existing resource into its exact state root and check the resulting saved plan.
+- `bun run infra:output -- <digitalocean|yandex>` - print only the safe operational Terraform outputs.
+- `bun run infra:plan -- <digitalocean|yandex>` - inspect a guarded production Terraform plan without applying it.
+- `bun run release -- <digitalocean|yandex>` - build, migrate, promote, publish, and verify one production release.
 - `bun run e2e:webapp` - run the Playwright journeys through backend + Vite.
 - `bun run e2e:webapp:s3` - run the same journeys against the local S3 container.
 - `bun run storage:local:start|status|stop|env` - manage the optional local S3 container; `stop` keeps its volume.
@@ -243,6 +270,7 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
 - `bun run --cwd backend prisma:deploy` - apply existing Prisma migrations on a server.
 - `bun run dev:seed` - idempotently create the local demo accounts.
 - `bun run --cwd backend db:deploy` - production pre-deploy: migrate, optionally bootstrap the first administrator, and require a login-capable administrator.
+- `bun run --cwd backend db:adopt-owner` - read-only inventory for legacy PostgreSQL ownership; add the documented confirmation and `-- --apply` only for the reviewed one-time transfer.
 
 ## Project READMEs
 
@@ -284,5 +312,5 @@ For framework, API, deployment, or testing questions, consult the current upstre
 - Testing: [Playwright docs](https://playwright.dev/docs/intro)
 - Website: [Astro docs](https://docs.astro.build/en/getting-started/)
 - Local infrastructure: [Docker Compose docs](https://docs.docker.com/compose/) and [PostgreSQL Docker Official Image](https://hub.docker.com/_/postgres)
-- Deployment and storage: [DigitalOcean App Platform](https://docs.digitalocean.com/products/app-platform/), [DigitalOcean App specs](https://docs.digitalocean.com/products/app-platform/reference/app-spec/), [DigitalOcean Static Sites](https://docs.digitalocean.com/products/app-platform/how-to/manage-static-sites/), [DigitalOcean Managed Databases in App Platform](https://docs.digitalocean.com/products/app-platform/how-to/manage-databases/), [DigitalOcean Valkey](https://docs.digitalocean.com/products/databases/valkey/), [DigitalOcean Dockerfile builds](https://docs.digitalocean.com/products/app-platform/reference/dockerfile/), [DigitalOcean Bun buildpack](https://docs.digitalocean.com/products/app-platform/reference/buildpacks/bun/), [doctl](https://docs.digitalocean.com/reference/doctl/), [doctl apps spec validate](https://docs.digitalocean.com/reference/doctl/reference/apps/spec/validate/), [DigitalOcean Container Registry](https://docs.digitalocean.com/products/container-registry/), [DigitalOcean Spaces](https://docs.digitalocean.com/products/spaces/), [DigitalOcean Spaces CDN](https://docs.digitalocean.com/products/spaces/how-to/enable-cdn/), and [external CDN in front of App Platform](https://docs.digitalocean.com/products/app-platform/how-to/configure-external-cdn/)
+- DigitalOcean infrastructure: [Terraform provider](https://docs.digitalocean.com/reference/terraform/), [App Platform](https://docs.digitalocean.com/products/app-platform/), [Static Sites](https://docs.digitalocean.com/products/app-platform/how-to/manage-static-sites/), [Managed PostgreSQL](https://docs.digitalocean.com/products/databases/postgresql/), [Container Registry](https://docs.digitalocean.com/products/container-registry/), [Spaces](https://docs.digitalocean.com/products/spaces/), and [doctl](https://docs.digitalocean.com/reference/doctl/)
 - Yandex Cloud path: [Yandex Cloud CLI](https://yandex.cloud/en/docs/cli/quickstart), [Yandex Serverless Containers](https://yandex.cloud/en/docs/serverless-containers/), [Yandex Container Registry](https://yandex.cloud/en/docs/container-registry/quickstart), [Yandex Managed PostgreSQL](https://yandex.cloud/en/docs/managed-postgresql/), [Yandex Managed Service for Valkey](https://yandex.cloud/en/docs/managed-redis/), [Yandex Object Storage static hosting](https://yandex.cloud/en/docs/storage/operations/hosting/setup), [Yandex Object Storage AWS CLI](https://yandex.cloud/en/docs/storage/tools/aws-cli), [Yandex Cloud CDN](https://yandex.cloud/en/docs/cdn/concepts/), and [Yandex Cloud Marketplace Image Resizer](https://yandex.cloud/en/marketplace/products/yc/image-resizer)

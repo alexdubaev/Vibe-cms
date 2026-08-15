@@ -67,7 +67,8 @@ and active sessions. Replacing a configured credential updates its Argon2id hash
 and revokes stale authentication authority. The committed values are public
 local defaults and must never be reused in a deployed environment.
 
-Production remains a separate path. `bun run db:deploy` applies migrations,
+Production remains a separate path. `bun run db:deploy` checks migration ownership before Prisma,
+applies migrations, reconciles a separate DigitalOcean runtime role back to DML-only access, and
 optionally bootstraps only the first administrator from paired
 `ADMIN_SEED_EMAIL` and `ADMIN_SEED_PASSWORD`, then fails unless at least one
 administrator has a password credential. Production bootstrap rejects blank,
@@ -90,9 +91,11 @@ The backend is one workspace with one Prisma schema and one Dockerfile, but it h
 
 - API: `bun run start:api`, backed by `src/index.ts`.
 - Jobs: declared once in `src/jobs.ts` and shared by the three runners below. `noop`, `db:ping`, `auth:sessions:cleanup`, `uploads:pending:cleanup`, and `outbox:drain` ship with the template; see [../docs/BACKGROUND_JOBS.md](../docs/BACKGROUND_JOBS.md).
-- Cron: `bun run start:cron -- <job>`, backed by `src/cron.ts`. Runs one job and exits, for a provider timer to call.
+- Cron: `bun run start:cron -- <job>`, backed by `src/cron.ts`. CLI mode runs one job and exits;
+  Yandex Terraform starts the same executor in HTTP mode so a failed job returns non-2xx to the
+  timer trigger.
 - Scheduler: `bun run start:scheduler`, backed by `src/scheduler.ts`. Keeps schedules in the repository instead of a cloud console. `bun run dev` runs it next to the API, so a queued email leaves in development without a second terminal.
-- Worker: `bun run start:worker`, backed by `src/worker.ts`. A loop, for work that must run more often than once a minute. The scheduler ships with one entry, `outbox:drain` every minute, and `bun run dev` starts it alongside the API; the worker ships empty, so give it a loop before deploying it as an App Platform worker - a process that exits immediately gets restarted forever.
+- Worker: `bun run start:worker`, backed by `src/worker.ts`. A loop for work that must run more often than once a minute. `src/job-schedules.json` ships the outbox drain every minute, upload cleanup hourly, and auth cleanup daily; `bun run dev` starts that scheduler alongside the API, and Terraform deploys the matching production runner. The loop worker ships empty, so give it a loop before deploying it - a process that exits immediately gets restarted forever.
 
 All entrypoints use `src/runtime.ts` for env loading, Prisma creation, and cleanup, so backend services can be shared without duplicating Prisma schema or database setup.
 
@@ -100,7 +103,12 @@ Primary keys use database-generated UUIDv7 values in PostgreSQL (`@default(dbgen
 
 ## Deployment
 
-Production deployment for the backend uses DigitalOcean App Platform with DigitalOcean Managed PostgreSQL by default. Follow the shared runbook in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) instead of duplicating provider-specific steps here. The root `bun run deploy:do api` command applies the committed `.do/api-app.yaml`, taking secret values from the running app; never put a secret value in a spec. If `CHECKLIST.md` records Yandex Cloud, use [../docs/YANDEX_CLOUD.md](../docs/YANDEX_CLOUD.md) instead.
+Production infrastructure is Terraform under [../infra](../infra/README.md). Follow the shared safety and release contract in [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md), then the provider runbook selected in `CHECKLIST.md`: [DigitalOcean](../docs/DIGITALOCEAN.md) or [Yandex Cloud](../docs/YANDEX_CLOUD.md). One `bun run release -- <provider>` build uses `backend/Dockerfile`, gates promotion on `db:deploy`, deploys the API and scheduled work, and verifies readiness. Never put a secret in committed tfvars or backend configuration.
+
+When adopting a legacy database, run `bun run db:adopt-owner` first for a read-only public-schema
+ownership inventory. The exact confirmation and `-- --apply` sequence lives in
+[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md); normal deployment never transfers ownership
+implicitly.
 
 ## Auth API
 
@@ -150,7 +158,7 @@ Admin list responses expose only `id`, `email`, `displayName`,
 
 `src/index.ts` only starts the API server. `src/runtime.ts` loads env and creates the Prisma client for API, worker, and cron entrypoints. `src/app.ts` is the composition root. Product contexts live under `src/modules/<context>` and expose only `index.ts` across context boundaries. Auth is the authentication/principal golden path; the separate users context owns profiles, admin directory reads, and role policy. `transport` owns Hono/HTTP, `application` owns use cases and ports, optional `domain` code stays pure, and `infrastructure` owns Prisma and token/password adapters. Route factories capture dependencies in closures; request context contains only the authenticated principal. Run `bun run architecture:check` to enforce these dependency rules. `src/db.ts` normalizes DigitalOcean Managed PostgreSQL URLs that use `sslmode=require` so the Prisma PostgreSQL adapter uses libpq-compatible TLS handling.
 
-The storage service lives in `src/storage` and wraps DigitalOcean Spaces through S3-compatible SDK calls. Product-specific upload routes should validate ownership and permissions, then delegate object key generation, presigned upload/download URLs, public CDN URL construction, and deletion to that service.
+The storage service lives in `src/storage` and wraps private S3-compatible storage. Product-specific upload routes should validate ownership and permissions, then delegate object key generation, presigned upload/download URLs, and deletion to that service. Terraform creates a dedicated private media bucket and scoped runtime credentials on either supported cloud.
 
 Prisma migration SQL is not written by hand. Change `prisma/schema.prisma`, then run `bun run prisma:migrate`.
 
