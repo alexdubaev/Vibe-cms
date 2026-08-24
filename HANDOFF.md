@@ -13,6 +13,7 @@
 - безопасная передача: approval/publication snapshots не возвращаются через HTTP mutation responses;
 - CMS media API: signed-ticket upload/finalize, list/search, alt-текст, owner-only durable delete;
 - media finalize извлекает bounded dimensions для PNG/JPEG/WebP/AVIF без декодирования пикселей и сохраняет их в asset record;
+- publication snapshot включает только ready media descriptors с безопасным immutable `publicPath`, а live/preview Astro renderer разрешает media IDs без private object keys;
 - публикационная логика, immutable artifacts, builder HMAC/nonce, Yandex queue/storage adapters;
 - website snapshot loader, static rendering, robots/sitemap и fail-closed preview exchange helper;
 - request-time Astro preview runtime: Node adapter, external `/__preview/*` rewrite, one-time exchange,
@@ -109,6 +110,7 @@ Media finalize dimensions:
 - `bun run build:webapp` — успешно;
 - `bun run architecture:check` — успешно, 432 source files;
 - media PostgreSQL integration — **1 pass, 0 fail**;
+- `bun run --cwd website test` — **12 pass, 0 fail**; website typecheck/build успешны, остаётся только существующий `verticalAlign` hint;
 - `bun run --cwd website-builder test` — **19 pass, 0 fail**;
 - `bun run --cwd website-builder typecheck` — успешно;
 - `bun run typecheck`, `bun run lint`, `bun run build` — успешно; website оставляет только существующий hint о deprecated `verticalAlign`;

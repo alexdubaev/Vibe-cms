@@ -29,7 +29,7 @@ const homePage = publicationSnapshot?.pages.find((page) => page.path === '/')
 ---
 
 <BaseLayout canonicalUrl={canonicalUrl} description={description} title={title}>
-  {homePage ? <CmsPage page={homePage} /> : (
+  {homePage ? <CmsPage page={homePage} media={publicationSnapshot?.media ?? []} /> : (
     <>
       <SiteHeader primaryHref={TEMPLATE_ACTION.href} primaryLabel={TEMPLATE_ACTION.label} />
       <main id="main-content">

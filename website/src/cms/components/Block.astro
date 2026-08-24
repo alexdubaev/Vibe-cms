@@ -1,12 +1,15 @@
 ---
+import type { PublicationSnapshot } from '@web-app-demo/contracts'
 import type { PublicBlock } from '../block-registry'
+import { resolveCmsMediaSrc } from '../media'
 
 interface Props {
   block: PublicBlock
+  media?: PublicationSnapshot['media']
   mediaBasePath?: string
 }
 
-const { block, mediaBasePath } = Astro.props
+const { block, media = [], mediaBasePath } = Astro.props
 const data = block.data as Record<string, unknown>
 const title = typeof data.title === 'string' ? data.title : undefined
 const text = typeof data.text === 'string' ? data.text : undefined
@@ -17,7 +20,7 @@ const action = data.primaryAction && typeof data.primaryAction === 'object'
 const actionLabel = typeof action?.label === 'string' ? action.label : undefined
 const actionHref = typeof action?.href === 'string' ? action.href : undefined
 const mediaId = typeof data.mediaId === 'string' ? data.mediaId : undefined
-const mediaSrc = mediaBasePath && mediaId ? `${mediaBasePath}/${mediaId}` : undefined
+const mediaSrc = resolveCmsMediaSrc(media, mediaId, mediaBasePath)
 const itemLabel = (item: unknown) => {
   if (item && typeof item === 'object' && 'title' in item && typeof item.title === 'string') return item.title
   return 'Элемент'

@@ -18,6 +18,7 @@ import {
   createCmsPreviewStore,
   createCmsRepository,
   createCmsRoutes,
+  toPublicMediaDescriptor,
 } from './modules/cms'
 import { createMediaModule } from './modules/media'
 import {
@@ -73,12 +74,26 @@ export function createApp({
       })
     : null
   const cmsSnapshot = new CmsSnapshotService(async () => {
-    const [settings, pages, entries, menus, redirects] = await Promise.all([
+    const [settings, pages, entries, menus, redirects, mediaAssets] = await Promise.all([
       prisma.cmsSiteSettings.findUnique({ where: { key: 'default' } }),
       prisma.cmsPage.findMany({ where: { archivedAt: null }, orderBy: { path: 'asc' } }),
       prisma.cmsContentEntry.findMany({ where: { archivedAt: null }, orderBy: { createdAt: 'asc' } }),
       prisma.cmsMenu.findMany({ orderBy: { location: 'asc' } }),
       prisma.cmsRedirect.findMany({ where: { active: true }, orderBy: { sourcePath: 'asc' } }),
+      prisma.cmsMediaAsset.findMany({
+        where: { state: 'ready' },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          contentVersion: true,
+          filename: true,
+          contentType: true,
+          byteSize: true,
+          width: true,
+          height: true,
+          altText: true,
+        },
+      }),
     ])
     const asRecord = (value: unknown): Record<string, unknown> =>
       value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -103,7 +118,7 @@ export function createApp({
         items: asRecord(menu.draftPayload).items ?? [],
       })),
       redirects: redirects.map((redirect) => ({ source: redirect.sourcePath, destination: redirect.destinationPath })),
-      media: [],
+      media: mediaAssets.map(toPublicMediaDescriptor),
     }
   })
   const cmsService = new CmsService({ repository: cmsRepository, snapshot: cmsSnapshot })

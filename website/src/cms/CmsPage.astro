@@ -1,15 +1,17 @@
 ---
+import type { PublicationSnapshot } from '@web-app-demo/contracts'
 import type { PublicPage } from './block-registry'
 import Block from './components/Block.astro'
 
 interface Props {
   page: PublicPage
+  media?: PublicationSnapshot['media']
   mediaBasePath?: string
 }
 
-const { mediaBasePath, page } = Astro.props
+const { media, mediaBasePath, page } = Astro.props
 ---
 
 <main id="main-content">
-  {page.blocks.map((block) => <Block block={block} mediaBasePath={mediaBasePath} />)}
+  {page.blocks.map((block) => <Block block={block} media={media ?? []} mediaBasePath={mediaBasePath} />)}
 </main>

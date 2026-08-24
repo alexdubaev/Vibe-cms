@@ -13,6 +13,7 @@ export {
 } from './application/cms-service'
 export { CmsPreviewService } from './application/preview-service'
 export { CmsSnapshotService } from './application/snapshot-service'
+export { toPublicMediaDescriptor } from './domain/media-descriptor'
 export { createCmsRoutes } from './transport/routes'
 export { createCmsPreviewExchangeRoutes } from './transport/routes'
 export { createCmsPreviewRuntimeRoutes } from './transport/routes'
