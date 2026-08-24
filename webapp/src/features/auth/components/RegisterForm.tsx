@@ -39,7 +39,7 @@ export function RegisterForm({ returnTo }: { returnTo?: string }) {
       })
       const nextErrors = result.success ? {} : toFieldErrors(result.error.issues)
       if (value.password !== value.confirmPassword) {
-        nextErrors.confirmPassword = [{ message: 'Passwords do not match' }]
+        nextErrors.confirmPassword = [{ message: 'Пароли не совпадают' }]
       }
       if (!result.success || hasErrors(nextErrors.confirmPassword)) {
         setFieldErrors(nextErrors)
@@ -51,7 +51,7 @@ export function RegisterForm({ returnTo }: { returnTo?: string }) {
         await auth.register(result.data as RegisterRequest)
       } catch (caughtError) {
         setFormError(
-          caughtError instanceof ApiRequestError ? caughtError.message : 'Unexpected auth error',
+          caughtError instanceof ApiRequestError ? caughtError.message : 'Неожиданная ошибка регистрации',
         )
       }
     },
@@ -68,16 +68,16 @@ export function RegisterForm({ returnTo }: { returnTo?: string }) {
       <FieldGroup className="gap-5">
         <div className="flex flex-col items-center gap-1 text-center">
           <Typography as="h1" variant="h3" balance>
-            Create your account
+            Создайте учётную запись
           </Typography>
           <Typography variant="bodySm" tone="muted" balance>
-            Fill in the form below to create your account
+            Заполните форму, чтобы начать работу.
           </Typography>
         </div>
 
         <form.Field name="displayName" children={(field) => (
           <Field data-invalid={hasErrors(fieldErrors.displayName)}>
-            <FieldLabel htmlFor={displayNameId}>Full Name</FieldLabel>
+            <FieldLabel htmlFor={displayNameId}>Имя</FieldLabel>
             <Input
               aria-describedby={errorId(fieldErrors.displayName, displayNameErrorId)}
               aria-invalid={hasErrors(fieldErrors.displayName)}
@@ -91,7 +91,7 @@ export function RegisterForm({ returnTo }: { returnTo?: string }) {
                 clearFieldError('displayName', setFieldErrors)
                 setFormError(null)
               }}
-              placeholder="John Doe"
+              placeholder="Иван Петров"
               type="text"
               value={field.state.value}
             />
@@ -101,7 +101,7 @@ export function RegisterForm({ returnTo }: { returnTo?: string }) {
 
         <form.Field name="email" children={(field) => (
           <Field data-invalid={hasErrors(fieldErrors.email)}>
-            <FieldLabel htmlFor={emailId}>Email</FieldLabel>
+            <FieldLabel htmlFor={emailId}>Электронная почта</FieldLabel>
             <Input
               aria-describedby={errorId(fieldErrors.email, emailErrorId)}
               aria-invalid={hasErrors(fieldErrors.email)}
@@ -120,14 +120,14 @@ export function RegisterForm({ returnTo }: { returnTo?: string }) {
               type="email"
               value={field.state.value}
             />
-            <FieldDescription>We&apos;ll use this to contact you.</FieldDescription>
+            <FieldDescription>Используем её для связи и входа.</FieldDescription>
             <FieldError id={emailErrorId} errors={fieldErrors.email} />
           </Field>
         )} />
 
         <form.Field name="password" children={(field) => (
           <Field data-invalid={hasErrors(fieldErrors.password)}>
-            <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
+            <FieldLabel htmlFor={passwordId}>Пароль</FieldLabel>
             <PasswordInput
               aria-describedby={[
                 passwordDescriptionId,
@@ -148,7 +148,7 @@ export function RegisterForm({ returnTo }: { returnTo?: string }) {
               value={field.state.value}
             />
             <FieldDescription id={passwordDescriptionId}>
-              Must be at least 8 characters long.
+              Не менее 8 символов.
             </FieldDescription>
             <FieldError id={passwordErrorId} errors={fieldErrors.password} />
           </Field>
@@ -156,7 +156,7 @@ export function RegisterForm({ returnTo }: { returnTo?: string }) {
 
         <form.Field name="confirmPassword" children={(field) => (
           <Field data-invalid={hasErrors(fieldErrors.confirmPassword)}>
-            <FieldLabel htmlFor={confirmPasswordId}>Confirm Password</FieldLabel>
+            <FieldLabel htmlFor={confirmPasswordId}>Повторите пароль</FieldLabel>
             <PasswordInput
               aria-describedby={errorId(fieldErrors.confirmPassword, confirmPasswordErrorId)}
               aria-invalid={hasErrors(fieldErrors.confirmPassword)}
@@ -171,9 +171,9 @@ export function RegisterForm({ returnTo }: { returnTo?: string }) {
                 setFormError(null)
               }}
               value={field.state.value}
-              visibilityLabel="password confirmation"
+              visibilityLabel="подтверждение пароля"
             />
-            <FieldDescription>Please confirm your password.</FieldDescription>
+            <FieldDescription>Введите пароль ещё раз.</FieldDescription>
             <FieldError id={confirmPasswordErrorId} errors={fieldErrors.confirmPassword} />
           </Field>
         )} />
@@ -183,15 +183,15 @@ export function RegisterForm({ returnTo }: { returnTo?: string }) {
         <Field>
           <form.Subscribe selector={(state) => state.isSubmitting} children={(isSubmitting) => (
             <Button disabled={isSubmitting} type="submit">
-              {isSubmitting ? 'Creating account…' : 'Create Account'}
+              {isSubmitting ? 'Создаём…' : 'Создать учётную запись'}
             </Button>
           )} />
         </Field>
 
         <FieldDescription className="text-center">
-          Already have an account?{' '}
+          Уже есть учётная запись?{' '}
           <Link search={{ returnTo }} to="/login">
-            Sign in
+            Войти
           </Link>
         </FieldDescription>
       </FieldGroup>

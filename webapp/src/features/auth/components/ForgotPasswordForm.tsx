@@ -39,7 +39,7 @@ export function ForgotPasswordForm() {
         setFormError(
           caughtError instanceof ApiRequestError
             ? caughtError.message
-            : 'Unable to request a password reset',
+            : 'Не удалось запросить восстановление пароля',
         )
       }
     },
@@ -56,16 +56,16 @@ export function ForgotPasswordForm() {
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
           <Typography as="h1" variant="h3" balance>
-            Reset your password
+            Восстановление пароля
           </Typography>
           <Typography variant="bodySm" tone="muted" balance>
-            Enter your email and we&apos;ll send reset instructions if the account exists
+            Укажите email — если учётная запись существует, мы отправим инструкции.
           </Typography>
         </div>
 
         <form.Field name="email" children={(field) => (
           <Field data-invalid={hasErrors(fieldErrors.email)}>
-            <FieldLabel htmlFor={emailId}>Email</FieldLabel>
+            <FieldLabel htmlFor={emailId}>Электронная почта</FieldLabel>
             <Input
               aria-describedby={errorId(fieldErrors.email, emailErrorId)}
               aria-invalid={hasErrors(fieldErrors.email)}
@@ -91,25 +91,25 @@ export function ForgotPasswordForm() {
 
         {accepted ? (
           <Alert>
-            <AlertTitle>Check your email</AlertTitle>
+            <AlertTitle>Проверьте почту</AlertTitle>
             <AlertDescription>
-              If an account exists for that address, reset instructions are on the way.
+              Если для этого адреса есть учётная запись, инструкции уже отправлены.
             </AlertDescription>
           </Alert>
         ) : null}
-        <FormAlert message={formError} title="Request failed" />
+        <FormAlert message={formError} title="Запрос не выполнен" />
 
         <Field>
           <form.Subscribe selector={(state) => state.isSubmitting} children={(isSubmitting) => (
             <Button disabled={isSubmitting} type="submit">
-              {isSubmitting ? 'Sending…' : 'Send reset instructions'}
+              {isSubmitting ? 'Отправляем…' : 'Отправить инструкции'}
             </Button>
           )} />
         </Field>
 
         <Typography align="center" variant="bodySm">
           <Link className="underline underline-offset-4" search={{ returnTo: undefined }} to="/login">
-            Back to login
+            Вернуться ко входу
           </Link>
         </Typography>
       </FieldGroup>
