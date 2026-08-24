@@ -28,10 +28,18 @@ const EMPTY_HASH = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852
 const AWS_ALGORITHM = 'AWS4-HMAC-SHA256'
 const SERVICE = 's3'
 const DEFAULT_REGION = 'ru-central1'
-const DEFAULT_MAX_MEDIA_BYTES = 16 * 1024 * 1024
+const DEFAULT_MAX_MEDIA_BYTES = 100 * 1024 * 1024
 const SLOT_PREFIX = /^(blue|green)\/$/
 const STATIC_OBJECT = /^(blue|green)\/(.+)$/
-const MEDIA_DESTINATION = /^\/media\/[a-z0-9-]+\/[a-z0-9-]+\/[A-Za-z0-9._-]+$/
+const MEDIA_DESTINATION = /^\/(blue|green)\/media\/[a-z0-9-]+\/[a-z0-9-]+\/[A-Za-z0-9._-]+$/
+const MEDIA_CONTENT_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/avif',
+  'video/mp4',
+  'application/pdf',
+])
 
 /**
  * S3-compatible Object Storage adapter for a builder release.
@@ -112,7 +120,9 @@ export function createYandexObjectStorageAdapter(options: YandexObjectStorageOpt
 
     async copyFromSignedUrl(input: MediaCopyRequest) {
       if (!isHttpUrl(input.sourceUrl)) throw new Error('Media source must be a signed HTTP URL')
-      if (!MEDIA_DESTINATION.test(input.destinationPath)) throw new Error('Media destination path is invalid')
+      const destination = MEDIA_DESTINATION.exec(input.destinationPath)
+      if (!destination || !allowedSlots.has(destination[1] as 'blue' | 'green')) throw new Error('Media destination path is invalid')
+      if (!MEDIA_CONTENT_TYPES.has(input.contentType)) throw new Error('Media content type is invalid')
       const sourceResponse = await fetcher(input.sourceUrl, { method: 'GET', redirect: 'error' })
       await ensureSuccess(sourceResponse, 'media source download')
       const body = await readResponseBodyWithLimit(sourceResponse, maxMediaBytes)
@@ -120,7 +130,10 @@ export function createYandexObjectStorageAdapter(options: YandexObjectStorageOpt
         method: 'PUT',
         key: input.destinationPath.slice(1),
         body,
-        headers: { 'content-type': input.contentType },
+        headers: {
+          'content-type': input.contentType,
+          'cache-control': 'public, max-age=31536000, immutable',
+        },
       })
     },
   }

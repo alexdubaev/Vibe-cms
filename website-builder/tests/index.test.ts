@@ -20,7 +20,7 @@ describe('builder worker', () => {
     const calls: string[] = []
     const worker = createBuilderWorker({
       backend: {
-        getBuildInput: async () => ({ buildId, publicationRevision: 4, slot: 'green', snapshotArtifact: { url: 'https://storage.test/snapshot', expiresAt: '2026-08-24T10:05:00.000Z', etag: 'etag-4' } }),
+        getBuildInput: async () => ({ buildId, publicationRevision: 4, slot: 'green', snapshotArtifact: { url: 'https://storage.test/snapshot', expiresAt: '2026-08-24T10:05:00.000Z', etag: 'etag-4' }, media: [] }),
         heartbeat: async () => { calls.push('heartbeat') },
         result: async (_id, result) => { calls.push(result.status) },
       },
@@ -36,7 +36,7 @@ describe('builder worker', () => {
     const results: unknown[] = []
     const worker = createBuilderWorker({
       backend: {
-        getBuildInput: async () => ({ buildId, publicationRevision: 4, slot: 'green', snapshotArtifact: { url: 'https://storage.test/snapshot', expiresAt: '2026-08-24T10:05:00.000Z', etag: 'etag-4' } }),
+        getBuildInput: async () => ({ buildId, publicationRevision: 4, slot: 'green', snapshotArtifact: { url: 'https://storage.test/snapshot', expiresAt: '2026-08-24T10:05:00.000Z', etag: 'etag-4' }, media: [] }),
         heartbeat: async () => undefined,
         result: async (_id, result) => { results.push(result) },
       },
@@ -52,7 +52,7 @@ describe('builder worker', () => {
     const results: unknown[] = []
     const worker = createBuilderWorker({
       backend: {
-        getBuildInput: async () => ({ buildId, publicationRevision: 4, slot: 'green', snapshotArtifact: { url: 'https://storage.test/snapshot', expiresAt: '2026-08-24T10:05:00.000Z', etag: 'etag-4' } }),
+        getBuildInput: async () => ({ buildId, publicationRevision: 4, slot: 'green', snapshotArtifact: { url: 'https://storage.test/snapshot', expiresAt: '2026-08-24T10:05:00.000Z', etag: 'etag-4' }, media: [] }),
         heartbeat: async () => undefined,
         result: async (_id, result) => { results.push(result) },
       },

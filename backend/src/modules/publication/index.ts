@@ -15,6 +15,12 @@ export {
   type PublicationArtifactStorage,
 } from './application/artifact-service'
 export {
+  PublicationMediaCopyInputService,
+  type PublicationMediaAssetForCopy,
+  type PublicationMediaCopyRepository,
+  type PublicationMediaCopyStorage,
+} from './application/media-copy-input'
+export {
   BuilderRequestAuthError,
   createBuilderRequestVerifier,
   signBuilderRequest,

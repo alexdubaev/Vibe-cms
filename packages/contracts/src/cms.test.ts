@@ -14,6 +14,7 @@ import {
   previewMediaResponseSchema,
   previewPageResponseSchema,
   publicationSnapshotSchema,
+  publicationBuildInputSchema,
   structuredTextDocumentSchema,
 } from './cms'
 
@@ -138,6 +139,33 @@ describe('CMS contracts', () => {
         alt: 'Логотип',
       }),
     ).toThrow()
+  })
+
+  test('keeps builder media input short-lived and free of private object keys', () => {
+    const input = publicationBuildInputSchema.parse({
+      buildId: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10',
+      publicationRevision: 4,
+      slot: 'green',
+      snapshotArtifact: {
+        url: 'https://storage.example.test/snapshot',
+        expiresAt: '2026-08-24T10:05:00.000Z',
+        etag: 'etag-4',
+      },
+      media: [{
+        sourceUrl: 'https://storage.example.test/signed-media',
+        destinationPath: '/green/media/018f8c8d-5f34-7db2-8b98-2c7bf3d80a10/018f8c8d-5f34-7db2-8b98-2c7bf3d80a11/hero.png',
+        contentType: 'image/png',
+      }],
+    })
+    expect(input.media).toHaveLength(1)
+    expect(() => publicationBuildInputSchema.parse({
+      ...input,
+      media: [{ ...input.media[0], objectKey: 'cms-media/private' }],
+    })).toThrow()
+    expect(() => publicationBuildInputSchema.parse({
+      ...input,
+      media: [{ ...input.media[0], destinationPath: input.media[0].destinationPath.replace('/green/', '/blue/') }],
+    })).toThrow()
   })
 
   test('requires optimistic revisions and typed preview/conflict responses', () => {

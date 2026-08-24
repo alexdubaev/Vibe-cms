@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { contentBlockSchema, contentPathSchema, seoSchema } from './content'
-import { publicMediaDescriptorSchema } from './media'
+import { mediaMimeTypeSchema, publicMediaDescriptorSchema } from './media'
 
 const publicSettingsSchema = z
   .object({
@@ -61,6 +61,44 @@ export const publicationSnapshotSchema = z
   })
   .strict()
 
+const signedHttpUrlSchema = z
+  .url()
+  .refine((value) => {
+    const protocol = new URL(value).protocol
+    return protocol === 'https:' || protocol === 'http:'
+  }, 'Media source must be an HTTP(S) URL')
+
+export const publicationMediaCopySchema = z
+  .object({
+    sourceUrl: signedHttpUrlSchema,
+    destinationPath: z.string().regex(/^\/(blue|green)\/media\/[a-z0-9-]+\/[a-z0-9-]+\/[A-Za-z0-9._-]+$/),
+    contentType: mediaMimeTypeSchema,
+  })
+  .strict()
+
+export const publicationBuildInputSchema = z
+  .object({
+    buildId: z.uuid(),
+    publicationRevision: z.number().int().positive(),
+    slot: z.enum(['blue', 'green']),
+    snapshotArtifact: z
+      .object({ url: z.url(), expiresAt: z.string().datetime(), etag: z.string().min(1) })
+      .strict(),
+    media: z.array(publicationMediaCopySchema).max(500),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    for (const [index, media] of value.media.entries()) {
+      if (!media.destinationPath.startsWith(`/${value.slot}/`)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['media', index, 'destinationPath'],
+          message: 'Media destination must belong to the assigned build slot',
+        })
+      }
+    }
+  })
+
 export const publicationStateSchema = z.enum(['queued', 'building', 'published', 'failed'])
 
 export const cmsConflictSchema = z
@@ -72,4 +110,6 @@ export const cmsConflictSchema = z
   .strict()
 
 export type PublicationSnapshot = z.infer<typeof publicationSnapshotSchema>
+export type PublicationMediaCopy = z.infer<typeof publicationMediaCopySchema>
+export type PublicationBuildInput = z.infer<typeof publicationBuildInputSchema>
 export type CmsConflict = z.infer<typeof cmsConflictSchema>

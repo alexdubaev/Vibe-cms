@@ -1,5 +1,6 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { z } from 'zod'
+import { publicationBuildInputSchema } from '@web-app-demo/contracts'
 
 import { AppError, validationErrorHook } from '../../../http/errors'
 import {
@@ -8,6 +9,7 @@ import {
 } from '../application/build-request-auth'
 import type { PublicationCallbackRepository } from '../application/rebuild-controller'
 import type { PublicationArtifactService } from '../application/artifact-service'
+import type { PublicationMediaCopyInputService } from '../application/media-copy-input'
 
 const buildParams = z.object({ buildId: z.uuid() }).strict()
 const heartbeatBody = z.object({}).strict()
@@ -28,6 +30,7 @@ export function createPublicationInternalRoutes(options: {
     Partial<Pick<PublicationCallbackRepository, 'getBuildForInput'>>
   verifier: BuilderRequestVerifier
   artifact?: Pick<PublicationArtifactService, 'ensureArtifact' | 'createArtifactDownload'>
+  media?: Pick<PublicationMediaCopyInputService, 'createForBuild'>
   now?: () => Date
 }) {
   const routes = new OpenAPIHono({ defaultHook: validationErrorHook })
@@ -69,7 +72,7 @@ export function createPublicationInternalRoutes(options: {
 
       await options.artifact!.ensureArtifact(build.publicationRevision)
       const artifact = await options.artifact!.createArtifactDownload(build.publicationRevision, 300)
-      return c.json({
+      const input = publicationBuildInputSchema.parse({
         buildId,
         publicationRevision: build.publicationRevision,
         slot: build.slot,
@@ -78,7 +81,9 @@ export function createPublicationInternalRoutes(options: {
           expiresAt: artifact.expiresAt,
           etag: artifact.etag,
         },
+        media: options.media ? await options.media.createForBuild(build.publicationRevision, build.slot) : [],
       })
+      return c.json(input)
     })
   }
 

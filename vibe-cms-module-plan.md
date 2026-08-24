@@ -249,7 +249,7 @@ Expected: permissions, frozen approval, preview grant, concurrency, public leaka
 
 ## Task 4: Implement the media library and durable deletion
 
-> Progress note: the private media upload/finalise/list/alt/deletion foundation and `media:delete-object` outbox handler are implemented. Finalise now extracts bounded dimensions for PNG/JPEG/WebP/AVIF and persists them; provider-side publication copy remains pending.
+> Progress note: the private media upload/finalise/list/alt/deletion foundation and `media:delete-object` outbox handler are implemented. Finalise now extracts bounded dimensions for PNG/JPEG/WebP/AVIF and persists them; provider-side publication copy is wired in the dedicated builder block below.
 
 **Files:**
 
@@ -307,7 +307,7 @@ Expected: upload, finalise, usage, and deletion recovery tests pass.
 
 ## Task 5: Implement transactional publication and the single-flight controller
 
-> Progress note: publication creation now atomically advances the durable controller desired revision and inserts a deduplicated `website:rebuild:wakeup` outbox row. The single-flight controller/repository claims one inactive blue/green build, materialises the immutable artifact before dispatch, rejects concurrent claims, expires stale heartbeats, and records recoverable dispatch failures. Builder HMAC signing/verifying, durable nonce replay protection, provider-neutral `{ buildId }` queue dispatch, signed input/heartbeat/result routes, immutable snapshot artifact materialization, write-once private storage, the short wake-up handler, recurring reconciliation, Yandex Query/SQS SigV4 sending, runtime composition, blue/green promotion, public marker verification, and backend-owned publication promotion wiring are now in place. Provider-side media copy remains pending.
+> Progress note: publication creation now atomically advances the durable controller desired revision and inserts a deduplicated `website:rebuild:wakeup` outbox row. The single-flight controller/repository claims one inactive blue/green build, materialises the immutable artifact before dispatch, rejects concurrent claims, expires stale heartbeats, and records recoverable dispatch failures. Builder HMAC signing/verifying, durable nonce replay protection, provider-neutral `{ buildId }` queue dispatch, signed input/heartbeat/result routes, immutable snapshot artifact materialization, write-once private storage, the short wake-up handler, recurring reconciliation, Yandex Query/SQS SigV4 sending, runtime composition, blue/green promotion, public marker verification, backend-owned publication promotion wiring, and backend signed media-copy inputs are now in place.
 
 **Files:**
 
@@ -385,7 +385,7 @@ Expected: transaction, deduplication, at-least-once delivery, heartbeat, and fol
 
 ## Task 6: Build the dedicated website-builder workspace
 
-> Progress note: the isolated `website-builder` workspace now parses YMQ envelopes, deduplicates and sequentially processes build ids, signs backend input/heartbeat/result calls, validates immutable snapshot artifacts, runs Astro in a temporary output directory, collects static output with cache policy, validates all slot keys before destructive work, uploads the inactive slot with a last-written marker, provides a tested Yandex S3/SigV4 storage adapter with bounded signed-URL media copy, and wires production blue/green promotion through HTTPS selector/purge control endpoints plus public marker polling. Server-side media copy from the publication snapshot and the full snapshot-aware Astro block renderer remain pending.
+> Progress note: the isolated `website-builder` workspace now parses YMQ envelopes, deduplicates and sequentially processes build ids, signs backend input/heartbeat/result calls, validates immutable snapshot artifacts, runs Astro in a temporary output directory, collects static output with cache policy, validates all slot keys before destructive work, uploads the inactive slot with a last-written marker, copies frozen publication media into the assigned inactive slot from short-lived signed URLs, and wires production blue/green promotion through HTTPS selector/purge control endpoints plus public marker polling. The full snapshot-aware Astro block renderer remains pending.
 
 **Files:**
 
@@ -505,7 +505,7 @@ Expected: script and Terraform tests pass; the plan shows additive CMS resources
 
 ## Task 8: Render immutable public pages and the protected Astro preview
 
-> Progress note: the website has a snapshot loader, closed block registry, immutable page/path renderer, safe public media-path resolver, snapshot-backed `robots.txt`/`sitemap.xml`, and a fallback to the original template landing page when no CMS snapshot is supplied. The request-time preview runtime is now implemented with a compatible Astro Node adapter, server-side one-time exchange, current-role/session/page revalidation, private draft DTOs, authorized server-side media proxy, and `private, no-store`/`X-Robots-Tag` headers. Because Astro ignores leading-underscore page directories, external `/__preview/*` requests rewrite to internal `src/pages/preview/*` routes. Full block-specific component coverage and provider-side media copy remain separate follow-up work.
+> Progress note: the website has a snapshot loader, closed block registry, immutable page/path renderer, safe public media-path resolver, snapshot-backed `robots.txt`/`sitemap.xml`, and a fallback to the original template landing page when no CMS snapshot is supplied. The request-time preview runtime is now implemented with a compatible Astro Node adapter, server-side one-time exchange, current-role/session/page revalidation, private draft DTOs, authorized server-side media proxy, and `private, no-store`/`X-Robots-Tag` headers. Because Astro ignores leading-underscore page directories, external `/__preview/*` requests rewrite to internal `src/pages/preview/*` routes. Full block-specific component coverage remains a separate follow-up work item; builder media copy is implemented in Task 6.
 
 **Files:**
 
@@ -568,7 +568,7 @@ Expected: static HTML contains SEO-critical fixture content; preview tests and w
 
 ## Task 9: Build the human-centred CMS admin
 
-> Progress note: the admin foundation now includes Russian page/publication/media navigation for editor and owner roles, authenticated contract-validated CMS queries, safe page/draft summaries, a schema-validated page editor for core fields/SEO/block ordering, structured text editing for text-image, bounded benefits item editing, optional Hero/CTA actions, Contacts/FormPlaceholder fields, media pickers for Hero/TextImage/Gallery, and collection selection pickers backed by a safe active-entry list, collection entry CRUD, serialized autosave with optimistic revisions and conflict preservation, publication status, submit/approve/reject actions, a safe page revision history with scoped restore, and a media library with search, signed-ticket upload/finalisation, bounded image dimensions, alt-text editing, and owner-only durable deletion. Production publication wiring is now present; provider-side media copy remains pending.
+> Progress note: the admin foundation now includes Russian page/publication/media navigation for editor and owner roles, authenticated contract-validated CMS queries, safe page/draft summaries, a schema-validated page editor for core fields/SEO/block ordering, structured text editing for text-image, bounded benefits item editing, optional Hero/CTA actions, Contacts/FormPlaceholder fields, media pickers for Hero/TextImage/Gallery, and collection selection pickers backed by a safe active-entry list, collection entry CRUD, serialized autosave with optimistic revisions and conflict preservation, publication status, submit/approve/reject actions, a safe page revision history with scoped restore, and a media library with search, signed-ticket upload/finalisation, bounded image dimensions, alt-text editing, and owner-only durable deletion. Production publication wiring and builder media copy are now present.
 
 **Files:**
 

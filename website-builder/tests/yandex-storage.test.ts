@@ -153,21 +153,22 @@ describe('Yandex Object Storage adapter', () => {
 
     await adapter.copyFromSignedUrl({
       sourceUrl: 'https://cdn.example/signed?token=one',
-      destinationPath: '/media/site-1/asset-1/logo.png',
+      destinationPath: '/green/media/site-1/asset-1/logo.png',
       contentType: 'image/png',
     })
 
     expect(calls[0].url).toBe('https://cdn.example/signed?token=one')
     expect(calls[0].init?.method).toBe('GET')
     expect(calls[0].init?.redirect).toBe('error')
-    expect(calls[1].url).toBe(`${endpoint}/vibe-media/media/site-1/asset-1/logo.png`)
+    expect(calls[1].url).toBe(`${endpoint}/vibe-media/green/media/site-1/asset-1/logo.png`)
     expect(calls[1].init?.method).toBe('PUT')
     expect(header(calls[1].init, 'content-type')).toBe('image/png')
+    expect(header(calls[1].init, 'cache-control')).toBe('public, max-age=31536000, immutable')
     expect(new Uint8Array(await new Response(calls[1].init?.body).arrayBuffer())).toEqual(new TextEncoder().encode('image-data'))
     await expect(adapter.copyFromSignedUrl({
       sourceUrl: 'https://cdn.example/signed?token=one',
-      destinationPath: '/media/site-1/asset-1/../../private.txt',
-      contentType: 'text/plain',
+      destinationPath: '/green/media/site-1/asset-1/../../private.txt',
+      contentType: 'image/png',
     })).rejects.toThrow('destination path is invalid')
   })
 
@@ -188,7 +189,7 @@ describe('Yandex Object Storage adapter', () => {
 
     await expect(adapter.copyFromSignedUrl({
       sourceUrl: 'https://cdn.example/signed?token=one',
-      destinationPath: '/media/site-1/asset-1/logo.png',
+      destinationPath: '/green/media/site-1/asset-1/logo.png',
       contentType: 'image/png',
     })).rejects.toThrow('media source download failed (302)')
     expect(calls[0].init?.redirect).toBe('error')
@@ -216,9 +217,38 @@ describe('Yandex Object Storage adapter', () => {
 
     await expect(adapter.copyFromSignedUrl({
       sourceUrl: 'https://cdn.example/signed?token=one',
-      destinationPath: '/media/site-1/asset-1/logo.png',
+      destinationPath: '/green/media/site-1/asset-1/logo.png',
       contentType: 'image/png',
     })).rejects.toThrow('maximum media size')
     expect(calls.filter((call) => call.init?.method === 'PUT')).toHaveLength(0)
+  })
+
+  test('keeps the default copy limit above the largest supported publication media type', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const fetcher: FetchLike = async (input, init) => {
+      calls.push({ url: String(input), init })
+      if (init?.method === 'GET' && String(input).startsWith('https://cdn.example/')) {
+        return new Response('small', {
+          status: 200,
+          headers: { 'content-length': String(16 * 1024 * 1024 + 1) },
+        })
+      }
+      return response()
+    }
+    const adapter = createYandexObjectStorageAdapter({
+      endpoint,
+      bucket: 'vibe-media',
+      accessKeyId: 'access-key',
+      secretAccessKey: 'secret-key',
+      now: fixedDate,
+      fetcher,
+    })
+
+    await expect(adapter.copyFromSignedUrl({
+      sourceUrl: 'https://cdn.example/signed?token=video',
+      destinationPath: '/green/media/site-1/asset-1/video.mp4',
+      contentType: 'video/mp4',
+    })).resolves.toBeUndefined()
+    expect(calls.filter((call) => call.init?.method === 'PUT')).toHaveLength(1)
   })
 })

@@ -1,18 +1,7 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto'
-import { z } from 'zod'
+import { publicationBuildInputSchema, type PublicationBuildInput } from '@web-app-demo/contracts'
 
-const buildInputSchema = z
-  .object({
-    buildId: z.uuid(),
-    publicationRevision: z.number().int().positive(),
-    slot: z.enum(['blue', 'green']),
-    snapshotArtifact: z
-      .object({ url: z.url(), expiresAt: z.string().datetime(), etag: z.string().min(1) })
-      .strict(),
-  })
-  .strict()
-
-export type BuildInput = z.infer<typeof buildInputSchema>
+export type BuildInput = PublicationBuildInput
 export type BuildResult = { status: 'succeeded' | 'failed'; markerVerified: boolean; diagnostics?: string }
 
 export class BuilderBackendError extends Error {
@@ -43,7 +32,7 @@ export function createBuilderBackendClient(options: {
   const nonce = options.nonce ?? (() => randomBytes(18).toString('base64url'))
 
   return {
-    getBuildInput: async (buildId) => request(`/builds/${buildId}/input`, buildId).then((value) => buildInputSchema.parse(value)),
+    getBuildInput: async (buildId) => request(`/builds/${buildId}/input`, buildId).then((value) => publicationBuildInputSchema.parse(value)),
     heartbeat: async (buildId) => { await request(`/builds/${buildId}/heartbeat`, buildId) },
     result: async (buildId, input) => { await request(`/builds/${buildId}/result`, buildId, input) },
   }

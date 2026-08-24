@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-const mediaMimeTypeSchema = z.enum([
+export const mediaMimeTypeSchema = z.enum([
   'image/jpeg',
   'image/png',
   'image/webp',

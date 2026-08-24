@@ -9,6 +9,7 @@ import {
 } from '../application/build-request-auth'
 import type { PublicationCallbackRepository } from '../application/rebuild-controller'
 import type { PublicationArtifactService } from '../application/artifact-service'
+import type { PublicationMediaCopyInputService } from '../application/media-copy-input'
 import { createPublicationInternalRoutes } from './internal-routes'
 
 const buildId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10'
@@ -29,14 +30,14 @@ function createTestApp(
   repository: Pick<PublicationCallbackRepository, 'heartbeat' | 'recordResult'> & Partial<Pick<PublicationCallbackRepository, 'getBuildForInput'>> = {
   heartbeat: async () => true,
   recordResult: async () => 'accepted',
-}, artifact?: Pick<PublicationArtifactService, 'ensureArtifact' | 'createArtifactDownload'>) {
+}, artifact?: Pick<PublicationArtifactService, 'ensureArtifact' | 'createArtifactDownload'>, media?: Pick<PublicationMediaCopyInputService, 'createForBuild'>) {
   const app = new OpenAPIHono()
   const verifier = createBuilderRequestVerifier({
     activeSecret: 'builder-secret',
     nonceStore: new MemoryNonceStore(),
     now: () => new Date(timestamp * 1_000),
   })
-  app.route('/api/internal/cms', createPublicationInternalRoutes({ repository, verifier, artifact, now: () => new Date(timestamp * 1_000) }))
+  app.route('/api/internal/cms', createPublicationInternalRoutes({ repository, verifier, artifact, media, now: () => new Date(timestamp * 1_000) }))
   app.onError(handleError)
   return app
 }
@@ -124,7 +125,35 @@ describe('publication internal builder routes', () => {
       publicationRevision: 4,
       slot: 'green',
       snapshotArtifact: { url: 'https://storage.test/snapshot', expiresAt: '2026-08-24T10:05:00.000Z', etag: 'etag-4' },
+      media: [],
     })
+    expect(JSON.stringify(payload)).not.toContain('objectKey')
+  })
+
+  test('returns only signed media URLs and safe slot destinations in builder input', async () => {
+    const app = createTestApp({
+      heartbeat: async () => true,
+      recordResult: async () => 'accepted',
+      getBuildForInput: async () => ({ id: buildId, publicationRevision: 4, slot: 'green', state: 'queued' }),
+    }, {
+      ensureArtifact: async () => ({ revision: 4, objectKey: 'cms-publications/4/snapshot.json', etag: 'etag-4' }),
+      createArtifactDownload: async () => ({ revision: 4, url: 'https://storage.test/snapshot', expiresAt: '2026-08-24T10:05:00.000Z', etag: 'etag-4' }),
+    }, {
+      createForBuild: async () => [{
+        sourceUrl: 'https://private.example/signed-hero',
+        destinationPath: '/green/media/018f8c8d-5f34-7db2-8b98-2c7bf3d80a10/018f8c8d-5f34-7db2-8b98-2c7bf3d80a11/hero.png',
+        contentType: 'image/png',
+      }],
+    })
+
+    const response = await app.fetch(await signedRequest(`/api/internal/cms/builds/${buildId}/input`, '{}', 'nonce-0000000006'))
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+    expect(payload.media).toEqual([{
+      sourceUrl: 'https://private.example/signed-hero',
+      destinationPath: '/green/media/018f8c8d-5f34-7db2-8b98-2c7bf3d80a10/018f8c8d-5f34-7db2-8b98-2c7bf3d80a11/hero.png',
+      contentType: 'image/png',
+    }])
     expect(JSON.stringify(payload)).not.toContain('objectKey')
   })
 })

@@ -25,6 +25,7 @@ import {
   createBuilderNonceStore,
   createBuilderRequestVerifier,
   createPublicationInternalRoutes,
+  PublicationMediaCopyInputService,
   PublicationArtifactService,
   createPublicationRepository,
 } from './modules/publication'
@@ -62,10 +63,12 @@ export function createApp({
   const cmsRepository = createCmsRepository(prisma)
   const publicationRepository = createPublicationRepository(prisma)
   const publicationArtifact = new PublicationArtifactService(publicationRepository, storage.storage)
+  const publicationMediaCopy = new PublicationMediaCopyInputService(publicationRepository, storage.storage)
   const publicationInternalRoutes = env.CMS_BUILDER_HMAC_ACTIVE_SECRET
     ? createPublicationInternalRoutes({
         repository: publicationRepository,
         artifact: publicationArtifact,
+        media: publicationMediaCopy,
         verifier: createBuilderRequestVerifier({
           activeSecret: env.CMS_BUILDER_HMAC_ACTIVE_SECRET,
           previousSecret: env.CMS_BUILDER_HMAC_PREVIOUS_SECRET,

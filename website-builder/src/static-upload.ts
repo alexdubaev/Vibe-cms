@@ -35,6 +35,7 @@ export async function uploadStaticRelease(input: {
   slot: 'blue' | 'green'
   objects: StaticObject[]
   revision: number
+  beforeStaticUpload?: () => Promise<void>
 }) {
   const prefix = `${input.slot}/`
   // Validate the complete object set before removing anything from the slot.
@@ -43,6 +44,7 @@ export async function uploadStaticRelease(input: {
     if (!isStaticObjectKey(object.key, input.slot)) throw new Error('Static upload object escaped the assigned slot')
   }
   await input.port.deleteInactivePrefix(prefix)
+  await input.beforeStaticUpload?.()
   for (const object of input.objects) {
     await input.port.putImmutable(object)
   }

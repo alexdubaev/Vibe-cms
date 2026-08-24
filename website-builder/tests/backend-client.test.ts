@@ -16,10 +16,11 @@ describe('builder backend client', () => {
         calls.push(new Request(input, init))
         return new Response(JSON.stringify({
           buildId,
-          publicationRevision: 4,
-          slot: 'green',
-          snapshotArtifact: { url: 'https://storage.example.test/snapshot', expiresAt: '2026-08-24T10:05:00.000Z', etag: 'etag-4' },
-        }), { status: 200, headers: { 'content-type': 'application/json' } })
+        publicationRevision: 4,
+        slot: 'green',
+        snapshotArtifact: { url: 'https://storage.example.test/snapshot', expiresAt: '2026-08-24T10:05:00.000Z', etag: 'etag-4' },
+        media: [],
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
       },
     })
 

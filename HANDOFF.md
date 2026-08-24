@@ -20,6 +20,9 @@
   session revalidation on every render, private draft page DTO, authorized media proxy и security headers;
 - website-builder publication runtime: static release upload в inactive Yandex slot, прямое подтверждение marker/index,
   HTTPS selector switch, CDN purge, public marker polling и fail-closed runtime configuration;
+- website-builder provider-side media copy: backend signed build input resolves only frozen ready media into short-lived
+  signed URLs plus slot-scoped public destinations/content types; builder copies them after inactive-slot cleanup and
+  before static objects/marker, failing closed before promotion on any copy error;
 - webapp CMS routes:
   - `/admin/pages`;
   - `/admin/pages/$pageId`;
@@ -103,15 +106,17 @@ Media finalize dimensions:
 Последние успешные результаты:
 
 - `bun run typecheck` — все workspace typechecks успешны; website оставляет только существующий hint о deprecated `verticalAlign`;
-- `bun run test:backend:unit` — **325 pass, 0 fail**;
+- `bun run test:backend:unit` — **330 pass, 0 fail**;
+- `bun run test:contracts` — **25 pass, 0 fail**;
+- `bun run test:website-builder` — **22 pass, 0 fail**;
 - CMS backend app/routes tests — **18 pass, 0 fail**;
 - CMS repository integration — **10 pass, 0 fail**;
 - `bun run test:webapp` — **56 pass, 0 fail**;
 - `bun run build:webapp` — успешно;
-- `bun run architecture:check` — успешно, 432 source files;
+- `bun run architecture:check` — успешно, 437 source files;
 - media PostgreSQL integration — **1 pass, 0 fail**;
 - `bun run --cwd website test` — **12 pass, 0 fail**; website typecheck/build успешны, остаётся только существующий `verticalAlign` hint;
-- `bun run --cwd website-builder test` — **19 pass, 0 fail**;
+- `bun run --cwd website-builder test` — **22 pass, 0 fail**;
 - `bun run --cwd website-builder typecheck` — успешно;
 - `bun run typecheck`, `bun run lint`, `bun run build` — успешно; website оставляет только существующий hint о deprecated `verticalAlign`;
 - `bun run test` — infra/contracts/backend unit/webapp/website/builder проходят; backend integration на Windows/Bun остановлен после известных Prisma transaction timeout failures;
@@ -125,7 +130,6 @@ Media finalize dimensions:
 Приоритетный порядок:
 
 1. Довести builder release pipeline:
-   - подключить server-side media copy из publication snapshot в inactive slot;
    - завершить snapshot-aware renderer для всех public media paths;
    - добавить rollback/операционную проверку selector и purge.
 2. Закрыть Terraform/acceptance/operations checklist и проверить deploy smoke.

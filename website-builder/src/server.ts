@@ -44,6 +44,7 @@ const worker = createBuilderWorker({
     return publishBuiltRelease({
       build,
       outputDirectory: output.outputDirectory,
+      copyMedia: websiteStorage,
       uploader: websiteStorage,
       promotion: publicationPromotion,
     })

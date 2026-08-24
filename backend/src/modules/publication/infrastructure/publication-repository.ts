@@ -2,6 +2,7 @@ import { Prisma } from '../../../generated/prisma/client'
 import type { DbClient } from '../../../db'
 
 import type { PublicationArtifactRepository } from '../application/artifact-service'
+import type { PublicationMediaCopyRepository } from '../application/media-copy-input'
 import type {
   PublicationBuildRecord,
   PublicationCallbackRepository,
@@ -11,7 +12,7 @@ import type {
 
 const DEFAULT_KEY = 'default'
 
-export function createPublicationRepository(db: DbClient): PublicationCallbackRepository & PublicationArtifactRepository {
+export function createPublicationRepository(db: DbClient): PublicationCallbackRepository & PublicationArtifactRepository & PublicationMediaCopyRepository {
   return {
     async getController() {
       const row = await db.cmsPublicationController.findUnique({ where: { key: DEFAULT_KEY } })
@@ -161,6 +162,20 @@ export function createPublicationRepository(db: DbClient): PublicationCallbackRe
             artifactEtag: row.artifactEtag,
           }
         : null
+    },
+
+    async getMediaAssets(ids) {
+      if (ids.length === 0) return []
+      return db.cmsMediaAsset.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          contentVersion: true,
+          objectKey: true,
+          contentType: true,
+          state: true,
+        },
+      })
     },
 
     async claimArtifact(revision, objectKey) {
