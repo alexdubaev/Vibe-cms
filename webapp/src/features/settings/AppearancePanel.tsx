@@ -30,6 +30,11 @@ const themeIcons = {
   light: Sun01Icon,
   dark: Moon02Icon,
 } as const
+const themeLabels: Record<Theme, string> = {
+  system: 'Как в системе',
+  light: 'Светлая',
+  dark: 'Тёмная',
+}
 
 export function AppearancePanel() {
   const { theme = 'system', setTheme } = useTheme()
@@ -39,15 +44,15 @@ export function AppearancePanel() {
     <Card>
       <CardHeader>
         <Typography as="h2" variant="h6">
-          Appearance
+          Внешний вид
         </Typography>
         <CardDescription>
-          Follow your device preference or keep a consistent light or dark theme.
+          Выберите оформление, которое будет комфортно для работы.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Field>
-          <FieldLabel htmlFor="appearance-theme">Theme</FieldLabel>
+          <FieldLabel htmlFor="appearance-theme">Тема</FieldLabel>
           <Select
             onValueChange={(value) => {
               if (isTheme(value)) setTheme(value)
@@ -59,15 +64,15 @@ export function AppearancePanel() {
             </SelectTrigger>
             <SelectContent>
               {themes.map((item) => (
-                <SelectItem className="capitalize" key={item} value={item}>
+                <SelectItem key={item} value={item}>
                   <HugeiconsIcon aria-hidden icon={themeIcons[item]} strokeWidth={2} />
-                  {item}
+                  {themeLabels[item]}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           <FieldDescription>
-            Changes are saved in this browser and applied immediately.
+            Выбор сохранится в этом браузере и применится сразу.
           </FieldDescription>
         </Field>
       </CardContent>
