@@ -1,3 +1,5 @@
+import { Image02Icon, File01Icon, Video01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import type { MediaAsset } from '@web-app-demo/contracts'
 import { useState, type FormEvent } from 'react'
 
@@ -98,6 +100,7 @@ function MediaAssetCard({ asset, canDelete }: { asset: MediaAsset; canDelete: bo
   return (
     <Card>
       <CardHeader className="gap-3">
+        <MediaVisual asset={asset} />
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <CardTitle className="truncate" title={asset.filename}>
@@ -145,6 +148,30 @@ function MediaAssetCard({ asset, canDelete }: { asset: MediaAsset; canDelete: bo
         {remove.isError && <ActionError text="Не удалось удалить файл. Возможно, он используется на сайте." />}
       </CardContent>
     </Card>
+  )
+}
+
+function MediaVisual({ asset }: { asset: MediaAsset }) {
+  const isImage = asset.mimeType.startsWith('image/')
+  const isVideo = asset.mimeType.startsWith('video/')
+  const Icon = isImage ? Image02Icon : isVideo ? Video01Icon : File01Icon
+  const label = isImage
+    ? 'Изображение'
+    : isVideo
+      ? 'Видео'
+      : 'Документ'
+
+  return (
+    <div
+      aria-label={`${label}: ${asset.filename}`}
+      className="relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded-lg border bg-secondary/70"
+      role="img"
+    >
+      <HugeiconsIcon aria-hidden className="size-10 text-primary/70" icon={Icon} strokeWidth={1.5} />
+      <Typography as="span" className="absolute bottom-2 left-2 rounded-md bg-background/85 px-2 py-1 backdrop-blur" variant="caption">
+        {isImage && asset.width && asset.height ? `${asset.width} × ${asset.height}` : label}
+      </Typography>
+    </div>
   )
 }
 

@@ -129,6 +129,13 @@ const cmsMediaListSchema = z
   .object({ assets: z.array(mediaAssetSchema) })
   .strict()
 
+const cmsSiteSettingsSchema = z.object({ companyName: z.string().trim().min(1).max(160), revision: z.number().int().nonnegative() }).strict()
+const cmsMenuSchema = z.object({
+  location: z.enum(['header', 'footer']),
+  items: z.array(z.object({ label: z.string().trim().min(1).max(120), href: z.string().trim().min(1).max(500) }).strict()).max(100),
+  revision: z.number().int().nonnegative(),
+}).strict()
+
 const cmsMediaUpdateSchema = z
   .object({ asset: mediaAssetSchema })
   .strict()
@@ -187,6 +194,8 @@ export type CmsMediaUpdateResponse = z.infer<typeof cmsMediaUpdateSchema>
 export type CmsMediaDeleteResponse = z.infer<typeof cmsMediaDeleteSchema>
 export type CmsMediaUploadResponse = z.infer<typeof cmsMediaUploadSchema>
 export type CmsPreviewGrantResponse = z.infer<typeof previewGrantResponseSchema>
+export type CmsSiteSettings = z.infer<typeof cmsSiteSettingsSchema>
+export type CmsMenu = z.infer<typeof cmsMenuSchema>
 
 export function getCmsPages(transport: AuthenticatedTransport) {
   return transport.request('/api/cms/pages', cmsPagesResponseSchema)
@@ -276,6 +285,14 @@ export function saveCmsPage(
 
 export function getCmsPublicationSummary(transport: AuthenticatedTransport) {
   return transport.request('/api/cms/publication', cmsPublicationSummaryResponseSchema)
+}
+
+export function getCmsSiteSettings(transport: AuthenticatedTransport) {
+  return transport.request('/api/cms/settings', cmsSiteSettingsSchema)
+}
+
+export function getCmsMenu(transport: AuthenticatedTransport, menuId: string) {
+  return transport.request(`/api/cms/menus/${encodeURIComponent(z.uuid().parse(menuId))}`, cmsMenuSchema)
 }
 
 export function createCmsPreviewGrant(transport: AuthenticatedTransport, pageId: string) {

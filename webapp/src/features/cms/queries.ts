@@ -17,6 +17,8 @@ import {
   createCmsMediaUpload,
   finalizeCmsMediaUpload,
   getCmsMedia,
+  getCmsMenu,
+  getCmsSiteSettings,
   approveCmsApproval,
   publishCmsCurrent,
   rejectCmsApproval,
@@ -38,6 +40,8 @@ export const cmsQueryKeys = {
   pendingApprovals: () => [...cmsQueryKeys.all, 'approvals', 'pending'] as const,
   mediaRoot: () => [...cmsQueryKeys.all, 'media'] as const,
   media: (query = '') => [...cmsQueryKeys.mediaRoot(), query] as const,
+  menu: (menuId: string) => [...cmsQueryKeys.all, 'menu', menuId] as const,
+  settings: () => [...cmsQueryKeys.all, 'settings'] as const,
 }
 
 export function useCmsPagesQuery() {
@@ -180,6 +184,16 @@ export function useCmsPreviewGrantMutation() {
   return useMutation({
     mutationFn: (pageId: string) => createCmsPreviewGrant(auth.transport, pageId),
   })
+}
+
+export function useCmsSiteSettingsQuery() {
+  const auth = useAuth()
+  return useQuery({ queryKey: cmsQueryKeys.settings(), queryFn: () => getCmsSiteSettings(auth.transport) })
+}
+
+export function useCmsMenuQuery(menuId: string) {
+  const auth = useAuth()
+  return useQuery({ queryKey: cmsQueryKeys.menu(menuId), queryFn: () => getCmsMenu(auth.transport, menuId), enabled: Boolean(menuId) })
 }
 
 export function useSubmitCmsApprovalMutation() {

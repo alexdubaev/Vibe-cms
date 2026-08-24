@@ -6,6 +6,8 @@ import {
   getCmsEntry,
   getCmsEntries,
   getCmsPageRevisions,
+  getCmsMenu,
+  getCmsSiteSettings,
   createCmsPreviewGrant,
   publishCmsCurrent,
   rejectCmsApproval,
@@ -138,6 +140,22 @@ test('preview grant posts only the page id and preserves the opaque URL contract
 
   await createCmsPreviewGrant(transport, pageId)
   expect(request).toEqual({ path: '/api/cms/preview/grants', options: { method: 'POST', body: { pageId } } })
+})
+
+test('site navigation and settings use safe read routes', async () => {
+  const menuId = '00000000-0000-7000-8000-000000000004'
+  const calls: string[] = []
+  const transport: AuthenticatedTransport = {
+    async request(path) {
+      calls.push(path)
+      return path === '/api/cms/settings'
+        ? { companyName: 'Vibe', revision: 2 }
+        : { location: 'header', items: [{ label: 'Главная', href: '/' }], revision: 3 }
+    },
+  }
+  await getCmsSiteSettings(transport)
+  await getCmsMenu(transport, menuId)
+  expect(calls).toEqual(['/api/cms/settings', `/api/cms/menus/${menuId}`])
 })
 
 test('collection editor API uses separate create, read, and optimistic update contracts', async () => {
