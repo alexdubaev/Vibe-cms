@@ -501,7 +501,7 @@ Expected: script and Terraform tests pass; the plan shows additive CMS resources
 
 ## Task 8: Render immutable public pages and the protected Astro preview
 
-> Progress note: the website now has a snapshot loader, closed block registry, immutable page/path renderer, snapshot-backed `robots.txt`/`sitemap.xml`, and a fallback to the original template landing page when no CMS snapshot is supplied. A framework-neutral, fail-closed server-side preview exchange helper now validates the one-time grant, shared session response, scoped cookie, and no-store/noindex 404 policy. Request-time `__preview` routes, session revalidation, media proxy, full block-specific components, and runtime/public marker integration remain pending until a compatible Astro Node runtime is provisioned.
+> Progress note: the website has a snapshot loader, closed block registry, immutable page/path renderer, snapshot-backed `robots.txt`/`sitemap.xml`, and a fallback to the original template landing page when no CMS snapshot is supplied. The request-time preview runtime is now implemented with a compatible Astro Node adapter, server-side one-time exchange, current-role/session/page revalidation, private draft DTOs, authorized server-side media proxy, and `private, no-store`/`X-Robots-Tag` headers. Because Astro ignores leading-underscore page directories, external `/__preview/*` requests rewrite to internal `src/pages/preview/*` routes. Full block-specific component coverage and runtime/public marker integration remain separate follow-up work.
 
 **Files:**
 
@@ -512,9 +512,9 @@ Expected: script and Terraform tests pass; the plan shows additive CMS resources
 - Create: `website/src/pages/[...slug].astro`
 - Create: `website/src/pages/robots.txt.ts`
 - Create: `website/src/pages/sitemap.xml.ts`
-- Create: `website/src/pages/__preview/exchange.ts`
-- Create: `website/src/pages/__preview/[pageId].astro`
-- Create: `website/src/pages/__preview/media/[assetId].ts`
+- Create: `website/src/pages/preview/exchange.ts` (external `/__preview/exchange` via middleware rewrite)
+- Create: `website/src/pages/preview/[pageId].astro` (external `/__preview/:pageId` via middleware rewrite)
+- Create: `website/src/pages/preview/media/[assetId].ts` (external `/__preview/media/:assetId` via middleware rewrite)
 - Create: `website/src/middleware.ts`
 - Create: `website/Dockerfile.preview`
 - Create: `website/.env.example`
@@ -543,11 +543,11 @@ Load and parse `CMS_SNAPSHOT_FILE` once per build. `index.astro` renders the `/`
 
 Use a compile-time exhaustive map equivalent to `satisfies Record<CmsBlockType, AstroRenderer>`. Resolve media URLs and central entry selections from the already materialised public block data. Renderer code does not query the backend.
 
-- [ ] **Step 4: Add the compatible Node adapter and preview flow**
+- [x] **Step 4: Add the compatible Node adapter and preview flow**
 
 Install the current `@astrojs/node` version whose peer range covers the pinned Astro version. Keep default output static and mark only preview routes `prerender = false`. Exchange the one-time code server-to-server, set the scoped preview cookie, revalidate capability on every render, proxy authorised preview media, and return `private, no-store` plus `X-Robots-Tag: noindex, nofollow`.
 
-- [ ] **Step 5: Verify public and preview builds**
+- [x] **Step 5: Verify public and preview builds**
 
 Run:
 
@@ -558,13 +558,13 @@ bun run build:website
 docker build -f website/Dockerfile.preview -t vibe-cms-preview-test .
 ```
 
-Expected: static HTML contains SEO-critical fixture content; preview tests and image build pass; no draft/private marker appears in `website/dist`.
+Expected: static HTML contains SEO-critical fixture content; preview tests and website build pass; no draft/private marker appears in `website/dist`. The Docker smoke build reached dependency installation but was blocked by external Bun tarball integrity/extraction failures.
 
 - [ ] **Checkpoint:** inspect generated root, nested page, robots, sitemap, redirect manifest, and preview response headers.
 
 ## Task 9: Build the human-centred CMS admin
 
-> Progress note: the admin foundation now includes Russian page/publication/media navigation for editor and owner roles, authenticated contract-validated CMS queries, safe page/draft summaries, a schema-validated page editor for core fields/SEO/block ordering, structured text editing for text-image, bounded benefits item editing, optional Hero/CTA actions, Contacts/FormPlaceholder fields, media pickers for Hero/TextImage/Gallery, and collection selection pickers backed by a safe active-entry list, serialized autosave with optimistic revisions and conflict preservation, publication status, submit/approve/reject actions, a safe page revision history with scoped restore, and a media library with search, signed-ticket upload/finalisation, alt-text editing, and owner-only durable deletion. Collection entry CRUD and production preview/publication wiring remain pending.
+> Progress note: the admin foundation now includes Russian page/publication/media navigation for editor and owner roles, authenticated contract-validated CMS queries, safe page/draft summaries, a schema-validated page editor for core fields/SEO/block ordering, structured text editing for text-image, bounded benefits item editing, optional Hero/CTA actions, Contacts/FormPlaceholder fields, media pickers for Hero/TextImage/Gallery, and collection selection pickers backed by a safe active-entry list, collection entry CRUD, serialized autosave with optimistic revisions and conflict preservation, publication status, submit/approve/reject actions, a safe page revision history with scoped restore, and a media library with search, signed-ticket upload/finalisation, alt-text editing, and owner-only durable deletion. Production publication wiring remains pending.
 
 **Files:**
 

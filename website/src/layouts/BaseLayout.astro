@@ -5,10 +5,11 @@ import '@/styles/global.css'
 interface Props {
   canonicalUrl?: string
   description: string
+  noIndex?: boolean
   title: string
 }
 
-const { canonicalUrl, description, title } = Astro.props
+const { canonicalUrl, description, noIndex = false, title } = Astro.props
 ---
 
 <!doctype html>
@@ -23,6 +24,7 @@ const { canonicalUrl, description, title } = Astro.props
     <link rel="icon" href="/favicon.ico" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    {noIndex && <meta name="robots" content="noindex,nofollow" />}
     {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />

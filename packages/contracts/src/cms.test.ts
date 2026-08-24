@@ -11,11 +11,34 @@ import {
   mediaAssetSchema,
   pageDraftSchema,
   previewGrantResponseSchema,
+  previewMediaResponseSchema,
+  previewPageResponseSchema,
   publicationSnapshotSchema,
   structuredTextDocumentSchema,
 } from './cms'
 
 describe('CMS contracts', () => {
+  test('keeps preview responses safe for a private server-to-server boundary', () => {
+    const page = previewPageResponseSchema.parse({
+      id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10',
+      title: 'Черновик',
+      path: '/draft',
+      draftPayload: { title: 'Черновик', blocks: [] },
+      draftRevision: 4,
+      archived: false,
+    })
+    expect(page).not.toHaveProperty('objectKey')
+
+    const media = previewMediaResponseSchema.parse({
+      id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a11',
+      mimeType: 'image/png',
+      downloadUrl: 'https://storage.example.test/signed/object',
+      expiresAt: '2026-08-24T10:01:00.000Z',
+    })
+    expect(media).not.toHaveProperty('objectKey')
+    expect(() => previewMediaResponseSchema.parse({ ...media, objectKey: 'private' })).toThrow()
+  })
+
   test('exposes the role capability matrix without granting editors publication by default', () => {
     expect(capabilitiesForRole('user', { editorCanPublish: true })).toEqual([])
     expect(capabilitiesForRole('editor', { editorCanPublish: false })).not.toContain('cms:publish')

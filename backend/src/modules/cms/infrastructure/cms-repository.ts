@@ -437,5 +437,36 @@ export function createCmsPreviewStore(db: DbClient): PreviewStore {
     async createSession(input) {
       await db.cmsPreviewSession.create({ data: input })
     },
+    async findSession(input) {
+      const session = await db.cmsPreviewSession.findFirst({
+        where: { tokenHash: input.tokenHash, revokedAt: null, expiresAt: { gt: input.now } },
+      })
+      if (!session) return null
+
+      const actor = await db.user.findUnique({ where: { id: session.actorUserId }, select: { role: true } })
+      const actorRole = toPreviewActorRole(actor?.role)
+      if (!actorRole) return null
+
+      return {
+        id: session.id,
+        actorUserId: session.actorUserId,
+        actorRole,
+        pageId: session.pageId,
+        expiresAt: session.expiresAt,
+      }
+    },
+    async findMediaAsset(assetId) {
+      return db.cmsMediaAsset.findUnique({
+        where: { id: assetId },
+        select: { id: true, objectKey: true, contentType: true, state: true },
+      })
+    },
   }
+}
+
+function toPreviewActorRole(role: string | undefined): 'user' | 'editor' | 'owner' | null {
+  if (role === 'admin' || role === 'owner') return 'owner'
+  if (role === 'editor') return 'editor'
+  if (role === 'user') return 'user'
+  return null
 }

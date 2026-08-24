@@ -3,9 +3,10 @@ import type { PublicBlock } from '../block-registry'
 
 interface Props {
   block: PublicBlock
+  mediaBasePath?: string
 }
 
-const { block } = Astro.props
+const { block, mediaBasePath } = Astro.props
 const data = block.data as Record<string, unknown>
 const title = typeof data.title === 'string' ? data.title : undefined
 const text = typeof data.text === 'string' ? data.text : undefined
@@ -15,6 +16,8 @@ const action = data.primaryAction && typeof data.primaryAction === 'object'
   : undefined
 const actionLabel = typeof action?.label === 'string' ? action.label : undefined
 const actionHref = typeof action?.href === 'string' ? action.href : undefined
+const mediaId = typeof data.mediaId === 'string' ? data.mediaId : undefined
+const mediaSrc = mediaBasePath && mediaId ? `${mediaBasePath}/${mediaId}` : undefined
 const itemLabel = (item: unknown) => {
   if (item && typeof item === 'object' && 'title' in item && typeof item.title === 'string') return item.title
   return 'Элемент'
@@ -27,12 +30,14 @@ const itemLabel = (item: unknown) => {
       {typeof data.eyebrow === 'string' && <p class="mb-4 text-sm uppercase tracking-[0.2em] opacity-70">{data.eyebrow}</p>}
       <h1 class="text-4xl font-semibold tracking-tight md:text-6xl">{typeof data.title === 'string' ? data.title : 'Без заголовка'}</h1>
       {text && <p class="mx-auto mt-6 max-w-2xl text-lg opacity-80">{text}</p>}
+      {mediaSrc && <img class="mx-auto mt-8 max-h-80 rounded-3xl object-cover" src={mediaSrc} alt={typeof data.title === 'string' ? data.title : ''} />}
       {actionLabel && actionHref && <a class="mt-8 inline-flex rounded-full bg-primary px-6 py-3 text-primary-foreground" href={actionHref}>{actionLabel}</a>}
     </div>
   ) : (
     <div class="mx-auto max-w-5xl px-6 py-12">
       {title && <h2 class="text-2xl font-semibold">{title}</h2>}
       {text && <p class="mt-4 max-w-3xl whitespace-pre-wrap opacity-80">{text}</p>}
+      {mediaSrc && <img class="mt-6 max-h-80 rounded-3xl object-cover" src={mediaSrc} alt={title ?? ''} />}
       {items.length > 0 && (
         <ul class="mt-6 grid gap-4 md:grid-cols-2">
           {items.map((item) => (

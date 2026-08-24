@@ -307,6 +307,8 @@ describe('CMS preview grants', () => {
         return { id: 'grant', actorUserId: stored.actorUserId, pageId: stored.pageId, expiresAt: stored.expiresAt }
       },
       async createSession() {},
+      async findSession() { return null },
+      async findMediaAsset() { return null },
     }
     const preview = new CmsPreviewService({
       store,

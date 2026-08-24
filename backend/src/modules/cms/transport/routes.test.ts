@@ -5,11 +5,74 @@ import { createMiddleware } from 'hono/factory'
 import type { AuthHttpEnv } from '../../auth'
 import type { CmsService } from '../application/cms-service'
 import type { CmsPreviewService } from '../application/preview-service'
-import { createCmsRoutes } from './routes'
+import { createCmsPreviewRuntimeRoutes, createCmsRoutes } from './routes'
 
 const pageId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10'
 
 describe('CMS HTTP routes', () => {
+  test('serves a draft page and authorized media URL only with a preview session', async () => {
+    const service = {
+      getPageForEditor: async () => ({
+        id: pageId,
+        title: 'Черновик',
+        path: '/draft',
+        draftPayload: { blocks: [{ id: 'hero', type: 'hero' }], secret: 'draft-only' },
+        draftRevision: 4,
+        archived: false,
+      }),
+    } as unknown as CmsService
+    const preview = {
+      authorizeSession: async (token: string, requestedPageId?: string) => {
+        expect(token).toBe('preview-session')
+        expect(requestedPageId).toBe(pageId)
+        return { actor: { id: 'editor', role: 'editor' as const }, pageId, expiresAt: new Date('2026-08-24T10:15:00.000Z') }
+      },
+      getMedia: async (token: string, assetId: string) => {
+        expect(token).toBe('preview-session')
+        expect(assetId).toBe('018f8c8d-5f34-7db2-8b98-2c7bf3d80a11')
+        return { id: assetId, objectKey: 'cms-media/private.png', contentType: 'image/png' }
+      },
+    } as unknown as CmsPreviewService
+    const routes = createCmsPreviewRuntimeRoutes({
+      preview,
+      service,
+      storage: {
+        createDownloadUrl: async ({ key }) => ({
+          key,
+          url: 'https://storage.example.test/signed/private.png',
+          expiresAt: '2026-08-24T10:01:00.000Z',
+        }),
+      },
+    })
+    const app = new Hono()
+    app.route('/api/cms/preview', routes)
+
+    const page = await app.request(`/api/cms/preview/pages/${pageId}`, {
+      headers: { 'x-cms-preview-session': 'preview-session' },
+    })
+    expect(page.status).toBe(200)
+    expect(await page.json()).toMatchObject({ id: pageId, draftRevision: 4 })
+    expect(page.headers.get('cache-control')).toBe('private, no-store')
+    expect(page.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+
+    const media = await app.request('/api/cms/preview/media/018f8c8d-5f34-7db2-8b98-2c7bf3d80a11', {
+      headers: { 'x-cms-preview-session': 'preview-session' },
+    })
+    expect(media.status).toBe(200)
+    expect(await media.json()).toEqual({
+      id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a11',
+      mimeType: 'image/png',
+      downloadUrl: 'https://storage.example.test/signed/private.png',
+      expiresAt: '2026-08-24T10:01:00.000Z',
+    })
+
+    const unauthorized = await app.request(`/api/cms/preview/pages/${pageId}`)
+    expect(unauthorized.status).toBe(404)
+    expect(await unauthorized.text()).toContain('Not Found')
+    expect(unauthorized.headers.get('cache-control')).toBe('private, no-store')
+    expect(unauthorized.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+  })
+
   test('serves authenticated safe read DTOs and never exposes approval snapshots', async () => {
     const auth = createMiddleware<AuthHttpEnv>(async (c, next) => {
       c.set('user', { id: 'editor', role: 'editor', email: 'editor@example.com', displayName: null, createdAt: new Date().toISOString(), sessionId: 'session' })

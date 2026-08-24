@@ -4,11 +4,12 @@ import Block from './components/Block.astro'
 
 interface Props {
   page: PublicPage
+  mediaBasePath?: string
 }
 
-const { page } = Astro.props
+const { mediaBasePath, page } = Astro.props
 ---
 
 <main id="main-content">
-  {page.blocks.map((block) => <Block block={block} />)}
+  {page.blocks.map((block) => <Block block={block} mediaBasePath={mediaBasePath} />)}
 </main>

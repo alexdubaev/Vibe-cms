@@ -1,0 +1,47 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro'
+import CmsPage from '@/cms/CmsPage.astro'
+import * as preview from '@/cms/preview'
+import {
+  fetchPreviewPage,
+  previewPageToPublicPage,
+  readPreviewSessionCookie,
+} from '@/cms/preview-runtime'
+
+export const prerender = false
+
+const pageId = Astro.params.pageId
+const backendOrigin = process.env.CMS_BACKEND_ORIGIN
+const cookieToken = readPreviewSessionCookie(Astro.request.headers.get('cookie') ?? undefined)
+let sessionToken = cookieToken
+let setCookie: string | undefined
+
+if (!sessionToken && Astro.url.searchParams.has('token') && backendOrigin) {
+  try {
+    const session = await preview.exchangePreviewGrant({ grantUrl: Astro.url, backendOrigin })
+    sessionToken = session.sessionToken
+    setCookie = preview.previewSessionCookie(session)
+  } catch {
+    return preview.previewNotFoundResponse()
+  }
+}
+
+if (!backendOrigin || !pageId || !sessionToken) return preview.previewNotFoundResponse()
+
+let page
+try {
+  page = previewPageToPublicPage(await fetchPreviewPage({ backendOrigin, pageId, sessionToken }))
+} catch {
+  return preview.previewNotFoundResponse()
+}
+
+for (const [name, value] of Object.entries(preview.previewSecurityHeaders())) Astro.response.headers.set(name, value)
+if (setCookie) Astro.response.headers.set('Set-Cookie', setCookie)
+
+const title = page.seo?.title ?? page.title
+const description = page.seo?.description ?? page.title
+---
+
+<BaseLayout canonicalUrl={undefined} description={description} noIndex title={title}>
+  <CmsPage page={page} mediaBasePath="/__preview/media" />
+</BaseLayout>

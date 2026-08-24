@@ -1,4 +1,4 @@
-import { collectionEntryCreateSchema, collectionEntryDraftSchema, collectionTypeSchema, pageDraftSchema } from '@web-app-demo/contracts'
+import { collectionEntryCreateSchema, collectionEntryDraftSchema, collectionTypeSchema, pageDraftSchema, previewMediaResponseSchema } from '@web-app-demo/contracts'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
 import { z } from 'zod'
@@ -8,6 +8,7 @@ import type { AuthHttpEnv } from '../../auth'
 import type { CmsService } from '../application/cms-service'
 import { menuDraftSchema, siteSettingsDraftSchema } from '../application/cms-service'
 import type { CmsPreviewService } from '../application/preview-service'
+import type { PrivateStorage } from '../../../storage'
 import { executeCms } from './errors'
 
 const pageIdParams = z.object({ pageId: z.uuid() }).strict()
@@ -19,6 +20,8 @@ const previewBody = z.object({ pageId: z.uuid() }).strict()
 const previewExchangeBody = z.object({ token: z.string().min(43).max(256) }).strict()
 const entryIdParams = z.object({ entryId: z.uuid() }).strict()
 const menuIdParams = z.object({ menuId: z.uuid() }).strict()
+const assetIdParams = z.object({ assetId: z.uuid() }).strict()
+const previewSessionHeader = 'x-cms-preview-session'
 
 type CreateCmsRoutesOptions = {
   requireAuth: MiddlewareHandler<AuthHttpEnv>
@@ -239,4 +242,55 @@ export function createCmsPreviewExchangeRoutes(preview: CmsPreviewService) {
     return c.json(session, 200)
   })
   return routes
+}
+
+/** Request-time preview endpoints. They intentionally return the same generic 404 for every failure. */
+export function createCmsPreviewRuntimeRoutes(input: {
+  preview: CmsPreviewService
+  service: CmsService
+  storage: Pick<PrivateStorage, 'createDownloadUrl'>
+}) {
+  const routes = new OpenAPIHono({ defaultHook: validationErrorHook })
+  routes.use('*', async (c, next) => {
+    c.header('Cache-Control', 'private, no-store')
+    c.header('X-Robots-Tag', 'noindex, nofollow')
+    await next()
+  })
+
+  routes.get('/pages/:pageId', async (c) => {
+    try {
+      const pageId = pageIdParams.parse(c.req.param()).pageId
+      const token = c.req.header(previewSessionHeader)
+      if (!token) return previewNotFound(c)
+      const session = await input.preview.authorizeSession(token, pageId)
+      const page = await input.service.getPageForEditor(session.actor, pageId)
+      return c.json({ ...page }, 200)
+    } catch {
+      return previewNotFound(c)
+    }
+  })
+
+  routes.get('/media/:assetId', async (c) => {
+    try {
+      const assetId = assetIdParams.parse(c.req.param()).assetId
+      const token = c.req.header(previewSessionHeader)
+      if (!token) return previewNotFound(c)
+      const media = await input.preview.getMedia(token, assetId)
+      const download = await input.storage.createDownloadUrl({ key: media.objectKey, expiresInSeconds: 60 })
+      return c.json(previewMediaResponseSchema.parse({
+        id: media.id,
+        mimeType: media.contentType,
+        downloadUrl: download.url,
+        expiresAt: download.expiresAt,
+      }), 200)
+    } catch {
+      return previewNotFound(c)
+    }
+  })
+
+  return routes
+}
+
+function previewNotFound(c: { text(body: string, status: 404): Response }) {
+  return c.text('Not Found', 404)
 }

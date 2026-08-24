@@ -10,10 +10,27 @@ export type PreviewGrantRecord = {
   expiresAt: Date
 }
 
+export type PreviewSessionRecord = {
+  id: string
+  actorUserId: string
+  actorRole: CmsActor['role']
+  pageId: string
+  expiresAt: Date
+}
+
+export type PreviewMediaRecord = {
+  id: string
+  objectKey: string
+  contentType: string
+  state: 'pending' | 'ready' | 'deleting' | 'deleted'
+}
+
 export type PreviewStore = {
   createGrant(input: { codeHash: string; actorUserId: string; pageId: string; expiresAt: Date }): Promise<PreviewGrantRecord>
   consumeGrant(input: { codeHash: string; now: Date }): Promise<PreviewGrantRecord | null>
   createSession(input: { tokenHash: string; actorUserId: string; pageId: string; expiresAt: Date }): Promise<void>
+  findSession(input: { tokenHash: string; now: Date }): Promise<PreviewSessionRecord | null>
+  findMediaAsset(assetId: string): Promise<PreviewMediaRecord | null>
 }
 
 type PreviewDependencies = {
@@ -78,4 +95,37 @@ export class CmsPreviewService {
     })
     return { sessionToken, expiresAt: expiresAt.toISOString() }
   }
+
+  /** Re-checks the session and the actor's current CMS capability on every preview request. */
+  async authorizeSession(token: string, requestedPageId?: string) {
+    if (!tokenPattern.test(token)) throw new CmsRepositoryError('Preview session is invalid or expired', 'CMS_PREVIEW_INVALID')
+    const session = await this.dependencies.store.findSession({
+      tokenHash: this.hashToken(token),
+      now: this.clock.now(),
+    })
+    if (
+      !session ||
+      (requestedPageId !== undefined && session.pageId !== requestedPageId) ||
+      !capabilitiesForRole(session.actorRole, { editorCanPublish: false }).includes('cms:read')
+    ) {
+      throw new CmsRepositoryError('Preview session is invalid or expired', 'CMS_PREVIEW_INVALID')
+    }
+
+    return {
+      actor: { id: session.actorUserId, role: session.actorRole },
+      pageId: session.pageId,
+      expiresAt: session.expiresAt,
+    }
+  }
+
+  async getMedia(token: string, assetId: string) {
+    await this.authorizeSession(token)
+    const media = await this.dependencies.store.findMediaAsset(assetId)
+    if (!media || media.state !== 'ready') {
+      throw new CmsRepositoryError('Preview media is unavailable', 'CMS_PREVIEW_INVALID')
+    }
+    return media
+  }
 }
+
+const tokenPattern = /^[A-Za-z0-9_-]{43,256}$/

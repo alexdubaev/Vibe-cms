@@ -45,22 +45,21 @@ SEO-critical content must be present in the initial HTML: title, description, ca
 
 ### Preview status
 
-The backend already exposes the one-time exchange at `POST /api/cms/preview/exchange`. The static
-website deliberately does not expose a `__preview` route or middleware: a static host cannot
-revalidate a private session, set an HttpOnly cookie, or proxy draft media per request. Adding a
-prerendered preview page would either publish a misleading shell or leak the existence of private
-pages.
+The website now has a separate request-time preview runtime. The Node adapter is enabled for the
+`__preview` routes while public pages remain static-first. The runtime exchanges the one-time grant
+server-to-server, stores only the scoped HttpOnly cookie, revalidates the actor capability on every
+draft request, and fetches media through an authorized private proxy. Preview responses are always
+`private, no-store` and `X-Robots-Tag: noindex, nofollow`.
 
-`src/cms/preview.ts` contains the framework-neutral server-side boundary for the future preview
+`src/cms/preview.ts` contains the framework-neutral server-side boundary used by the preview
 runtime. It accepts only the HTTPS grant URL issued by the backend, sends only the opaque token to
 the configured backend origin, validates the shared session response, and provides the scoped
 HttpOnly cookie plus `private, no-store`/`X-Robots-Tag: noindex, nofollow` response policy. It is not
 imported by public pages or browser islands, and it never stores a grant in browser storage.
 
-To activate preview, install an Astro Node adapter compatible with the pinned Astro release,
-deploy a separate runtime service, and add request-time `__preview` routes that call this helper,
-revalidate the session for every render, and proxy media through the backend. Keep this capability
-disabled until that runtime and its private backend/preview configuration are deployed together.
+Set the private `CMS_BACKEND_ORIGIN` environment variable and deploy `website/Dockerfile.preview`
+as a separate runtime service. The public static build remains safe to publish independently; the
+preview service must not expose `CMS_BACKEND_ORIGIN` through a `PUBLIC_*` variable.
 
 ## Commands
 

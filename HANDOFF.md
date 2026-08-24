@@ -5,7 +5,7 @@
 
 ## Что уже сделано
 
-Текущий функциональный прогресс оценивается примерно в 73%. Реализованы:
+Текущий функциональный прогресс оценивается примерно в 78%. Реализованы:
 
 - роли `user/editor/owner`, capability-политика и совместимость старого `admin` с `owner`;
 - Prisma-модели и миграции CMS: страницы, ревизии, media/usage, approvals, publications, controller/builds, preview grants/sessions, builder nonces, audit/outbox;
@@ -14,6 +14,8 @@
 - CMS media API: signed-ticket upload/finalize, list/search, alt-текст, owner-only durable delete;
 - публикационная логика, immutable artifacts, builder HMAC/nonce, Yandex queue/storage adapters;
 - website snapshot loader, static rendering, robots/sitemap и fail-closed preview exchange helper;
+- request-time Astro preview runtime: Node adapter, external `/__preview/*` rewrite, one-time exchange,
+  session revalidation on every render, private draft page DTO, authorized media proxy и security headers;
 - webapp CMS routes:
   - `/admin/pages`;
   - `/admin/pages/$pageId`;
@@ -40,6 +42,14 @@
 - Contacts получили переключатели видимости полей, FormPlaceholder — способ связи.
 - collection selection blocks получили безопасный список активных записей и picker по типам service/case/review/faq;
 - backend `GET /api/cms/entries?type=...` отдаёт только id, тип, имя, summary, revision и archived.
+
+Preview runtime end-to-end:
+
+- backend `GET /api/cms/preview/pages/:pageId` revalidates the opaque session, current actor role and page scope;
+- backend `GET /api/cms/preview/media/:assetId` returns only a short-lived signed download URL, never an object key;
+- website renders dynamic draft pages through the private Node runtime and follows media URLs server-side;
+- all preview successes and indistinguishable failures carry `private, no-store` and `X-Robots-Tag: noindex, nofollow`;
+- Astro ignores leading-underscore page directories, so middleware rewrites external `/__preview/*` to internal `src/pages/preview/*` routes.
 
 Проверки блока: `bun run test:webapp` — **54 pass, 0 fail**; CMS backend app/routes — **14 pass, 0 fail**; `bun run lint`, `bun run typecheck:webapp`, `bun run build:webapp`, `bun run architecture:check` — успешно.
 
@@ -89,30 +99,24 @@
 
 Приоритетный порядок:
 
-1. Довести редактор блоков:
-   - поддержать создание/редактирование collection entries в отдельном CMS-разделе;
-2. Реализовать полноценный preview runtime в `website`:
-   - Node adapter/dynamic `__preview` routes;
-   - session revalidation на каждый render;
-   - authorized media proxy;
-   - `private, no-store`, `X-Robots-Tag: noindex, nofollow`.
-3. Закрыть production publication:
+1. Закрыть production publication:
    - concrete `publishRelease` adapter в `website-builder/src/server.ts`;
    - inactive marker verification;
    - active blue/green selector switch;
    - public marker verification и rollback/purge.
-4. Добавить image dimension extraction при media finalize.
-5. Закрыть Terraform/acceptance/operations checklist и проверить deploy smoke.
+2. Добавить image dimension extraction при media finalize.
+3. Закрыть Terraform/acceptance/operations checklist и проверить deploy smoke.
 
 ## Известные ограничения и gotchas
 
 - `website-builder/src/server.ts` намеренно fail-closed: `publishRelease` сейчас бросает `Website release adapter is not configured`.
-- Docker image build для website-builder ранее зависал на `bun install`; image build не считать проверенным.
+- Docker image build для website-builder ранее зависал на `bun install`; текущий `docker build -f website/Dockerfile.preview`
+  дошёл до установки website dependencies, но завершился внешней Bun tarball integrity/extraction ошибкой для нескольких пакетов.
 - Полный backend integration suite ранее упирался в Windows/Bun/Prisma `Transaction API error: Unable to start a transaction in the given time` в `deploy-database.integration.test.ts`. CMS-targeted integration tests проходят; не заявлять, что весь integration suite зелёный.
 - Не возвращать `candidateSnapshot`/`snapshot` через transport routes. Внутренние service DTO могут содержать snapshot для frozen approval/publication logic — это намеренно.
 - Page autosave должен сохранять стабильный mutation ref и не пересоздавать queue на каждом React Query state change. Текущий `PageEditor` использует `mutationRef` и remount key `${id}:${draftRevision}`.
 - Signed media upload обязан отправлять ticket headers verbatim, `credentials: omit`; object keys и signed URLs не показывать в UI/DTO.
-- Worktree намеренно dirty и содержит большой набор текущих пользовательских изменений. Не использовать `git reset --hard`, `git checkout --` или массовое удаление файлов. Коммитов нет.
+- Основной CMS foundation закоммичен как `23ee9ae feat(cms): add content collections and preview foundations`; текущий preview milestone ожидает отдельного коммита после финальной проверки.
 
 ## Полезные команды
 

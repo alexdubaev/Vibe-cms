@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 
+import node from '@astrojs/node';
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -34,6 +35,8 @@ import tailwindcss from '@tailwindcss/vite';
 //      DigitalOcean/Yandex static path; use rebuilds or CDN/runtime cache
 //      freshness instead.
 export default defineConfig({
+  adapter: node({ mode: 'standalone' }),
+  output: 'static',
   integrations: [react()],
   vite: {
     plugins: [tailwindcss()]

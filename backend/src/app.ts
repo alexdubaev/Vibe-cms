@@ -14,6 +14,7 @@ import {
   CmsService,
   CmsSnapshotService,
   createCmsPreviewExchangeRoutes,
+  createCmsPreviewRuntimeRoutes,
   createCmsPreviewStore,
   createCmsRepository,
   createCmsRoutes,
@@ -235,6 +236,7 @@ export function createApp({
   app.route('/api/admin', users.adminRoutes)
   app.route('/api/uploads', uploads.routes)
   app.route('/api/cms/preview', createCmsPreviewExchangeRoutes(cmsPreview))
+  app.route('/api/cms/preview', createCmsPreviewRuntimeRoutes({ preview: cmsPreview, service: cmsService, storage: storage.storage }))
   if (publicationInternalRoutes) app.route('/api/internal/cms', publicationInternalRoutes)
   app.route('/api/cms/media', media.routes)
   app.route(
