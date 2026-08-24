@@ -22,6 +22,7 @@ import {
   homePathForRole,
   navigationItemsForRole,
 } from '@/features/navigation'
+import { useCmsSiteSettingsQuery } from '@/features/cms'
 
 const iconsByPath = {
   '/app': Home01Icon,
@@ -55,6 +56,7 @@ export function WorkspaceShell({
 }>) {
   const pathname = useLocation({ select: (location) => location.pathname })
   const navigationItems = navigationItemsForRole(user.role)
+  const siteSettings = useCmsSiteSettingsQuery(user.role !== 'user')
   const activeItem = navigationItems.find((item) => item.to === pathname)
   const homePath = homePathForRole(user.role)
   const settingsPath = user.role === 'user' ? '/app/settings' : '/admin/settings'
@@ -73,7 +75,7 @@ export function WorkspaceShell({
         onLogout={onLogout}
         settingsPath={settingsPath}
         user={user}
-        workspaceLabel={user.role === 'user' ? 'Личный кабинет' : 'Рабочее пространство'}
+        workspaceLabel={user.role === 'user' ? 'Личный кабинет' : siteSettings.data?.companyName ?? 'Рабочее пространство'}
       />
       <SidebarInset>
         <SiteHeader

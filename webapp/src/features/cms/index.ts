@@ -23,6 +23,8 @@ export {
   getCmsPages,
   getCmsPendingApprovals,
   getCmsPublicationSummary,
+  getCmsMenu,
+  getCmsSiteSettings,
   saveCmsPage,
   restoreCmsPageRevision,
   deleteCmsMedia,
@@ -45,6 +47,8 @@ export {
   type CmsMediaResponse,
   type CmsMediaUpdateResponse,
   type CmsMediaUploadResponse,
+  type CmsMenu,
+  type CmsSiteSettings,
 } from './api'
 export {
   cmsCollectionViewState,
@@ -65,6 +69,8 @@ export {
   useCmsPagesQuery,
   useCmsPendingApprovalsQuery,
   useCmsPublicationSummaryQuery,
+  useCmsMenuQuery,
+  useCmsSiteSettingsQuery,
   usePublishCmsCurrentMutation,
   useRejectCmsApprovalMutation,
   useSaveCmsPageMutation,

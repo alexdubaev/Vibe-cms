@@ -186,9 +186,9 @@ export function useCmsPreviewGrantMutation() {
   })
 }
 
-export function useCmsSiteSettingsQuery() {
+export function useCmsSiteSettingsQuery(enabled = true) {
   const auth = useAuth()
-  return useQuery({ queryKey: cmsQueryKeys.settings(), queryFn: () => getCmsSiteSettings(auth.transport) })
+  return useQuery({ queryKey: cmsQueryKeys.settings(), queryFn: () => getCmsSiteSettings(auth.transport), enabled })
 }
 
 export function useCmsMenuQuery(menuId: string) {
