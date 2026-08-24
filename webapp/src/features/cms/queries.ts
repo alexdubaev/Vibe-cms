@@ -17,6 +17,7 @@ import {
   createCmsMediaUpload,
   finalizeCmsMediaUpload,
   getCmsMedia,
+  getCmsMediaImageDownload,
   getCmsMenu,
   getCmsSiteSettings,
   saveCmsSiteSettings,
@@ -41,6 +42,7 @@ export const cmsQueryKeys = {
   pendingApprovals: () => [...cmsQueryKeys.all, 'approvals', 'pending'] as const,
   mediaRoot: () => [...cmsQueryKeys.all, 'media'] as const,
   media: (query = '') => [...cmsQueryKeys.mediaRoot(), query] as const,
+  mediaImageDownload: (assetId: string) => [...cmsQueryKeys.mediaRoot(), 'download', assetId] as const,
   menu: (menuId: string) => [...cmsQueryKeys.all, 'menu', menuId] as const,
   settings: () => [...cmsQueryKeys.all, 'settings'] as const,
 }
@@ -225,6 +227,16 @@ export function useCmsMediaQuery(query = '') {
   return useQuery({
     queryKey: cmsQueryKeys.media(query),
     queryFn: () => getCmsMedia(auth.transport, query),
+  })
+}
+
+export function useCmsMediaImageDownloadQuery(assetId: string, enabled = true) {
+  const auth = useAuth()
+  return useQuery({
+    queryKey: cmsQueryKeys.mediaImageDownload(assetId),
+    queryFn: () => getCmsMediaImageDownload(auth.transport, assetId),
+    enabled: enabled && Boolean(assetId),
+    staleTime: 45_000,
   })
 }
 

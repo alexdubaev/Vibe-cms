@@ -25,6 +25,7 @@ export type MediaRepository = {
     byteSize: number
   }): Promise<MediaAssetRecord>
   findPending(assetId: string): Promise<MediaAssetRecord | null>
+  findReady(assetId: string): Promise<MediaAssetRecord | null>
   markReady(input: { assetId: string; storageEtag?: string; width?: number; height?: number }): Promise<MediaAssetRecord | null>
   list(input?: { query?: string }): Promise<MediaAssetRecord[]>
   updateAlt(input: { assetId: string; altText: string | null }): Promise<MediaAssetRecord | null>

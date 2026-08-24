@@ -128,6 +128,10 @@ const cmsPublicationMutationResponseSchema = z
 const cmsMediaListSchema = z
   .object({ assets: z.array(mediaAssetSchema) })
   .strict()
+const cmsMediaImageDownloadSchema = z.object({
+  url: z.url(),
+  expiresAt: z.string().datetime(),
+}).strict()
 
 const cmsSiteSettingsSchema = z.object({ companyName: z.string().trim().min(1).max(160), revision: z.number().int().nonnegative() }).strict()
 const cmsSiteSettingsDraftSchema = z.object({
@@ -194,6 +198,7 @@ export type CmsPendingApproval = z.infer<typeof cmsPendingApprovalSchema>
 export type CmsApprovalMutationResponse = z.infer<typeof cmsApprovalMutationResponseSchema>
 export type CmsPublicationMutationResponse = z.infer<typeof cmsPublicationMutationResponseSchema>
 export type CmsMediaResponse = z.infer<typeof cmsMediaListSchema>
+export type CmsMediaImageDownload = z.infer<typeof cmsMediaImageDownloadSchema>
 export type CmsMediaUpdateResponse = z.infer<typeof cmsMediaUpdateSchema>
 export type CmsMediaDeleteResponse = z.infer<typeof cmsMediaDeleteSchema>
 export type CmsMediaUploadResponse = z.infer<typeof cmsMediaUploadSchema>
@@ -329,6 +334,13 @@ export function getCmsMedia(transport: AuthenticatedTransport, query?: string) {
     ? `/api/cms/media?q=${encodeURIComponent(trimmed)}`
     : '/api/cms/media'
   return transport.request(path, cmsMediaListSchema)
+}
+
+export function getCmsMediaImageDownload(transport: AuthenticatedTransport, assetId: string) {
+  return transport.request(
+    `/api/cms/media/${encodeURIComponent(z.uuid().parse(assetId))}/download`,
+    cmsMediaImageDownloadSchema,
+  )
 }
 
 export function updateCmsMediaAlt(

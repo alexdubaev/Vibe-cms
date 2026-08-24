@@ -105,6 +105,19 @@ export class MediaService {
     return { assets: (await this.dependencies.repository.list({ query })).map((asset) => this.toDto(asset)) }
   }
 
+  async createImageDownload(actor: MediaActor, assetId: string) {
+    this.requireEditor(actor)
+    const asset = await this.dependencies.repository.findReady(assetId)
+    if (!asset || !asset.contentType.startsWith('image/')) {
+      throw new MediaError('Image was not found', 'MEDIA_NOT_FOUND')
+    }
+    const download = await this.dependencies.storage.createDownloadUrl({
+      key: asset.objectKey,
+      expiresInSeconds: 60,
+    })
+    return { url: download.url, expiresAt: download.expiresAt }
+  }
+
   async updateAlt(actor: MediaActor, assetId: string, altText: string | null) {
     this.requireEditor(actor)
     const asset = await this.dependencies.repository.updateAlt({ assetId, altText: altText?.trim() || null })

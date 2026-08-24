@@ -21,6 +21,11 @@ export function createMediaRepository(db: DbClient): MediaRepository {
       return asset ? toRecord(asset) : null
     },
 
+    async findReady(assetId) {
+      const asset = await db.cmsMediaAsset.findFirst({ where: { id: assetId, state: 'ready' } })
+      return asset ? toRecord(asset) : null
+    },
+
     async markReady(input) {
       const updated = await db.cmsMediaAsset.updateMany({
         where: { id: input.assetId, state: 'pending' },

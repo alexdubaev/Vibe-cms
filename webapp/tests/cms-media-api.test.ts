@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 
 import {
+  getCmsMediaImageDownload,
   createCmsMediaUpload,
   deleteCmsMedia,
   finalizeCmsMediaUpload,
@@ -27,6 +28,20 @@ test('media list sends an optional trimmed search query', async () => {
     { path: '/api/cms/media?q=logo', options: undefined },
     { path: '/api/cms/media', options: undefined },
   ])
+})
+
+test('image previews use a short-lived server-issued URL without private storage keys', async () => {
+  const assetId = '00000000-0000-7000-8000-000000000008'
+  let request: { path: string; options?: Record<string, unknown> } | undefined
+  const transport: AuthenticatedTransport = {
+    async request(path, _schema, options) {
+      request = { path, options: options as Record<string, unknown> | undefined }
+      return { url: 'https://storage.example.test/signed/image', expiresAt: '2026-08-25T08:00:00.000Z' } as never
+    },
+  }
+
+  await getCmsMediaImageDownload(transport, assetId)
+  expect(request).toEqual({ path: `/api/cms/media/${assetId}/download`, options: undefined })
 })
 
 test('media mutations use safe PATCH and DELETE contracts', async () => {

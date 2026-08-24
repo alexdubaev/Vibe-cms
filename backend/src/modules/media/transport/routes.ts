@@ -32,6 +32,10 @@ export function createMediaRoutes(requireCmsAccess: MiddlewareHandler<AuthHttpEn
   routes.get('/', async (c) => {
     return c.json(await executeMedia(() => service.list(c.var.user, c.req.query('q'))), 200)
   })
+  routes.get('/:assetId/download', async (c) => {
+    const params = assetParams.parse(c.req.param())
+    return c.json(await executeMedia(() => service.createImageDownload(c.var.user, params.assetId)), 200)
+  })
   routes.patch('/:assetId', async (c) => {
     const params = assetParams.parse(c.req.param())
     const body = altBody.parse(await c.req.json())

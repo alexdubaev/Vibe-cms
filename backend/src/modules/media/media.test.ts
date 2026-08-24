@@ -30,6 +30,7 @@ function createService(overrides: Partial<MediaRepository> = {}, storageOverride
   const repository: MediaRepository = {
     createPending: async () => current,
     findPending: async () => current,
+    findReady: async () => ({ ...current, state: 'ready' }),
     markReady: async ({}) => ({ ...current, state: 'ready', storageEtag: 'etag' }),
     list: async () => [current],
     updateAlt: async () => ({ ...current, altText: 'Описание' }),
@@ -64,6 +65,12 @@ describe('media file signatures', () => {
 })
 
 describe('media service', () => {
+  test('creates a short-lived image URL without exposing the private object key', async () => {
+    const result = await createService().createImageDownload({ id: 'editor', role: 'editor' }, uuid)
+    expect(result).toEqual({ url: 'https://storage.test/download', expiresAt: '2026-08-24T10:01:00.000Z' })
+    expect(result).not.toHaveProperty('objectKey')
+  })
+
   test('issues an opaque upload ticket without exposing the object key', async () => {
     const service = createService()
     const result = await service.createUpload({ id: 'editor', role: 'editor' }, { filename: 'hero.png', mimeType: 'image/png', byteSize: 128 })
