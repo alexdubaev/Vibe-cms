@@ -133,3 +133,4 @@ function buildAuthService({
 export type { AuthHttpEnv }
 export type { LogoutCleanup, ProjectUser } from './application/ports'
 export type { AuthenticatedPrincipal } from './domain/user'
+export { createRequireAnyRole } from './transport/middleware'
