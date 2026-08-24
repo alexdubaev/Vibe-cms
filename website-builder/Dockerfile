@@ -10,7 +10,7 @@ COPY webapp/package.json webapp/package.json
 COPY website/package.json website/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY website-builder/package.json website-builder/package.json
-RUN bun install --frozen-lockfile --ignore-scripts
+RUN bun install --frozen-lockfile --ignore-scripts --network-concurrency=4
 
 COPY packages/contracts packages/contracts
 COPY website website
