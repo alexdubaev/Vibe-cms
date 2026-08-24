@@ -102,30 +102,30 @@ export function UserDirectory({ currentUser }: { currentUser: UserDto }) {
           : ''
       }`
     : viewState === 'error'
-      ? 'Users unavailable'
-      : 'Loading users'
+      ? 'Список участников недоступен'
+      : 'Загружаем участников'
 
   return (
     <>
       <div className="grid gap-4">
         {mutationFeedback === 'success' && roleMutation.isSuccess && (
           <Alert>
-            <AlertTitle>Role changed</AlertTitle>
+            <AlertTitle>Роль изменена</AlertTitle>
             <AlertDescription>
-              {roleMutation.data.user.email} is now {roleMutation.data.user.role}.
-              Their previous sessions have been revoked.
+              {roleMutation.data.user.email}: {roleLabel(roleMutation.data.user.role)}.
+              Предыдущие сеансы этого участника завершены.
             </AlertDescription>
           </Alert>
         )}
 
         <DataTableFrame
-          description="Role changes revoke the affected user’s active sessions."
+          description="После изменения роли активные сеансы участника завершаются для безопасности."
           nextDisabled={!pagination?.canGoNext}
           onNext={() => setPage((current) => current + 1)}
           onPrevious={() => setPage((current) => Math.max(1, current - 1))}
           previousDisabled={page <= 1}
           summary={summary}
-          title="User directory"
+          title="Участники"
           toolbar={
             <form className="flex flex-col gap-2 sm:flex-row" onSubmit={submitSearch}>
               <InputGroup>
@@ -133,13 +133,13 @@ export function UserDirectory({ currentUser }: { currentUser: UserDto }) {
                   <HugeiconsIcon aria-hidden icon={Search01Icon} strokeWidth={2} />
                 </InputGroupAddon>
                 <InputGroupInput
-                  aria-label="Search users"
+                  aria-label="Поиск участников"
                   onChange={(event) => setDraftQuery(event.target.value)}
-                  placeholder="Search by email or name"
+                  placeholder="Поиск по email или имени"
                   value={draftQuery}
                 />
               </InputGroup>
-              <Button type="submit">Search</Button>
+              <Button type="submit">Найти</Button>
             </form>
           }
         >
@@ -155,9 +155,9 @@ export function UserDirectory({ currentUser }: { currentUser: UserDto }) {
             <Table className="block sm:table">
               <TableHeader className="hidden sm:table-header-group">
                 <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead>Участник</TableHead>
+                  <TableHead>Роль</TableHead>
+                  <TableHead>Добавлен</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className="grid gap-3 sm:table-row-group">
@@ -189,7 +189,7 @@ export function UserDirectory({ currentUser }: { currentUser: UserDto }) {
                         value={user.role}
                       >
                         <SelectTrigger
-                          aria-label={`Role for ${user.email}`}
+                          aria-label={`Роль для ${user.email}`}
                           className="w-28 capitalize"
                         >
                           <SelectValue />
@@ -199,21 +199,21 @@ export function UserDirectory({ currentUser }: { currentUser: UserDto }) {
                             disabled={user.id === currentUser.id && user.role === 'owner'}
                             value="user"
                           >
-                            User
+                            Участник
                           </SelectItem>
-                          <SelectItem value="editor">Editor</SelectItem>
+                          <SelectItem value="editor">Редактор</SelectItem>
                           <SelectItem
                             disabled={user.id === currentUser.id && user.role === 'owner'}
                             value="owner"
                           >
-                            Owner
+                            Владелец
                           </SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>
                     <TableCell className="col-span-2 flex items-center justify-between border-t p-0 pt-3 tabular-nums sm:table-cell sm:border-0 sm:p-3">
                       <Typography className="sm:hidden" variant="caption" tone="muted">
-                        Created
+                        Добавлен
                       </Typography>
                       <Typography as="span" variant="bodySm">
                         {new Date(user.createdAt).toLocaleDateString()}
@@ -243,7 +243,7 @@ export function UserDirectory({ currentUser }: { currentUser: UserDto }) {
 
 function DirectoryLoading() {
   return (
-    <div aria-label="Loading users" className="grid gap-3 py-2" role="status">
+    <div aria-label="Загружаем участников" className="grid gap-3 py-2" role="status">
       <Skeleton className="h-12 w-full" />
       <Skeleton className="h-12 w-full" />
       <Skeleton className="h-12 w-full" />
@@ -260,11 +260,11 @@ function DirectoryError({
 }) {
   return (
     <Alert variant="destructive">
-      <AlertTitle>Users are unavailable</AlertTitle>
+      <AlertTitle>Список участников недоступен</AlertTitle>
       <AlertDescription>{error.message}</AlertDescription>
       <AlertAction>
         <Button onClick={onRetry} size="sm" type="button" variant="outline">
-          Try again
+          Повторить
         </Button>
       </AlertAction>
     </Alert>
@@ -275,13 +275,17 @@ function DirectoryEmpty({ hasQuery }: { hasQuery: boolean }) {
   return (
     <Empty>
       <EmptyHeader>
-        <EmptyTitle>No users found</EmptyTitle>
+        <EmptyTitle>Участники не найдены</EmptyTitle>
         <EmptyDescription>
           {hasQuery
-            ? 'Try a different name or email.'
-            : 'No accounts are available yet.'}
+            ? 'Попробуйте другое имя или email.'
+            : 'Участников пока нет.'}
         </EmptyDescription>
       </EmptyHeader>
     </Empty>
   )
+}
+
+function roleLabel(role: UserRole) {
+  return role === 'owner' ? 'владелец' : role === 'editor' ? 'редактор' : 'участник'
 }

@@ -11,8 +11,8 @@ export function UserHome({ user }: { user: UserDto }) {
   return (
     <PageContainer>
       <PageHeader
-        description="Review your account status and continue managing your workspace."
-        title={`Welcome, ${user.displayName ?? user.email}`}
+        description="Проверьте состояние учётной записи и продолжайте работу в своём пространстве."
+        title={`Здравствуйте, ${user.displayName ?? user.email}`}
       />
       <AccountSummary user={user} />
     </PageContainer>
@@ -24,8 +24,8 @@ export function UserProfile({ user }: { user: UserDto }) {
     <PageContainer>
       <div className="grid w-full max-w-2xl gap-6">
         <PageHeader
-          description="Keep the identity shown across your workspace current."
-          title="Profile"
+          description="Обновите имя, которое отображается в рабочем пространстве."
+          title="Профиль"
         />
         <AvatarPanel user={user} />
         <ProfilePanel user={user} />
@@ -38,8 +38,8 @@ export function UserSettings({ onLogout }: { onLogout: () => Promise<void> }) {
   return (
     <PageContainer>
       <PageHeader
-        description="Choose how the workspace looks and manage your current session."
-        title="Settings"
+        description="Выберите оформление рабочего пространства и управляйте текущим сеансом."
+        title="Настройки"
       />
       <div className="grid items-start gap-6 lg:grid-cols-2">
         <AppearancePanel />

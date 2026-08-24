@@ -37,26 +37,30 @@ export function RoleChangeDialog({
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Change user role?</AlertDialogTitle>
+          <AlertDialogTitle>Изменить роль участника?</AlertDialogTitle>
           <AlertDialogDescription>
             {pendingChange
-              ? `${pendingChange.user.email} will become ${pendingChange.role}. Their active sessions will be revoked.`
+              ? `${pendingChange.user.email} получит роль «${roleLabel(pendingChange.role)}». Его активные сеансы будут завершены.`
               : ''}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {error && (
           <Alert variant="destructive">
-            <AlertTitle>Role was not changed</AlertTitle>
+            <AlertTitle>Не удалось изменить роль</AlertTitle>
             <AlertDescription>{error.message}</AlertDescription>
           </Alert>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending}>Отмена</AlertDialogCancel>
           <Button disabled={isPending} onClick={onConfirm}>
-            {isPending ? 'Changing…' : 'Change role'}
+            {isPending ? 'Изменяем…' : 'Изменить роль'}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   )
+}
+
+function roleLabel(role: UserRole) {
+  return role === 'owner' ? 'владелец' : role === 'editor' ? 'редактор' : 'участник'
 }

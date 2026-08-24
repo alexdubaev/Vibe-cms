@@ -43,10 +43,10 @@ export function SessionPanel({ onLogout }: { onLogout: () => Promise<void> }) {
     <Card>
       <CardHeader>
         <Typography as="h2" variant="h6">
-          Current session
+          Текущий сеанс
         </Typography>
         <CardDescription>
-          Review this browser session or sign out when you are finished.
+          Проверьте текущий сеанс в браузере или выйдите из него после работы.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
@@ -55,17 +55,17 @@ export function SessionPanel({ onLogout }: { onLogout: () => Promise<void> }) {
             <HugeiconsIcon aria-hidden icon={ComputerIcon} strokeWidth={2} />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>This browser</ItemTitle>
+            <ItemTitle>Этот браузер</ItemTitle>
           </ItemContent>
           <ItemActions>
-            <Badge variant="outline">Active</Badge>
+            <Badge variant="outline">Активен</Badge>
           </ItemActions>
         </Item>
 
         {logoutFailed && (
           <Alert variant="destructive">
-            <AlertTitle>Logout failed</AlertTitle>
-            <AlertDescription>Your session is still active. Please try again.</AlertDescription>
+            <AlertTitle>Не удалось выйти</AlertTitle>
+            <AlertDescription>Сеанс всё ещё активен. Повторите попытку.</AlertDescription>
           </Alert>
         )}
 
@@ -82,7 +82,7 @@ export function SessionPanel({ onLogout }: { onLogout: () => Promise<void> }) {
               icon={Logout01Icon}
               strokeWidth={2}
             />
-            {isLoggingOut ? 'Logging out…' : 'Logout'}
+            {isLoggingOut ? 'Выходим…' : 'Выйти'}
           </Button>
         </div>
       </CardContent>

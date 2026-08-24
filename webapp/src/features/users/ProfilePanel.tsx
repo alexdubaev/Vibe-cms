@@ -27,17 +27,17 @@ export function ProfilePanel({ user }: { user: UserDto }) {
     <Card>
       <CardHeader>
         <Typography as="h2" variant="h6">
-          Profile details
+          Данные профиля
         </Typography>
         <CardDescription>
-          Update the name shown throughout your workspace. Your email is managed separately.
+          Обновите имя, которое отображается в рабочем пространстве. Адрес электронной почты изменяется отдельно.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form className="grid gap-5" noValidate onSubmit={submit}>
           <FieldGroup>
             <Field data-invalid={displayNameInvalid}>
-              <FieldLabel htmlFor="profile-display-name">Display name</FieldLabel>
+              <FieldLabel htmlFor="profile-display-name">Отображаемое имя</FieldLabel>
               <Input
                 aria-describedby={displayNameInvalid ? displayNameErrorId : undefined}
                 aria-invalid={displayNameInvalid}
@@ -49,13 +49,13 @@ export function ProfilePanel({ user }: { user: UserDto }) {
                   setDisplayName(event.target.value)
                   mutation.reset()
                 }}
-                placeholder="Your name"
+                placeholder="Ваше имя"
                 value={displayName}
               />
-              <FieldDescription>Leave empty to use your email instead.</FieldDescription>
+              <FieldDescription>Оставьте пустым, чтобы вместо имени использовать email.</FieldDescription>
               {displayNameInvalid && (
                 <FieldError id={displayNameErrorId}>
-                  Display name must be at least 2 characters.
+                  Имя должно содержать не менее 2 символов.
                 </FieldError>
               )}
             </Field>
@@ -67,20 +67,20 @@ export function ProfilePanel({ user }: { user: UserDto }) {
                 readOnly
                 value={user.email}
               />
-              <FieldDescription>Email changes are not enabled in this template.</FieldDescription>
+              <FieldDescription>Изменение email пока недоступно.</FieldDescription>
             </Field>
           </FieldGroup>
 
           {mutation.isError && (
             <Alert variant="destructive">
-              <AlertTitle>Profile was not saved</AlertTitle>
+              <AlertTitle>Не удалось сохранить профиль</AlertTitle>
               <AlertDescription>{mutation.error.message}</AlertDescription>
             </Alert>
           )}
           {mutation.isSuccess && (
             <Alert>
-              <AlertTitle>Profile saved</AlertTitle>
-              <AlertDescription>Your display name is up to date.</AlertDescription>
+              <AlertTitle>Профиль сохранён</AlertTitle>
+              <AlertDescription>Отображаемое имя обновлено.</AlertDescription>
             </Alert>
           )}
 
@@ -89,7 +89,7 @@ export function ProfilePanel({ user }: { user: UserDto }) {
               disabled={mutation.isPending || displayNameInvalid}
               type="submit"
             >
-              {mutation.isPending ? 'Saving…' : 'Save profile'}
+              {mutation.isPending ? 'Сохраняем…' : 'Сохранить профиль'}
             </Button>
           </div>
         </form>
