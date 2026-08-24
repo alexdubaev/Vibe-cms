@@ -35,18 +35,22 @@ type UsersRepository =
 
 export function createPrismaUsersRepository(db: DbClient): UsersRepository {
   return {
-    updateProfile(userId, displayName) {
-      return db.user.update({
+    async updateProfile(userId, displayName) {
+      const user = await db.user.update({
         where: { id: userId },
         data: { displayName },
         select: userSummarySelect,
       })
+      return {
+        ...user,
+        role: toDomainRole(user.role),
+      }
     },
 
     async dashboard(createdAfter) {
       const [totalUsers, totalAdmins, newUsersLast7Days] = await db.$transaction([
         db.user.count(),
-        db.user.count({ where: { role: 'admin' } }),
+        db.user.count({ where: { role: { in: ['owner', 'admin'] } } }),
         db.user.count({ where: { createdAt: { gte: createdAfter } } }),
       ])
       return { totalUsers, totalAdmins, newUsersLast7Days }
@@ -89,7 +93,7 @@ export function createPrismaUsersRepository(db: DbClient): UsersRepository {
           where: { id: input.actorUserId },
           select: { id: true, role: true },
         })
-        if (actor?.role !== 'admin') {
+        if (actor?.role !== 'owner' && actor?.role !== 'admin') {
           throw new UsersFailure('forbidden', 'Administrator access is required')
         }
 
@@ -100,15 +104,16 @@ export function createPrismaUsersRepository(db: DbClient): UsersRepository {
         if (!target) {
           throw new UsersFailure('not_found', 'User not found')
         }
-        if (target.role === input.role) {
+        const targetRole = toDomainRole(target.role)
+        if (targetRole === input.role) {
           return toAdminUserSummary(target)
         }
-        if (target.id === actor.id && input.role !== 'admin') {
+        if (target.id === actor.id && input.role !== 'owner') {
           throw new UsersFailure('role_conflict', 'You cannot remove your own administrator role')
         }
 
-        if (target.role === 'admin' && input.role === 'user') {
-          const adminCount = await tx.user.count({ where: { role: 'admin' } })
+        if ((target.role === 'admin' || target.role === 'owner') && input.role !== 'owner') {
+          const adminCount = await tx.user.count({ where: { role: { in: ['owner', 'admin'] } } })
           if (adminCount <= 1) {
             throw new UsersFailure('role_conflict', 'At least one administrator must remain')
           }
@@ -137,14 +142,20 @@ function toAdminUserSummary(user: {
   id: string
   email: string
   displayName: string | null
-  role: UserRole
+  role: string
   createdAt: Date
 }): AdminUserSummary {
   return {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
-    role: user.role,
+    role: toDomainRole(user.role),
     createdAt: user.createdAt.toISOString(),
   }
+}
+
+function toDomainRole(role: string): UserRole {
+  if (role === 'admin') return 'owner'
+  if (role === 'user' || role === 'editor' || role === 'owner') return role
+  throw new Error(`Unsupported persisted user role: ${role}`)
 }

@@ -89,6 +89,42 @@ const adminUsersRoute = createRoute({
   component: lazyRouteComponent(() => import('./pages'), 'AdminUsersPage'),
 })
 
+const adminPagesRoute = createRoute({
+  getParentRoute: () => adminWorkspaceRoute,
+  path: '/admin/pages',
+  component: lazyRouteComponent(() => import('./pages'), 'CmsPagesPage'),
+})
+
+const adminContentRoute = createRoute({
+  getParentRoute: () => adminWorkspaceRoute,
+  path: '/admin/content/$type',
+  component: lazyRouteComponent(() => import('./pages'), 'CmsContentPage'),
+})
+
+const adminContentServiceRoute = createRoute({
+  getParentRoute: () => adminWorkspaceRoute,
+  path: '/admin/content/service',
+  component: lazyRouteComponent(() => import('./pages'), 'CmsContentPage'),
+})
+
+const adminPageDetailRoute = createRoute({
+  getParentRoute: () => adminWorkspaceRoute,
+  path: '/admin/pages/$pageId',
+  component: lazyRouteComponent(() => import('./pages'), 'CmsPageDetailPage'),
+})
+
+const adminPublicationsRoute = createRoute({
+  getParentRoute: () => adminWorkspaceRoute,
+  path: '/admin/publications',
+  component: lazyRouteComponent(() => import('./pages'), 'CmsPublicationsPage'),
+})
+
+const adminMediaRoute = createRoute({
+  getParentRoute: () => adminWorkspaceRoute,
+  path: '/admin/media',
+  component: lazyRouteComponent(() => import('./pages'), 'MediaLibraryPage'),
+})
+
 const adminSettingsRoute = createRoute({
   getParentRoute: () => adminWorkspaceRoute,
   path: '/admin/settings',
@@ -109,6 +145,12 @@ const routeTree = rootRoute.addChildren([
   adminWorkspaceRoute.addChildren([
     adminDashboardRoute,
     adminUsersRoute,
+    adminPagesRoute,
+    adminContentRoute,
+    adminContentServiceRoute,
+    adminPageDetailRoute,
+    adminPublicationsRoute,
+    adminMediaRoute,
     adminSettingsRoute,
   ]),
 ])

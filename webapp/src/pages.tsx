@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useRouter, useSearch } from '@tanstack/react-router'
-import type { UserDto, UserRole } from '@web-app-demo/contracts'
+import type { UserDto } from '@web-app-demo/contracts'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import {
@@ -9,6 +9,13 @@ import {
 } from '@/components/WebRouteSections'
 import { WorkspaceShell } from '@/components/WorkspaceShell'
 import { AdminDashboard, AdminSettings, AdminUsers } from '@/features/admin'
+import {
+  CmsPageDetailPage,
+  CmsPagesPage,
+  CmsContentPage,
+  CmsPublicationsPage,
+  MediaLibraryPage,
+} from '@/features/cms'
 import {
   AuthPageShell,
   clearPasswordResetTokenHash,
@@ -107,21 +114,24 @@ export function AdminDashboardPage() {
 }
 
 export function AdminUsersPage() {
-  const user = useWorkspaceUser('admin')
-  return <AdminUsers currentUser={user} />
+  const auth = useAuth()
+  if (auth.user?.role !== 'owner') return <HrefRedirect href="/admin" />
+  return <AdminUsers currentUser={auth.user} />
 }
 
 export function AdminSettingsPage() {
-  const user = useWorkspaceUser('admin')
+  const user = useWorkspaceUser('cms')
   return <AdminSettings user={user} />
 }
+
+export { CmsContentPage, CmsPageDetailPage, CmsPagesPage, CmsPublicationsPage, MediaLibraryPage }
 
 export function UserWorkspaceLayout() {
   return <WorkspaceRoute role="user" />
 }
 
 export function AdminWorkspaceLayout() {
-  return <WorkspaceRoute role="admin" />
+  return <WorkspaceRoute role="cms" />
 }
 
 export function NotFoundPage() {
@@ -136,7 +146,7 @@ export function NotFoundPage() {
   return <NotFoundSection destination={destination} />
 }
 
-function WorkspaceRoute({ role }: { role: UserRole }) {
+function WorkspaceRoute({ role }: { role: 'user' | 'cms' }) {
   const auth = useAuth()
   const location = useLocation()
 
@@ -148,7 +158,8 @@ function WorkspaceRoute({ role }: { role: UserRole }) {
     const returnTo = `${location.pathname}${location.searchStr}`
     return <HrefRedirect href={`/login?returnTo=${encodeURIComponent(returnTo)}`} />
   }
-  if (auth.user.role !== role) {
+  const hasAccess = role === 'user' ? auth.user.role === 'user' : auth.user.role !== 'user'
+  if (!hasAccess) {
     return <HrefRedirect href={homePathForRole(auth.user.role)} />
   }
 
@@ -205,9 +216,15 @@ function usePasswordResetToken() {
   return token
 }
 
-function useWorkspaceUser(role: UserRole): UserDto {
+function useWorkspaceUser(role: 'user' | 'cms' | 'owner'): UserDto {
   const user = useAuth().user
-  if (!user || user.role !== role) {
+  const hasAccess =
+    role === 'user'
+      ? user?.role === 'user'
+      : role === 'owner'
+        ? user?.role === 'owner'
+        : user?.role === 'editor' || user?.role === 'owner'
+  if (!user || !hasAccess) {
     throw new Error(`${role} workspace page rendered outside its guarded layout`)
   }
   return user

@@ -88,6 +88,27 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...base, EMAIL_DELIVERY: 'smtp' })).toThrow('EMAIL_DELIVERY')
   })
 
+  test('requires a complete YMQ publication runtime when a queue is configured', () => {
+    const base = {
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/web_app_demo',
+      JWT_SECRET: '12345678901234567890123456789012',
+      CMS_BUILDER_QUEUE_URL: 'https://message-queue.api.cloud.yandex.net/queue',
+    }
+
+    expect(() => loadEnv(base)).toThrow('CMS_BUILDER_HMAC_ACTIVE_SECRET')
+    expect(() => loadEnv({
+      ...base,
+      CMS_BUILDER_HMAC_ACTIVE_SECRET: 'active-builder-secret-active-builder-secret',
+      CMS_BUILDER_YMQ_ACCESS_KEY_ID: 'access-key',
+    })).toThrow('CMS_BUILDER_YMQ_SECRET_ACCESS_KEY')
+    expect(() => loadEnv({
+      ...base,
+      CMS_BUILDER_HMAC_ACTIVE_SECRET: 'active-builder-secret-active-builder-secret',
+      CMS_BUILDER_YMQ_ACCESS_KEY_ID: 'access-key',
+      CMS_BUILDER_YMQ_SECRET_ACCESS_KEY: 'secret-builder-secret-builder-secret',
+    })).not.toThrow()
+  })
+
   test('rejects unsafe production CORS origins', () => {
     const baseEnv = {
       DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/web_app_demo',

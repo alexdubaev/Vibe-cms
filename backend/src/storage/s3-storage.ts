@@ -5,6 +5,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
+import { createHash } from 'node:crypto'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 import type { S3StorageConfig } from './config'
@@ -160,6 +161,30 @@ export class S3PrivateStorage implements PrivateStorage {
       new DeleteObjectCommand({ Bucket: this.config.bucket, Key: assertSafeObjectKey(key) }),
     )
   }
+
+  async putObjectOnce(key: string, body: Uint8Array, contentType: string) {
+    const safeKey = assertSafeObjectKey(key)
+
+    try {
+      const response = await this.s3.send(
+        new PutObjectCommand({
+          Bucket: this.config.bucket,
+          Key: safeKey,
+          Body: body,
+          ContentType: contentType,
+          ContentLength: body.byteLength,
+          IfNoneMatch: '*',
+        }),
+      )
+      return {
+        stored: true as const,
+        etag: response.ETag ?? `"${createHash('md5').update(body).digest('hex')}"`,
+      }
+    } catch (error) {
+      if (isAlreadyExistingObject(error)) return { stored: false as const, reason: 'already_exists' as const }
+      throw error
+    }
+  }
 }
 
 /**
@@ -174,5 +199,17 @@ function isMissingObject(error: unknown) {
     candidate.name === 'NotFound' ||
     candidate.name === 'NoSuchKey' ||
     candidate.$metadata?.httpStatusCode === 404
+  )
+}
+
+function isAlreadyExistingObject(error: unknown) {
+  if (typeof error !== 'object' || error === null) return false
+
+  const candidate = error as { name?: string; $metadata?: { httpStatusCode?: number } }
+  return (
+    candidate.name === 'PreconditionFailed' ||
+    candidate.name === 'ConditionalRequestConflict' ||
+    candidate.$metadata?.httpStatusCode === 409 ||
+    candidate.$metadata?.httpStatusCode === 412
   )
 }

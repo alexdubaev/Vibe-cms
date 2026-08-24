@@ -55,8 +55,8 @@ run "immutable_runtime_with_provider_timers" {
   }
 
   assert {
-    condition     = length(yandex_function_trigger.jobs) == 3
-    error_message = "Outbox, upload cleanup, and auth cleanup all need provider timers."
+    condition     = length(yandex_function_trigger.jobs) == 4
+    error_message = "Outbox, upload cleanup, auth cleanup, and publication reconciliation all need provider timers."
   }
 
   assert {
@@ -81,7 +81,8 @@ run "immutable_runtime_with_provider_timers" {
     condition = (
       yandex_serverless_container.jobs["outbox"].execution_timeout == "180s" &&
       yandex_serverless_container.jobs["uploads"].execution_timeout == "840s" &&
-      yandex_serverless_container.jobs["auth"].execution_timeout == "180s"
+      yandex_serverless_container.jobs["auth"].execution_timeout == "180s" &&
+      yandex_serverless_container.jobs["website-rebuild"].execution_timeout == "180s"
     )
     error_message = "Each provider task needs enough execution time for its declared workload."
   }

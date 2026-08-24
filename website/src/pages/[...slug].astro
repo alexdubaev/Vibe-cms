@@ -1,0 +1,24 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro'
+import CmsPage from '@/cms/CmsPage.astro'
+import { loadPublicationSnapshot } from '@/cms/snapshot'
+
+export async function getStaticPaths() {
+  const snapshot = await loadPublicationSnapshot()
+  return (snapshot?.pages ?? [])
+    .filter((page) => page.path !== '/')
+    .map((page) => ({
+      params: { slug: page.path.slice(1) },
+      props: { page },
+    }))
+}
+
+const { page } = Astro.props
+const canonicalUrl = import.meta.env.PUBLIC_WEBSITE_URL
+  ? new URL(Astro.url.pathname, import.meta.env.PUBLIC_WEBSITE_URL).toString()
+  : undefined
+---
+
+<BaseLayout canonicalUrl={canonicalUrl} description={page.seo?.description ?? page.title} title={page.seo?.title ?? page.title}>
+  <CmsPage page={page} />
+</BaseLayout>

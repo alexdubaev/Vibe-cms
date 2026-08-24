@@ -105,6 +105,17 @@ export const backgroundJobs = {
     // this deployment has no handler for.
     console.log('Job outbox:drain completed.', metrics)
   },
+  'website:rebuild:reconcile': async (runtime) => {
+    if (!runtime.publicationRebuild) {
+      console.log('Job website:rebuild:reconcile skipped: publication controller is not configured.')
+      return
+    }
+    const result = await runtime.publicationRebuild.reconcile()
+    if (result.kind === 'dispatch-failed') {
+      throw new Error('Publication rebuild dispatch failed; the next scheduled pass will retry')
+    }
+    console.log('Job website:rebuild:reconcile completed.', result)
+  },
 } satisfies Record<string, BackgroundJob>
 
 export type BackgroundJobName = keyof typeof backgroundJobs

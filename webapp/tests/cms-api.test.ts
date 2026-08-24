@@ -1,0 +1,149 @@
+import { expect, test } from 'bun:test'
+
+import {
+  approveCmsApproval,
+  createCmsEntry,
+  getCmsEntry,
+  getCmsEntries,
+  getCmsPageRevisions,
+  publishCmsCurrent,
+  rejectCmsApproval,
+  restoreCmsPageRevision,
+  saveCmsPage,
+  saveCmsEntry,
+  submitCmsApproval,
+} from '@/features/cms/api'
+import type { AuthenticatedTransport } from '@/platform/api'
+
+test('saveCmsPage validates the draft and sends an optimistic PATCH', async () => {
+  let request: { path: string; options?: Record<string, unknown> } | undefined
+  const transport: AuthenticatedTransport = {
+    async request(path, _schema, options) {
+      request = { path, options: options as Record<string, unknown> | undefined }
+      return {
+        id: '00000000-0000-7000-8000-000000000001',
+        title: 'Главная',
+        path: '/',
+        draftPayload: {},
+        revision: 2,
+      } as never
+    },
+  }
+
+  await saveCmsPage(transport, '00000000-0000-7000-8000-000000000001', {
+    title: 'Главная',
+    path: '/',
+    blocks: [{
+      id: 'hero',
+      type: 'hero',
+      data: {
+        title: 'Добро пожаловать',
+        text: 'Описание страницы',
+        primaryAction: { label: 'Подробнее', href: '/about' },
+      },
+    }],
+    expectedRevision: 1,
+  })
+
+  expect(request).toMatchObject({
+    path: '/api/cms/pages/00000000-0000-7000-8000-000000000001',
+    options: { method: 'PATCH', body: { expectedRevision: 1 } },
+  })
+})
+
+test('publication actions use safe response contracts and never send snapshots', async () => {
+  const calls: Array<{ path: string; options?: Record<string, unknown> }> = []
+  const transport: AuthenticatedTransport = {
+    async request(path, _schema, options) {
+      calls.push({ path, options: options as Record<string, unknown> | undefined })
+      return { id: '00000000-0000-7000-8000-000000000001', status: 'pending', requesterUserId: '00000000-0000-7000-8000-000000000001', revision: 2 } as never
+    },
+  }
+
+  await submitCmsApproval(transport, 2)
+  await approveCmsApproval(transport, '00000000-0000-7000-8000-000000000001')
+  await rejectCmsApproval(transport, '00000000-0000-7000-8000-000000000001', 'Нужно уточнить')
+  await publishCmsCurrent(transport, 2)
+
+  expect(calls).toEqual([
+    { path: '/api/cms/approvals', options: { method: 'POST', body: { revision: 2 } } },
+    { path: '/api/cms/approvals/00000000-0000-7000-8000-000000000001/approve', options: { method: 'POST' } },
+    { path: '/api/cms/approvals/00000000-0000-7000-8000-000000000001/reject', options: { method: 'POST', body: { note: 'Нужно уточнить' } } },
+    { path: '/api/cms/publish', options: { method: 'POST', body: { revision: 2 } } },
+  ])
+})
+
+test('page revision history reads safe metadata and restores through a scoped route', async () => {
+  const pageId = '00000000-0000-7000-8000-000000000001'
+  const revisionId = '00000000-0000-7000-8000-000000000002'
+  const calls: Array<{ path: string; options?: Record<string, unknown> }> = []
+  const transport: AuthenticatedTransport = {
+    async request(path, _schema, options) {
+      calls.push({ path, options: options as Record<string, unknown> | undefined })
+      return path.endsWith('/restore')
+        ? { id: pageId, title: 'Восстановлено', path: '/', draftPayload: {}, revision: 4 }
+        : [{
+            id: revisionId,
+            revision: 2,
+            sourceDraftRevision: 3,
+            publicationRevision: null,
+            createdAt: '2026-08-24T09:00:00.000Z',
+          }]
+    },
+  }
+
+  await getCmsPageRevisions(transport, pageId)
+  await restoreCmsPageRevision(transport, pageId, revisionId)
+
+  expect(calls).toEqual([
+    { path: `/api/cms/pages/${pageId}/revisions`, options: undefined },
+    { path: `/api/cms/pages/${pageId}/revisions/${revisionId}/restore`, options: { method: 'POST' } },
+  ])
+})
+
+test('collection entry list uses a type filter and safe labels', async () => {
+  let request: { path: string; options?: Record<string, unknown> } | undefined
+  const transport: AuthenticatedTransport = {
+    async request(path, _schema, options) {
+      request = { path, options: options as Record<string, unknown> | undefined }
+      return [{
+        id: '00000000-0000-7000-8000-000000000003',
+        type: 'service',
+        name: 'Аудит',
+        summary: 'Проверка сайта',
+        revision: 2,
+        archived: false,
+      }] as never
+    },
+  }
+
+  await getCmsEntries(transport, 'service')
+  expect(request).toEqual({ path: '/api/cms/entries?type=service', options: undefined })
+})
+
+test('collection editor API uses separate create, read, and optimistic update contracts', async () => {
+  const entryId = '00000000-0000-7000-8000-000000000003'
+  const calls: Array<{ path: string; options?: Record<string, unknown> }> = []
+  const transport: AuthenticatedTransport = {
+    async request(path, _schema, options) {
+      calls.push({ path, options: options as Record<string, unknown> | undefined })
+      return {
+        id: entryId,
+        type: 'service',
+        draftPayload: { type: 'service', name: 'Аудит' },
+        draftRevision: 2,
+        archived: false,
+      } as never
+    },
+  }
+
+  await getCmsEntry(transport, entryId)
+  await createCmsEntry(transport, { type: 'service', name: 'Аудит' })
+  await saveCmsEntry(transport, entryId, { type: 'service', name: 'Новый аудит', expectedRevision: 2 })
+
+  expect(calls).toEqual([
+    { path: `/api/cms/entries/${entryId}`, options: undefined },
+    { path: '/api/cms/entries', options: { method: 'POST', body: { type: 'service', name: 'Аудит' } } },
+    { path: `/api/cms/entries/${entryId}`, options: { method: 'PATCH', body: { type: 'service', name: 'Новый аудит', expectedRevision: 2 } } },
+  ])
+})

@@ -45,7 +45,7 @@ async function upsertAdmin(
           email: config.email,
           displayName: 'Administrator',
           passwordHash: requestedPasswordHash ?? null,
-          role: 'admin',
+          role: 'owner',
         },
         select: { email: true, passwordHash: true },
       })
@@ -73,7 +73,8 @@ function updateExistingAdmin(
       existing.passwordHash !== null &&
       await matchesPassword(config.password, existing.passwordHash)
     const passwordChanges = config.password !== null && !passwordMatches
-    const changesAuthenticationAuthority = existing.role !== 'admin' || passwordChanges
+    const changesAuthenticationAuthority =
+      (existing.role !== 'owner' && existing.role !== 'admin') || passwordChanges
     if (!changesAuthenticationAuthority) {
       return { email: config.email, passwordHash: existing.passwordHash }
     }
@@ -82,7 +83,7 @@ function updateExistingAdmin(
     const updated = await tx.user.update({
       where: { id: existing.id },
       data: {
-        role: 'admin',
+        role: 'owner',
         ...(passwordChanges ? { passwordHash: requestedPasswordHash! } : {}),
       },
       select: { email: true, passwordHash: true },
@@ -114,7 +115,7 @@ async function matchesPassword(password: string, passwordHash: string) {
 export async function assertLoginCapableAdmin(db: DbClient) {
   const count = await db.user.count({
     where: {
-      role: 'admin',
+      role: { in: ['owner', 'admin'] },
       passwordHash: { not: null },
     },
   })

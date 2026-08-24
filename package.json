@@ -8,6 +8,7 @@
   "workspaces": [
     "webapp",
     "website",
+    "website-builder",
     "backend",
     "packages/*"
   ],
@@ -57,8 +58,9 @@
     "typecheck": "bun run --filter '*' --sequential typecheck",
     "typecheck:webapp": "bun run --cwd webapp typecheck",
     "typecheck:website": "bun run --cwd website typecheck",
+    "typecheck:website-builder": "bun run --cwd website-builder typecheck",
     "typecheck:backend": "bun run --cwd backend typecheck",
-    "test": "bun run test:infra && bun run test:contracts && bun run test:backend && bun run test:webapp && bun run test:website",
+    "test": "bun run test:infra && bun run test:contracts && bun run test:backend && bun run test:webapp && bun run test:website && bun run test:website-builder",
     "test:infra": "bun test ./scripts/",
     "test:terraform": "bun scripts/terraform-test.mjs",
     "test:contracts": "bun run --cwd packages/contracts test",
@@ -68,6 +70,7 @@
     "test:storage:s3": "bun scripts/storage-local.mjs test",
     "test:webapp": "bun run --cwd webapp test",
     "test:website": "bun run --cwd website test",
+    "test:website-builder": "bun run --cwd website-builder test",
     "smoke:backend:docker": "bun run --cwd backend smoke:docker",
     "e2e:webapp": "bun run --cwd webapp e2e",
     "e2e:webapp:s3": "bun scripts/storage-local.mjs e2e"

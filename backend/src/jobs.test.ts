@@ -46,6 +46,20 @@ describe('runBackgroundJob', () => {
     }
   })
 
+  test('website reconciliation is a short optional controller pass', async () => {
+    const calls: number[] = []
+    const log = spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      await runBackgroundJob('website:rebuild:reconcile', {
+        publicationRebuild: { reconcile: async () => { calls.push(1); return { kind: 'idle' } } },
+      } as unknown as BackendRuntime)
+      expect(calls).toHaveLength(1)
+      expect(log).toHaveBeenCalledWith('Job website:rebuild:reconcile completed.', { kind: 'idle' })
+    } finally {
+      log.mockRestore()
+    }
+  })
+
   test('rejects Object.prototype keys instead of running nothing and reporting success', async () => {
     // `'constructor' in backgroundJobs` is true. A provider timer configured with that name would
     // exit 0 every night while doing no work at all, which looks healthy in every dashboard.

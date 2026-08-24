@@ -7,11 +7,13 @@ import { Prisma } from '../../../generated/prisma/client'
 import { enqueueTask } from '../../../outbox'
 import type { AuthRepository } from '../application/ports'
 import { AuthFailure } from '../domain/errors'
+import { toAuthUserRecord } from '../domain/user'
 
 export function createPrismaAuthRepository(db: DbClient): AuthRepository {
   return {
-    findUserByEmail(email) {
-      return db.user.findUnique({ where: { email } })
+    async findUserByEmail(email) {
+      const user = await db.user.findUnique({ where: { email } })
+      return user ? toAuthUserRecord(user) : null
     },
 
     async createPasswordUserWithSession(input) {
@@ -37,7 +39,7 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
             select: { id: true },
           })
 
-          return { user, session }
+          return { user: toAuthUserRecord(user), session }
         })
       } catch (error) {
         if (isUniqueConstraintError(error)) {
@@ -53,7 +55,9 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
         const user = await tx.user.findUnique({
           where: { id: input.userId },
         })
-        if (!user || !(await input.authorizeUser(user))) return null
+        if (!user) return null
+        const authUser = toAuthUserRecord(user)
+        if (!(await input.authorizeUser(authUser))) return null
 
         const session = await tx.authSession.create({
           data: {
@@ -66,7 +70,7 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
           },
           select: { id: true },
         })
-        return { user, session }
+        return { user: authUser, session }
       }, userAuthenticationSessionTransactionOptions)
     },
 
@@ -82,7 +86,7 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
       })
       if (family) {
         if (family.refreshTokenHash === input.refreshTokenHash) {
-          return { ...family, credentialState: 'current' as const }
+          return { ...family, user: toAuthUserRecord(family.user), credentialState: 'current' as const }
         }
 
         const isPrevious = family.previousRefreshTokenHash === input.refreshTokenHash
@@ -92,6 +96,7 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
           family.refreshRotatedAt >= input.reuseGraceAfter
         return {
           ...family,
+          user: toAuthUserRecord(family.user),
           credentialState: withinGrace
             ? ('previous_within_grace' as const)
             : ('reused' as const),
@@ -108,7 +113,7 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
         include: { user: true },
       })
       if (current) {
-        return { ...current, credentialState: 'current' as const }
+        return { ...current, user: toAuthUserRecord(current.user), credentialState: 'current' as const }
       }
 
       const previous = await db.authSession.findFirst({
@@ -126,6 +131,7 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
         previous.refreshRotatedAt !== null && previous.refreshRotatedAt >= input.reuseGraceAfter
       return {
         ...previous,
+        user: toAuthUserRecord(previous.user),
         credentialState: withinGrace
           ? ('previous_within_grace' as const)
           : ('reused' as const),
@@ -159,8 +165,8 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
       }).then(({ count }) => count === 1)
     },
 
-    findActiveAccessSession(input) {
-      return db.authSession.findFirst({
+    async findActiveAccessSession(input) {
+      const session = await db.authSession.findFirst({
         where: {
           id: input.sessionId,
           userId: input.userId,
@@ -170,6 +176,7 @@ export function createPrismaAuthRepository(db: DbClient): AuthRepository {
         },
         include: { user: true },
       })
+      return session ? { id: session.id, user: toAuthUserRecord(session.user) } : null
     },
 
     revokeSession(input) {

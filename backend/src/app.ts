@@ -9,6 +9,23 @@ import type { AppEnv } from './env'
 import { errorResponse, handleError, validationErrorHook } from './http/errors'
 import { createAuthSecurity, createFixedWindowRateLimit } from './http/security'
 import { createAuthModule, type AuthHttpEnv } from './modules/auth'
+import {
+  CmsPreviewService,
+  CmsService,
+  CmsSnapshotService,
+  createCmsPreviewExchangeRoutes,
+  createCmsPreviewStore,
+  createCmsRepository,
+  createCmsRoutes,
+} from './modules/cms'
+import { createMediaModule } from './modules/media'
+import {
+  createBuilderNonceStore,
+  createBuilderRequestVerifier,
+  createPublicationInternalRoutes,
+  PublicationArtifactService,
+  createPublicationRepository,
+} from './modules/publication'
 import { createUploadsModule } from './modules/uploads'
 import { createUsersModule } from './modules/users'
 import {
@@ -17,6 +34,7 @@ import {
   createPrivateStorage,
   type PrivateStorageRuntime,
 } from './storage'
+import { createHash, randomBytes } from 'node:crypto'
 
 type CreateAppOptions = {
   backgroundTasks?: TaskDeferrer
@@ -39,6 +57,61 @@ export function createApp({
 }: CreateAppOptions) {
   const storage = privateStorage ?? createPrivateStorage(env)
   const auth = createAuthModule({ db: prisma, emailDelivery, env })
+  const cmsRepository = createCmsRepository(prisma)
+  const publicationRepository = createPublicationRepository(prisma)
+  const publicationArtifact = new PublicationArtifactService(publicationRepository, storage.storage)
+  const publicationInternalRoutes = env.CMS_BUILDER_HMAC_ACTIVE_SECRET
+    ? createPublicationInternalRoutes({
+        repository: publicationRepository,
+        artifact: publicationArtifact,
+        verifier: createBuilderRequestVerifier({
+          activeSecret: env.CMS_BUILDER_HMAC_ACTIVE_SECRET,
+          previousSecret: env.CMS_BUILDER_HMAC_PREVIOUS_SECRET,
+          nonceStore: createBuilderNonceStore(prisma),
+        }),
+      })
+    : null
+  const cmsSnapshot = new CmsSnapshotService(async () => {
+    const [settings, pages, entries, menus, redirects] = await Promise.all([
+      prisma.cmsSiteSettings.findUnique({ where: { key: 'default' } }),
+      prisma.cmsPage.findMany({ where: { archivedAt: null }, orderBy: { path: 'asc' } }),
+      prisma.cmsContentEntry.findMany({ where: { archivedAt: null }, orderBy: { createdAt: 'asc' } }),
+      prisma.cmsMenu.findMany({ orderBy: { location: 'asc' } }),
+      prisma.cmsRedirect.findMany({ where: { active: true }, orderBy: { sourcePath: 'asc' } }),
+    ])
+    const asRecord = (value: unknown): Record<string, unknown> =>
+      value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+    return {
+      settings: { companyName: String(asRecord(settings?.draftPayload).companyName ?? 'Vibe CMS') },
+      pages: pages.map((page) => ({
+        id: page.id,
+        title: page.title,
+        path: page.path,
+        ...asRecord(page.draftPayload),
+        blocks: Array.isArray(asRecord(page.draftPayload).blocks) ? asRecord(page.draftPayload).blocks : [],
+      })),
+      collections: entries.map((entry) => ({
+        id: entry.id,
+        type: entry.type,
+        name: String(asRecord(entry.draftPayload).name ?? 'Без названия'),
+        ...asRecord(entry.draftPayload),
+      })),
+      menus: menus.map((menu) => ({
+        location: menu.location,
+        ...asRecord(menu.draftPayload),
+        items: asRecord(menu.draftPayload).items ?? [],
+      })),
+      redirects: redirects.map((redirect) => ({ source: redirect.sourcePath, destination: redirect.destinationPath })),
+      media: [],
+    }
+  })
+  const cmsService = new CmsService({ repository: cmsRepository, snapshot: cmsSnapshot })
+  const cmsPreview = new CmsPreviewService({
+    store: createCmsPreviewStore(prisma),
+    origin: (env.WEBAPP_ORIGIN ?? env.CORS_ORIGINS[0] ?? 'https://localhost').replace(/^http:/, 'https:'),
+    randomToken: () => randomBytes(32).toString('base64url'),
+    hashToken: (token) => createHash('sha256').update(token).digest('hex'),
+  })
   const adminUsersReadRateLimit = createFixedWindowRateLimit<AuthHttpEnv>({
     errorMessage: 'Too many admin user directory requests',
     key: (c) => c.var.user.id,
@@ -56,6 +129,18 @@ export function createApp({
     db: prisma,
     requireAuth: auth.requireAuth,
     storage: storage.storage,
+  })
+  const media = createMediaModule({
+    backgroundTasks,
+    db: prisma,
+    requireCmsAccess: auth.requireCmsAccess,
+    storage: storage.storage,
+  })
+  const cmsMutationRateLimit = createFixedWindowRateLimit<AuthHttpEnv>({
+    errorMessage: 'Too many CMS mutations',
+    key: (c) => c.var.user.id,
+    max: env.CMS_MUTATION_RATE_LIMIT_MAX,
+    windowSeconds: env.CMS_MUTATION_RATE_LIMIT_WINDOW_SECONDS,
   })
   const app = new OpenAPIHono<AuthHttpEnv>({
     defaultHook: validationErrorHook,
@@ -107,6 +192,16 @@ export function createApp({
     app.use('/api/admin/*', middleware)
     app.use('/api/uploads/*', middleware)
   }
+  for (const middleware of createAuthSecurity({
+    bodyLimitBytes: env.CMS_BODY_LIMIT_BYTES,
+    rateLimitMax: env.CMS_MUTATION_RATE_LIMIT_MAX,
+    rateLimitWindowSeconds: env.CMS_MUTATION_RATE_LIMIT_WINDOW_SECONDS,
+    trustProxy: env.TRUST_PROXY,
+    trustedProxyClientIpHeader: env.TRUSTED_PROXY_CLIENT_IP_HEADER,
+    trustedProxyClientIpPosition: env.TRUSTED_PROXY_CLIENT_IP_POSITION,
+  })) {
+    app.use('/api/cms/*', middleware)
+  }
   app.get('/', (c) => {
     return c.json({
       name: 'web_app_demo backend',
@@ -139,6 +234,19 @@ export function createApp({
   app.route('/api/users', users.userRoutes)
   app.route('/api/admin', users.adminRoutes)
   app.route('/api/uploads', uploads.routes)
+  app.route('/api/cms/preview', createCmsPreviewExchangeRoutes(cmsPreview))
+  if (publicationInternalRoutes) app.route('/api/internal/cms', publicationInternalRoutes)
+  app.route('/api/cms/media', media.routes)
+  app.route(
+    '/api/cms',
+    createCmsRoutes({
+      mutationRateLimit: cmsMutationRateLimit,
+      preview: cmsPreview,
+      requireAuth: auth.requireAuth,
+      requireCmsAccess: auth.requireCmsAccess,
+      service: cmsService,
+    }),
+  )
 
   // Only the filesystem driver needs the backend to serve the URLs it signs. With an S3 driver
   // the browser uploads straight to the bucket and there is nothing to mount here.

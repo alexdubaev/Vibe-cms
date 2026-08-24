@@ -1,0 +1,48 @@
+---
+import type { PublicBlock } from '../block-registry'
+
+interface Props {
+  block: PublicBlock
+}
+
+const { block } = Astro.props
+const data = block.data as Record<string, unknown>
+const title = typeof data.title === 'string' ? data.title : undefined
+const text = typeof data.text === 'string' ? data.text : undefined
+const items = Array.isArray(data.items) ? data.items : []
+const action = data.primaryAction && typeof data.primaryAction === 'object'
+  ? data.primaryAction as { label?: unknown; href?: unknown }
+  : undefined
+const actionLabel = typeof action?.label === 'string' ? action.label : undefined
+const actionHref = typeof action?.href === 'string' ? action.href : undefined
+const itemLabel = (item: unknown) => {
+  if (item && typeof item === 'object' && 'title' in item && typeof item.title === 'string') return item.title
+  return 'Элемент'
+}
+---
+
+<section class={`cms-block cms-block-${block.type}`} data-block-type={block.type}>
+  {block.type === 'hero' ? (
+    <div class="mx-auto max-w-5xl px-6 py-20 text-center">
+      {typeof data.eyebrow === 'string' && <p class="mb-4 text-sm uppercase tracking-[0.2em] opacity-70">{data.eyebrow}</p>}
+      <h1 class="text-4xl font-semibold tracking-tight md:text-6xl">{typeof data.title === 'string' ? data.title : 'Без заголовка'}</h1>
+      {text && <p class="mx-auto mt-6 max-w-2xl text-lg opacity-80">{text}</p>}
+      {actionLabel && actionHref && <a class="mt-8 inline-flex rounded-full bg-primary px-6 py-3 text-primary-foreground" href={actionHref}>{actionLabel}</a>}
+    </div>
+  ) : (
+    <div class="mx-auto max-w-5xl px-6 py-12">
+      {title && <h2 class="text-2xl font-semibold">{title}</h2>}
+      {text && <p class="mt-4 max-w-3xl whitespace-pre-wrap opacity-80">{text}</p>}
+      {items.length > 0 && (
+        <ul class="mt-6 grid gap-4 md:grid-cols-2">
+          {items.map((item) => (
+            <li class="rounded-2xl border border-border/60 p-5">
+              {itemLabel(item)}
+            </li>
+          ))}
+        </ul>
+      )}
+      {actionLabel && actionHref && <a class="mt-6 inline-flex underline underline-offset-4" href={actionHref}>{actionLabel}</a>}
+    </div>
+  )}
+</section>

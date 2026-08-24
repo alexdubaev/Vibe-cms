@@ -1,5 +1,10 @@
 # Mobile Template
 
+## Project status
+
+Mobile is deferred for the first Vibe CMS release. Keep implementation and validation on
+`master`; switch to the `mobile` branch only if a native application is explicitly added later.
+
 The runnable Expo mobile app is intentionally not part of `master`.
 
 Use the `mobile` branch when a project needs the mobile template:

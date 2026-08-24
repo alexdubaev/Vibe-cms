@@ -24,7 +24,7 @@ export async function bootstrapDevelopmentAccounts(
   const user = await bootstrapDevelopmentUser(db, accounts.user)
 
   return {
-    admin: { email: admin.email, role: 'admin' as const },
+    admin: { email: admin.email, role: 'owner' as const },
     user: { email: user.email, id: user.id, role: 'user' as const },
   }
 }

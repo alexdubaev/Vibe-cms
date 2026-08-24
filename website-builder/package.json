@@ -1,0 +1,19 @@
+{
+  "name": "@web-app-demo/website-builder",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "bun test tests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@web-app-demo/contracts": "workspace:*",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "typescript": "~6.0.3"
+  }
+}

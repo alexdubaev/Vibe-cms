@@ -10,7 +10,7 @@ export function AdminDashboard() {
   return (
     <PageContainer>
       <PageHeader
-        description="A live overview of accounts and administrator coverage."
+        description="A live overview of accounts and owner coverage."
         title="Dashboard"
       />
       <AdminMetrics />
@@ -34,7 +34,7 @@ export function AdminSettings({ user }: { user: UserDto }) {
   return (
     <PageContainer>
       <PageHeader
-        description="Manage your administrator identity and workspace appearance."
+        description="Manage your owner identity and workspace appearance."
         title="Settings"
       />
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">

@@ -28,6 +28,7 @@ const typographyVariants = cva("min-w-0 tracking-normal", {
       caption: "text-xs leading-normal font-normal",
       shortcut: "text-xs leading-normal tracking-widest font-normal",
       code: "font-mono text-sm leading-normal font-medium",
+      codeXs: "font-mono text-xs leading-normal",
       avatar: "text-sm leading-normal font-normal group-data-[size=sm]/avatar:text-xs",
       avatarCount:
         "text-sm leading-normal font-normal group-has-data-[size=sm]/avatar-group:text-xs",
@@ -101,6 +102,7 @@ const defaultElementByVariant: Record<TypographyVariant, React.ElementType> = {
   caption: "span",
   shortcut: "span",
   code: "code",
+  codeXs: "code",
   avatar: "span",
   avatarCount: "span",
   calendar: "div",

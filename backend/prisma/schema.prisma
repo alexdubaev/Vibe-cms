@@ -70,6 +70,8 @@ model PasswordResetToken {
 
 enum UserRole {
   user
+  editor
+  owner
   admin
 
   @@map("user_role")
@@ -129,6 +131,375 @@ enum TaskOutboxStatus {
   failed
 
   @@map("task_outbox_status")
+}
+
+// =============================================================================
+// CMS
+//
+// CMS payloads are JSON only at the persistence edge. Their shape is owned by
+// the strict contracts and registries in packages/contracts and modules/cms.
+// =============================================================================
+
+enum CmsContentEntryType {
+  service
+  review
+  teamMember
+  faq
+  case
+
+  @@map("cms_content_entry_type")
+}
+
+enum CmsMediaState {
+  pending
+  ready
+  deleting
+  deleted
+
+  @@map("cms_media_state")
+}
+
+enum CmsApprovalStatus {
+  pending
+  approved
+  rejected
+  superseded
+
+  @@map("cms_approval_status")
+}
+
+enum CmsPublicationArtifactState {
+  missing
+  uploading
+  ready
+
+  @@map("cms_publication_artifact_state")
+}
+
+enum CmsPublicationStatus {
+  queued
+  building
+  published
+  failed
+
+  @@map("cms_publication_status")
+}
+
+enum CmsPublicationSlot {
+  blue
+  green
+
+  @@map("cms_publication_slot")
+}
+
+enum CmsBuildState {
+  queued
+  running
+  succeeded
+  failed
+  cancelled
+
+  @@map("cms_build_state")
+}
+
+enum CmsMenuLocation {
+  header
+  footer
+
+  @@map("cms_menu_location")
+}
+
+model CmsSiteSettings {
+  key            String   @id @default("default")
+  draftPayload   Json     @map("draft_payload")
+  draftRevision  Int      @default(1) @map("draft_revision")
+  updatedByUserId String? @map("updated_by_user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("cms_site_settings")
+}
+
+model CmsPolicy {
+  key             String   @id @default("default")
+  editorCanPublish Boolean  @default(false) @map("editor_can_publish")
+  updatedByUserId String?  @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("cms_policy")
+}
+
+model CmsPage {
+  id                  String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  path                String            @unique(map: "cms_pages_path_key")
+  title               String
+  draftPayload        Json              @map("draft_payload")
+  draftRevision       Int               @default(1) @map("draft_revision")
+  publishedRevisionId String?           @map("published_revision_id") @db.Uuid
+  archivedAt          DateTime?         @map("archived_at")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  revisions           CmsPageRevision[]
+
+  @@index([archivedAt], map: "cms_pages_archived_at_idx")
+  @@map("cms_pages")
+}
+
+model CmsPageRevision {
+  id                 String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  pageId             String   @map("page_id") @db.Uuid
+  revision           Int
+  sourceDraftRevision Int     @map("source_draft_revision")
+  sourcePayload      Json     @map("source_payload")
+  publicPayload      Json     @map("public_payload")
+  authorUserId       String?  @map("author_user_id") @db.Uuid
+  publicationRevision Int?    @map("publication_revision")
+  createdAt          DateTime @default(now()) @map("created_at")
+  page               CmsPage  @relation(fields: [pageId], references: [id], onDelete: Cascade, map: "cms_page_revisions_page_id_fkey")
+
+  @@unique([pageId, revision], map: "cms_page_revisions_page_id_revision_key")
+  @@index([publicationRevision], map: "cms_page_revisions_publication_revision_idx")
+  @@map("cms_page_revisions")
+}
+
+model CmsContentEntry {
+  id                  String                    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  type                CmsContentEntryType
+  draftPayload        Json                      @map("draft_payload")
+  draftRevision       Int                       @default(1) @map("draft_revision")
+  publishedRevisionId String?                   @map("published_revision_id") @db.Uuid
+  archivedAt          DateTime?                 @map("archived_at")
+  createdAt           DateTime                  @default(now()) @map("created_at")
+  updatedAt           DateTime                  @updatedAt @map("updated_at")
+  revisions           CmsContentEntryRevision[]
+
+  @@index([type, archivedAt], map: "cms_content_entries_type_archived_at_idx")
+  @@map("cms_content_entries")
+}
+
+model CmsContentEntryRevision {
+  id                  String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  entryId             String          @map("entry_id") @db.Uuid
+  revision            Int
+  sourceDraftRevision Int             @map("source_draft_revision")
+  sourcePayload       Json            @map("source_payload")
+  publicPayload       Json            @map("public_payload")
+  authorUserId        String?         @map("author_user_id") @db.Uuid
+  publicationRevision Int?            @map("publication_revision")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  entry               CmsContentEntry @relation(fields: [entryId], references: [id], onDelete: Cascade, map: "cms_content_entry_revisions_entry_id_fkey")
+
+  @@unique([entryId, revision], map: "cms_content_entry_revisions_entry_id_revision_key")
+  @@index([publicationRevision], map: "cms_content_entry_revisions_publication_revision_idx")
+  @@map("cms_content_entry_revisions")
+}
+
+model CmsMenu {
+  id                  String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  location            CmsMenuLocation    @unique(map: "cms_menus_location_key")
+  draftPayload        Json               @map("draft_payload")
+  draftRevision       Int                @default(1) @map("draft_revision")
+  publishedRevisionId String?            @map("published_revision_id") @db.Uuid
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+  revisions           CmsMenuRevision[]
+
+  @@map("cms_menus")
+}
+
+model CmsMenuRevision {
+  id                  String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  menuId              String   @map("menu_id") @db.Uuid
+  revision            Int
+  sourceDraftRevision Int      @map("source_draft_revision")
+  sourcePayload       Json     @map("source_payload")
+  publicPayload       Json     @map("public_payload")
+  authorUserId        String?  @map("author_user_id") @db.Uuid
+  publicationRevision Int?     @map("publication_revision")
+  createdAt           DateTime @default(now()) @map("created_at")
+  menu                CmsMenu  @relation(fields: [menuId], references: [id], onDelete: Cascade, map: "cms_menu_revisions_menu_id_fkey")
+
+  @@unique([menuId, revision], map: "cms_menu_revisions_menu_id_revision_key")
+  @@index([publicationRevision], map: "cms_menu_revisions_publication_revision_idx")
+  @@map("cms_menu_revisions")
+}
+
+model CmsMediaAsset {
+  id            String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  filename      String
+  objectKey     String          @unique(map: "cms_media_assets_object_key_key") @map("object_key")
+  contentVersion String         @unique(map: "cms_media_assets_content_version_key") @default(dbgenerated("uuidv7()")) @map("content_version") @db.Uuid
+  storageEtag   String?         @map("storage_etag")
+  contentType   String          @map("content_type")
+  byteSize      Int             @map("byte_size")
+  width         Int?
+  height        Int?
+  durationMs    Int?            @map("duration_ms")
+  altText       String?         @map("alt_text")
+  state         CmsMediaState   @default(pending)
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  usages        CmsMediaUsage[]
+
+  @@index([state, createdAt], map: "cms_media_assets_state_created_at_idx")
+  @@map("cms_media_assets")
+}
+
+model CmsMediaUsage {
+  id        String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  assetId   String         @map("asset_id") @db.Uuid
+  ownerType String         @map("owner_type")
+  ownerId   String         @map("owner_id") @db.Uuid
+  scope     String
+  createdAt DateTime       @default(now()) @map("created_at")
+  asset     CmsMediaAsset  @relation(fields: [assetId], references: [id], onDelete: Restrict, map: "cms_media_usage_asset_id_fkey")
+
+  @@unique([assetId, ownerType, ownerId, scope], map: "cms_media_usage_asset_owner_scope_key")
+  @@index([ownerType, ownerId, scope], map: "cms_media_usage_owner_scope_idx")
+  @@map("cms_media_usage")
+}
+
+model CmsContentUsage {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  ownerType      String   @map("owner_type")
+  ownerId        String   @map("owner_id") @db.Uuid
+  scope          String
+  referencedType String   @map("referenced_type")
+  referencedId   String   @map("referenced_id") @db.Uuid
+  path           String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([ownerType, ownerId, scope, referencedType, referencedId, path], map: "cms_content_usage_reference_key")
+  @@index([ownerType, ownerId, scope], map: "cms_content_usage_owner_scope_idx")
+  @@index([referencedType, referencedId], map: "cms_content_usage_referenced_idx")
+  @@map("cms_content_usage")
+}
+
+model CmsApprovalRequest {
+  id                  String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  revisionMap         Json              @map("revision_map")
+  candidateSnapshot   Json              @map("candidate_snapshot")
+  requesterUserId     String            @map("requester_user_id") @db.Uuid
+  status              CmsApprovalStatus @default(pending)
+  reviewerUserId     String?           @map("reviewer_user_id") @db.Uuid
+  decisionNote        String?           @map("decision_note")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  decidedAt           DateTime?         @map("decided_at")
+
+  @@index([status, createdAt], map: "cms_approval_requests_status_created_at_idx")
+  @@map("cms_approval_requests")
+}
+
+model CmsPublication {
+  id                     String                      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  revision               Int                         @unique(map: "cms_publications_revision_key")
+  snapshot               Json
+  artifactState          CmsPublicationArtifactState @default(missing) @map("artifact_state")
+  artifactObjectKey      String?                     @map("artifact_object_key")
+  artifactEtag           String?                     @map("artifact_etag")
+  sourceApprovalId       String?                     @map("source_approval_id") @db.Uuid
+  actorUserId            String?                     @map("actor_user_id") @db.Uuid
+  createdAt              DateTime                    @default(now()) @map("created_at")
+
+  @@map("cms_publications")
+}
+
+model CmsRedirect {
+  id                  String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  sourcePath          String   @unique(map: "cms_redirects_source_path_key") @map("source_path")
+  destinationPath     String   @map("destination_path")
+  publicationRevision Int      @map("publication_revision")
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@index([active, sourcePath], map: "cms_redirects_active_source_path_idx")
+  @@map("cms_redirects")
+}
+
+model CmsPublicationController {
+  key                 String              @id @default("default")
+  desiredRevision     Int?                @map("desired_revision")
+  publishedRevision   Int?                @map("published_revision")
+  activeBuildId       String?             @map("active_build_id") @db.Uuid
+  activeSlot          CmsPublicationSlot  @default(blue) @map("active_slot")
+  status              CmsPublicationStatus @default(queued)
+  heartbeatAt         DateTime?           @map("heartbeat_at")
+  lastError           String?             @map("last_error")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  @@map("cms_publication_controller")
+}
+
+model CmsPublicationBuild {
+  id                    String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  publicationRevision   Int                @map("publication_revision")
+  slot                  CmsPublicationSlot
+  attempts              Int                @default(0)
+  state                 CmsBuildState      @default(queued)
+  heartbeatAt           DateTime?          @map("heartbeat_at")
+  markerVerifiedAt      DateTime?          @map("marker_verified_at")
+  diagnostics           Json?
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+
+  @@index([publicationRevision, state], map: "cms_publication_builds_revision_state_idx")
+  @@index([state, heartbeatAt], map: "cms_publication_builds_state_heartbeat_idx")
+  @@map("cms_publication_builds")
+}
+
+model CmsPreviewGrant {
+  id           String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  codeHash     String   @unique(map: "cms_preview_grants_code_hash_key") @map("code_hash")
+  actorUserId  String   @map("actor_user_id") @db.Uuid
+  pageId       String   @map("page_id") @db.Uuid
+  expiresAt    DateTime @map("expires_at")
+  consumedAt   DateTime? @map("consumed_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([pageId, expiresAt], map: "cms_preview_grants_page_expires_idx")
+  @@map("cms_preview_grants")
+}
+
+model CmsPreviewSession {
+  id           String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tokenHash    String   @unique(map: "cms_preview_sessions_token_hash_key") @map("token_hash")
+  actorUserId  String   @map("actor_user_id") @db.Uuid
+  pageId       String   @map("page_id") @db.Uuid
+  expiresAt    DateTime @map("expires_at")
+  revokedAt    DateTime? @map("revoked_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([pageId, expiresAt, revokedAt], map: "cms_preview_sessions_page_expiry_idx")
+  @@map("cms_preview_sessions")
+}
+
+model CmsBuilderRequestNonce {
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  nonce       String   @unique
+  keyVersion  String   @map("key_version")
+  buildId     String   @map("build_id") @db.Uuid
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([buildId, expiresAt], map: "cms_builder_request_nonces_build_expiry_idx")
+  @@map("cms_builder_request_nonces")
+}
+
+model CmsAuditEvent {
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  actionKey   String   @map("action_key")
+  targetType  String   @map("target_type")
+  targetId    String?  @map("target_id") @db.Uuid
+  summary     String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([actionKey, createdAt], map: "cms_audit_events_action_created_idx")
+  @@index([targetType, targetId, createdAt], map: "cms_audit_events_target_created_idx")
+  @@map("cms_audit_events")
 }
 
 model AuthSession {

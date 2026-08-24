@@ -262,8 +262,11 @@ recursive upload is not safe enough. The artifact contains that revision in a ca
 marker, and provider success is accepted only after promotion and marker verification. Then the
 controller advances `publishedRevision`; if `desiredRevision` is newer, it starts one follow-up.
 This single-flight state machine prevents a slow older deployment from overwriting a newer one.
-`backend/src/outbox/handlers.ts` carries only a commented shape; it is documentation, not an enabled
-controller or provider adapter.
+The checkout now ships the durable controller, short `website:rebuild:wakeup` handler, and
+`website:rebuild:reconcile` recurring pass. They stay provider-neutral until the selected hosting
+adapter supplies a queue sender and the dedicated `website-builder` image supplies promotion and
+public-marker verification. A missing adapter is surfaced as a retryable failure; the outbox never
+acknowledges a publication as complete merely because the provider is not configured.
 
 The template documents this instead of shipping it, because the two hosting paths are not one
 feature:

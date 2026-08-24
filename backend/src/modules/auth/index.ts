@@ -20,7 +20,12 @@ import {
   hashRefreshToken,
   hashRefreshTokenFamily,
 } from './infrastructure/refresh-tokens'
-import { createRequireAuth, createRequireRole, type AuthHttpEnv } from './transport/middleware'
+import {
+  createRequireAnyRole,
+  createRequireAuth,
+  createRequireRole,
+  type AuthHttpEnv,
+} from './transport/middleware'
 import { createAuthRoutes } from './transport/routes'
 
 type CreateAuthModuleOptions = {
@@ -53,7 +58,8 @@ export function createAuthModule({
     authenticateAccessToken: (accessToken: string | undefined) =>
       service.authenticateAccessToken(accessToken),
     requireAuth,
-    requireAdmin: createRequireRole('admin'),
+    requireAdmin: createRequireRole('owner'),
+    requireCmsAccess: createRequireAnyRole('editor', 'owner'),
     routes: createAuthRoutes({ env, requireAuth, service }),
   }
 }

@@ -15,6 +15,12 @@ const optionalStringSchema = z.preprocess((value) => {
   return trimmed === '' ? undefined : trimmed
 }, z.string().min(1).optional())
 
+const optionalSecretSchema = z.preprocess((value) => {
+  if (typeof value !== 'string') return value
+  const trimmed = value.trim()
+  return trimmed === '' ? undefined : trimmed
+}, z.string().min(32).optional())
+
 const optionalUrlSchema = z.preprocess((value) => {
   if (typeof value !== 'string') return value
   const trimmed = value.trim()
@@ -59,6 +65,16 @@ const envSchema = z.object({
   AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
   ADMIN_USERS_READ_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
   ADMIN_USERS_READ_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+  CMS_BODY_LIMIT_BYTES: z.coerce.number().int().positive().max(1024 * 1024).default(1024 * 1024),
+  CMS_MUTATION_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
+  CMS_MUTATION_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+  CMS_BUILDER_HMAC_ACTIVE_SECRET: optionalSecretSchema,
+  CMS_BUILDER_HMAC_PREVIOUS_SECRET: optionalSecretSchema,
+  CMS_BUILDER_QUEUE_URL: optionalUrlSchema,
+  CMS_BUILDER_YMQ_ENDPOINT: optionalUrlSchema,
+  CMS_BUILDER_YMQ_REGION: stringWithDefault('ru-central1'),
+  CMS_BUILDER_YMQ_ACCESS_KEY_ID: optionalStringSchema,
+  CMS_BUILDER_YMQ_SECRET_ACCESS_KEY: optionalSecretSchema,
   SHUTDOWN_GRACE_SECONDS: z.coerce.number().int().positive().max(60).default(20),
   // Which email adapter createEmailDelivery builds. 'console' prints the message instead of
   // sending it, so password reset can be followed locally; production refuses it below.
@@ -110,6 +126,7 @@ const envSchema = z.object({
   validateTrustedProxy(env, ctx)
   validatePrivateStorageEnv(env, ctx)
   validateEmailEnv(env, ctx)
+  validatePublicationEnv(env, ctx)
 })
 
 export type AppEnv = z.infer<typeof envSchema>
@@ -170,6 +187,48 @@ function validateTrustedProxy(env: z.infer<typeof envSchema>, ctx: z.RefinementC
       path: ['TRUSTED_PROXY_CLIENT_IP_POSITION'],
       message: 'TRUSTED_PROXY_CLIENT_IP_POSITION requires TRUSTED_PROXY_CLIENT_IP_HEADER',
     })
+  }
+}
+
+function validatePublicationEnv(env: z.infer<typeof envSchema>, ctx: z.RefinementCtx) {
+  if (env.CMS_BUILDER_HMAC_PREVIOUS_SECRET && !env.CMS_BUILDER_HMAC_ACTIVE_SECRET) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['CMS_BUILDER_HMAC_ACTIVE_SECRET'],
+      message: 'CMS_BUILDER_HMAC_ACTIVE_SECRET is required when a previous builder secret is configured',
+    })
+  }
+
+  const queueConfigured = Boolean(env.CMS_BUILDER_QUEUE_URL)
+  const keysConfigured = Boolean(env.CMS_BUILDER_YMQ_ACCESS_KEY_ID || env.CMS_BUILDER_YMQ_SECRET_ACCESS_KEY)
+  if (!queueConfigured && keysConfigured) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['CMS_BUILDER_QUEUE_URL'],
+      message: 'CMS_BUILDER_QUEUE_URL is required when YMQ credentials are configured',
+    })
+  }
+  if (!queueConfigured) return
+
+  for (const [key, value] of [
+    ['CMS_BUILDER_HMAC_ACTIVE_SECRET', env.CMS_BUILDER_HMAC_ACTIVE_SECRET],
+    ['CMS_BUILDER_YMQ_ACCESS_KEY_ID', env.CMS_BUILDER_YMQ_ACCESS_KEY_ID],
+    ['CMS_BUILDER_YMQ_SECRET_ACCESS_KEY', env.CMS_BUILDER_YMQ_SECRET_ACCESS_KEY],
+  ] as const) {
+    if (!value) {
+      ctx.addIssue({ code: 'custom', path: [key], message: `${key} is required when CMS_BUILDER_QUEUE_URL is configured` })
+    }
+  }
+
+  if (env.CMS_BUILDER_YMQ_ENDPOINT) {
+    const endpoint = new URL(env.CMS_BUILDER_YMQ_ENDPOINT)
+    if (endpoint.protocol !== 'https:' || endpoint.pathname !== '/' || endpoint.search || endpoint.hash) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CMS_BUILDER_YMQ_ENDPOINT'],
+        message: 'CMS_BUILDER_YMQ_ENDPOINT must be an HTTPS origin only',
+      })
+    }
   }
 }
 

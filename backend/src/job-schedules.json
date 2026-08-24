@@ -22,5 +22,13 @@
     "yandexExpression": "0 3 ? * * *",
     "lockTimeoutMs": 240000,
     "yandexExecutionTimeoutSeconds": 180
+  },
+  {
+    "key": "website-rebuild",
+    "job": "website:rebuild:reconcile",
+    "expression": "* * * * *",
+    "yandexExpression": "* * ? * * *",
+    "lockTimeoutMs": 240000,
+    "yandexExecutionTimeoutSeconds": 180
   }
 ]

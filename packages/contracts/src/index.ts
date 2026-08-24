@@ -1,4 +1,5 @@
 export * from './auth'
+export * from './cms'
 export * from './errors'
 export * from './uploads'
 export * from './users'

@@ -43,6 +43,25 @@ Only anonymous, public-equivalent HTML may use shared CDN caching such as `publi
 
 SEO-critical content must be present in the initial HTML: title, description, canonical URL, Open Graph/Twitter tags, product or category names, indexable descriptions, and public prices when they matter for search snippets. Client islands and server islands may enhance the page, but they must not be the only source of SEO-critical content.
 
+### Preview status
+
+The backend already exposes the one-time exchange at `POST /api/cms/preview/exchange`. The static
+website deliberately does not expose a `__preview` route or middleware: a static host cannot
+revalidate a private session, set an HttpOnly cookie, or proxy draft media per request. Adding a
+prerendered preview page would either publish a misleading shell or leak the existence of private
+pages.
+
+`src/cms/preview.ts` contains the framework-neutral server-side boundary for the future preview
+runtime. It accepts only the HTTPS grant URL issued by the backend, sends only the opaque token to
+the configured backend origin, validates the shared session response, and provides the scoped
+HttpOnly cookie plus `private, no-store`/`X-Robots-Tag: noindex, nofollow` response policy. It is not
+imported by public pages or browser islands, and it never stores a grant in browser storage.
+
+To activate preview, install an Astro Node adapter compatible with the pinned Astro release,
+deploy a separate runtime service, and add request-time `__preview` routes that call this helper,
+revalidate the session for every render, and proxy media through the backend. Keep this capability
+disabled until that runtime and its private backend/preview configuration are deployed together.
+
 ## Commands
 
 From the repository root:

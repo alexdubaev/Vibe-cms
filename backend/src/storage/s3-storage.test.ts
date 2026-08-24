@@ -121,3 +121,39 @@ describe('S3PrivateStorage presigned downloads', () => {
     )
   })
 })
+
+describe('S3PrivateStorage write-once objects', () => {
+  test('stores an immutable artifact with the expected metadata and returns its ETag', async () => {
+    const calls: unknown[] = []
+    const storage = new S3PrivateStorage(localConfig, {
+      send: async (command: { input: unknown }) => {
+        calls.push(command.input)
+        return { ETag: '"artifact-etag"' }
+      },
+    } as never)
+
+    await expect(storage.putObjectOnce('cms/publications/4/snapshot.json', new Uint8Array([1, 2, 3]), 'application/json')).resolves.toEqual({
+      stored: true,
+      etag: '"artifact-etag"',
+    })
+    expect(calls).toEqual([{
+      Bucket: 'local-private-storage',
+      Key: 'cms/publications/4/snapshot.json',
+      Body: new Uint8Array([1, 2, 3]),
+      ContentType: 'application/json',
+      ContentLength: 3,
+      IfNoneMatch: '*',
+    }])
+  })
+
+  test('turns an existing-object precondition into an idempotent result', async () => {
+    const storage = new S3PrivateStorage(localConfig, {
+      send: async () => { throw Object.assign(new Error('already exists'), { name: 'PreconditionFailed', $metadata: { httpStatusCode: 412 } }) },
+    } as never)
+
+    await expect(storage.putObjectOnce('cms/publications/4/snapshot.json', new Uint8Array([1]), 'application/json')).resolves.toEqual({
+      stored: false,
+      reason: 'already_exists',
+    })
+  })
+})

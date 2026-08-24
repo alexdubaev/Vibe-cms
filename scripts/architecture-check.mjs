@@ -8,6 +8,7 @@ const sourceRoots = [
   'packages/contracts/src',
   'webapp/src',
   'website/src',
+  'website-builder/src',
   'mobile/src',
 ]
 const sourceExtension = /\.(?:[cm]?[jt]sx?)$/

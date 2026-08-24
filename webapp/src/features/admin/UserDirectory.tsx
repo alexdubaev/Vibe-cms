@@ -196,12 +196,18 @@ export function UserDirectory({ currentUser }: { currentUser: UserDto }) {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem
-                            disabled={user.id === currentUser.id && user.role === 'admin'}
+                            disabled={user.id === currentUser.id && user.role === 'owner'}
                             value="user"
                           >
                             User
                           </SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="editor">Editor</SelectItem>
+                          <SelectItem
+                            disabled={user.id === currentUser.id && user.role === 'owner'}
+                            value="owner"
+                          >
+                            Owner
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>

@@ -23,8 +23,12 @@ export function createRequireAuth(
 }
 
 export function createRequireRole(role: UserRole) {
+  return createRequireAnyRole(role)
+}
+
+export function createRequireAnyRole(...roles: UserRole[]) {
   return createMiddleware<AuthHttpEnv>(async (c, next) => {
-    if (c.var.user.role !== role) {
+    if (!roles.includes(c.var.user.role)) {
       throw new AppError(403, 'FORBIDDEN', 'You do not have permission to access this resource')
     }
     await next()

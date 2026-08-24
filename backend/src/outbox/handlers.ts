@@ -42,19 +42,34 @@ export const taskHandlers = {
       await createAuthTasks(runtime).deliverPasswordChanged(input, signal)
     },
   },
-  // This is only a wake-up for a durable, single-flight rebuild controller. Publishing advances
-  // desiredRevision and enqueues a unique website:rebuild:<revision> task; short reconciler passes
-  // persist/adopt provider deployment state, verify the public artifact revision, and start one
-  // follow-up while desiredRevision is newer than publishedRevision. A recurring reconcile job is
-  // the repair path, so correctness never depends on reopening this terminal outbox row. The
-  // template does not ship that state machine. See docs/BACKGROUND_JOBS.md before implementing.
-  //
-  // 'website:rebuild': {
-  //   maxAttempts: 3,
-  //   run: async (_context, runtime) => {
-  //     await triggerDeployment(runtime.env)
-  //   },
-  // },
+  'media:delete-object': {
+    maxAttempts: 5,
+    run: async ({ payload }, runtime) => {
+      const input = mediaDeletePayload(payload)
+      await runtime.privateStorage.storage.deleteObject(input.objectKey)
+      await runtime.prisma.cmsMediaAsset.deleteMany({ where: { id: input.assetId, state: 'deleting' } })
+    },
+  },
+  /**
+   * A publication only wakes the durable controller. This attempt never waits for the builder;
+   * it claims at most one build, prepares its immutable input, and sends a tiny queue command.
+   * The recurring reconcile job retries the same state machine after a lost wake-up or provider
+   * outage.
+   */
+  'website:rebuild:wakeup': {
+    maxAttempts: 3,
+    deadlineMs: 15_000,
+    run: async ({ payload }, runtime) => {
+      publicationWakeupPayload(payload)
+      if (!runtime.publicationRebuild) {
+        throw new Error('Publication rebuild controller is not configured')
+      }
+      const result = await runtime.publicationRebuild.reconcile()
+      if (result.kind === 'dispatch-failed') {
+        throw new Error('Publication rebuild dispatch failed; reconciliation will retry')
+      }
+    },
+  },
 } satisfies TaskHandlerRegistry
 
 /**
@@ -69,6 +84,22 @@ function emailPayload(payload: unknown): { email: string } {
   }
 
   return { email }
+}
+
+function mediaDeletePayload(payload: unknown): { assetId: string; objectKey: string } {
+  const value = payload as { assetId?: unknown; objectKey?: unknown }
+  if (typeof value?.assetId !== 'string' || typeof value.objectKey !== 'string') {
+    throw new TerminalTaskError('Media deletion payload is missing an asset id or object key')
+  }
+  return { assetId: value.assetId, objectKey: value.objectKey }
+}
+
+function publicationWakeupPayload(payload: unknown): { revision: number } {
+  const revision = (payload as { revision?: unknown })?.revision
+  if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 1) {
+    throw new TerminalTaskError('Publication wake-up payload is missing a valid revision')
+  }
+  return { revision }
 }
 
 export function taskTypeNames(registry: TaskHandlerRegistry = taskHandlers): string[] {

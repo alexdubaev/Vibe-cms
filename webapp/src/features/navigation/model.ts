@@ -1,7 +1,14 @@
 import type { UserRole } from '@web-app-demo/contracts'
 
 export type UserRoutePath = '/app' | '/app/profile' | '/app/settings'
-export type AdminRoutePath = '/admin' | '/admin/users' | '/admin/settings'
+export type AdminRoutePath =
+  | '/admin'
+  | '/admin/users'
+  | '/admin/settings'
+  | '/admin/pages'
+  | '/admin/content/service'
+  | '/admin/publications'
+  | '/admin/media'
 export type WorkspaceRoutePath = UserRoutePath | AdminRoutePath
 
 const navigationByRole = {
@@ -10,9 +17,21 @@ const navigationByRole = {
     { label: 'Profile', to: '/app/profile' },
     { label: 'Settings', to: '/app/settings' },
   ],
-  admin: [
+  editor: [
+    { label: 'Dashboard', to: '/admin' },
+    { label: 'Страницы', to: '/admin/pages' },
+    { label: 'Контент', to: '/admin/content/service' },
+    { label: 'Медиатека', to: '/admin/media' },
+    { label: 'Публикации', to: '/admin/publications' },
+    { label: 'Settings', to: '/admin/settings' },
+  ],
+  owner: [
     { label: 'Dashboard', to: '/admin' },
     { label: 'Users', to: '/admin/users' },
+    { label: 'Страницы', to: '/admin/pages' },
+    { label: 'Контент', to: '/admin/content/service' },
+    { label: 'Медиатека', to: '/admin/media' },
+    { label: 'Публикации', to: '/admin/publications' },
     { label: 'Settings', to: '/admin/settings' },
   ],
 } as const satisfies Record<UserRole, ReadonlyArray<{ label: string; to: WorkspaceRoutePath }>>
@@ -22,7 +41,7 @@ export function navigationItemsForRole(role: UserRole) {
 }
 
 export function homePathForRole(role: UserRole): '/app' | '/admin' {
-  return role === 'admin' ? '/admin' : '/app'
+  return role === 'user' ? '/app' : '/admin'
 }
 
 export function resolveRoleDestination(

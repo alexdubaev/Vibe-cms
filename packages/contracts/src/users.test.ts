@@ -20,9 +20,10 @@ const user = {
 describe('user and admin contracts', () => {
   test('requires one of the supported roles on every user DTO', () => {
     expect(userSchema.parse(user)).toEqual(user)
-    expect(userSchema.parse({ ...user, role: 'admin' })).toEqual({ ...user, role: 'admin' })
     expect(() => userSchema.parse({ ...user, role: undefined })).toThrow()
-    expect(() => userSchema.parse({ ...user, role: 'owner' })).toThrow()
+    expect(userSchema.parse({ ...user, role: 'owner' })).toEqual({ ...user, role: 'owner' })
+    expect(userSchema.parse({ ...user, role: 'editor' })).toEqual({ ...user, role: 'editor' })
+    expect(() => userSchema.parse({ ...user, role: 'admin' })).toThrow()
   })
 
   test('normalizes profile updates and allows explicitly clearing the display name', () => {
@@ -67,8 +68,9 @@ describe('user and admin contracts', () => {
     expect(() =>
       adminUserSummarySchema.parse({ ...summary, passwordHash: 'must-not-leak' }),
     ).toThrow()
-    expect(updateUserRoleRequestSchema.parse({ role: 'admin' })).toEqual({ role: 'admin' })
-    expect(() => updateUserRoleRequestSchema.parse({ role: 'owner' })).toThrow()
+    expect(updateUserRoleRequestSchema.parse({ role: 'owner' })).toEqual({ role: 'owner' })
+    expect(updateUserRoleRequestSchema.parse({ role: 'editor' })).toEqual({ role: 'editor' })
+    expect(() => updateUserRoleRequestSchema.parse({ role: 'admin' })).toThrow()
     expect(adminUserParamsSchema.parse({ userId: user.id })).toEqual({ userId: user.id })
     expect(() => adminUserParamsSchema.parse({ userId: 'not-a-uuid' })).toThrow()
   })

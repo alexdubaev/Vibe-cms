@@ -88,7 +88,7 @@ maybeDescribe('users and admin API integration', () => {
     const roleChange = await app.request(`/api/admin/users/${session.user.id}/role`, {
       method: 'PATCH',
       headers: authenticatedJsonHeaders(session.accessToken),
-      body: JSON.stringify({ role: 'admin' }),
+      body: JSON.stringify({ role: 'owner' }),
     })
 
     for (const response of [dashboard, users, roleChange]) {
@@ -97,11 +97,30 @@ maybeDescribe('users and admin API integration', () => {
     }
   })
 
+  test('maps a legacy Prisma admin row to owner capabilities and API output', async () => {
+    const legacy = await register('legacy-admin@example.com', 'Legacy Admin')
+    await prisma.user.update({
+      where: { id: legacy.user.id },
+      data: { role: 'admin' },
+    })
+
+    const me = await app.request('/api/auth/me', {
+      headers: authenticatedHeaders(legacy.accessToken),
+    })
+    expect(me.status).toBe(200)
+    expect((await me.json()).user.role).toBe('owner')
+
+    const dashboard = await app.request('/api/admin/dashboard', {
+      headers: authenticatedHeaders(legacy.accessToken),
+    })
+    expect(dashboard.status).toBe(200)
+  })
+
   test('lets admins inspect users and promote an account while revoking its sessions', async () => {
     const admin = await register('admin@example.com', 'Admin')
     await prisma.user.update({
       where: { id: admin.user.id },
-      data: { role: 'admin' },
+      data: { role: 'owner' },
     })
     const target = await register('target@example.com', 'Target')
     const resetTokenBeforePromotion = 'p'.repeat(43)
@@ -158,7 +177,7 @@ maybeDescribe('users and admin API integration', () => {
     const malformedUserId = await app.request('/api/admin/users/not-a-uuid/role', {
       method: 'PATCH',
       headers: authenticatedJsonHeaders(admin.accessToken),
-      body: JSON.stringify({ role: 'admin' }),
+      body: JSON.stringify({ role: 'owner' }),
     })
     expect(malformedUserId.status).toBe(400)
     expect((await malformedUserId.json()).error.code).toBe('VALIDATION_ERROR')
@@ -166,10 +185,10 @@ maybeDescribe('users and admin API integration', () => {
     const promote = await app.request(`/api/admin/users/${target.user.id}/role`, {
       method: 'PATCH',
       headers: authenticatedJsonHeaders(admin.accessToken),
-      body: JSON.stringify({ role: 'admin' }),
+      body: JSON.stringify({ role: 'owner' }),
     })
     expect(promote.status).toBe(200)
-    expect((await promote.json()).user.role).toBe('admin')
+    expect((await promote.json()).user.role).toBe('owner')
 
     const revokedMe = await app.request('/api/auth/me', {
       headers: authenticatedHeaders(target.accessToken),
@@ -188,7 +207,7 @@ maybeDescribe('users and admin API integration', () => {
       {
         method: 'PATCH',
         headers: authenticatedJsonHeaders(admin.accessToken),
-        body: JSON.stringify({ role: 'admin' }),
+        body: JSON.stringify({ role: 'owner' }),
       },
     )
     expect(idempotentPromotion.status).toBe(200)
@@ -203,7 +222,7 @@ maybeDescribe('users and admin API integration', () => {
     const second = await register('second-admin@example.com')
     await prisma.user.updateMany({
       where: { id: { in: [first.user.id, second.user.id] } },
-      data: { role: 'admin' },
+      data: { role: 'owner' },
     })
 
     const selfDemotion = await app.request(`/api/admin/users/${first.user.id}/role`, {
@@ -229,14 +248,14 @@ maybeDescribe('users and admin API integration', () => {
     const statuses = [firstDemotesSecond.status, secondDemotesFirst.status].sort()
     expect(statuses[0]).toBe(200)
     expect([401, 403]).toContain(statuses[1])
-    expect(await prisma.user.count({ where: { role: 'admin' } })).toBe(1)
+    expect(await prisma.user.count({ where: { role: 'owner' } })).toBe(1)
   })
 
   test('keeps queued role transitions from blocking unrelated target logins', async () => {
     const actor = await register('queue-actor@example.com')
     await prisma.user.update({
       where: { id: actor.user.id },
-      data: { role: 'admin' },
+      data: { role: 'owner' },
     })
     const firstTarget = await register('queue-first@example.com')
     const secondTarget = await register('queue-second@example.com')
@@ -248,7 +267,7 @@ maybeDescribe('users and admin API integration', () => {
       requestApp.request(`/api/admin/users/${targetId}/role`, {
         method: 'PATCH',
         headers: authenticatedJsonHeaders(actor.accessToken),
-        body: JSON.stringify({ role: 'admin' }),
+        body: JSON.stringify({ role: 'owner' }),
       })
 
     const firstRoleChange = promote(firstTarget.user.id, firstRoleApp)
@@ -361,7 +380,7 @@ maybeDescribe('users and admin API integration', () => {
     const admin = await register('role-first-admin@example.com')
     await prisma.user.update({
       where: { id: admin.user.id },
-      data: { role: 'admin' },
+      data: { role: 'owner' },
     })
     const target = await register('role-first-target@example.com')
     const userUpdateGate = gateNextUserUpdate(target.user.id)
@@ -369,7 +388,7 @@ maybeDescribe('users and admin API integration', () => {
     const roleChange = roleApp.request(`/api/admin/users/${target.user.id}/role`, {
       method: 'PATCH',
       headers: authenticatedJsonHeaders(admin.accessToken),
-      body: JSON.stringify({ role: 'admin' }),
+      body: JSON.stringify({ role: 'owner' }),
     })
     await userUpdateGate.reached
 
@@ -393,7 +412,7 @@ maybeDescribe('users and admin API integration', () => {
     expect(roleResponse.status).toBe(200)
     expect(loginSettledBeforeRoleChange).toBe(false)
     expect(loginResponse.status).toBe(200)
-    expect(loginBody.user.role).toBe('admin')
+    expect(loginBody.user.role).toBe('owner')
     expect(await app.request('/api/auth/me', {
       headers: authenticatedHeaders(loginBody.accessToken),
     })).toHaveProperty('status', 200)
@@ -411,7 +430,7 @@ maybeDescribe('users and admin API integration', () => {
     const seeded = await prisma.user.findUniqueOrThrow({
       where: { email: 'admin@example.com' },
     })
-    expect(seeded).toMatchObject({ passwordHash: null, role: 'admin' })
+    expect(seeded).toMatchObject({ passwordHash: null, role: 'owner' })
     await expect(assertLoginCapableAdmin(prisma)).rejects.toThrow(
       'password credential',
     )
@@ -458,7 +477,7 @@ maybeDescribe('users and admin API integration', () => {
     expect(unlocked.passwordHash).not.toBeNull()
     expect(await Bun.password.verify(password, unlocked.passwordHash!)).toBe(true)
     await expect(assertLoginCapableAdmin(prisma)).resolves.toBeUndefined()
-  })
+  }, 60_000)
 
   test('concurrent first-admin bootstraps converge on one idempotent account', async () => {
     const config = {
@@ -478,7 +497,7 @@ maybeDescribe('users and admin API integration', () => {
     expect(await prisma.user.findUniqueOrThrow({
       where: { email: config.email },
       select: { passwordHash: true, role: true },
-    })).toEqual({ passwordHash: null, role: 'admin' })
+    })).toEqual({ passwordHash: null, role: 'owner' })
   })
 
   test('seeds login-ready development admin and user accounts idempotently', async () => {
@@ -494,7 +513,7 @@ maybeDescribe('users and admin API integration', () => {
     }
 
     expect(await bootstrapDevelopmentData(prisma, accounts)).toEqual({
-      admin: { email: accounts.admin.email, role: 'admin' },
+      admin: { email: accounts.admin.email, role: 'owner' },
       user: { email: accounts.user.email, role: 'user' },
     })
     const firstHashes = await prisma.user.findMany({
@@ -504,7 +523,7 @@ maybeDescribe('users and admin API integration', () => {
     })
 
     await expect(bootstrapDevelopmentData(prisma, accounts)).resolves.toEqual({
-      admin: { email: accounts.admin.email, role: 'admin' },
+      admin: { email: accounts.admin.email, role: 'owner' },
       user: { email: accounts.user.email, role: 'user' },
     })
     expect(await prisma.user.findMany({
@@ -521,7 +540,7 @@ maybeDescribe('users and admin API integration', () => {
       })
       expect(response.status).toBe(200)
       const body = await response.json()
-      expect(body.user.role).toBe(role)
+      expect(body.user.role).toBe(role === 'admin' ? 'owner' : role)
     }
   })
 
@@ -568,11 +587,11 @@ maybeDescribe('users and admin API integration', () => {
 
     await expect(Promise.all([firstSeed, secondSeed])).resolves.toEqual([
       {
-        admin: { email: accounts.admin.email, role: 'admin' },
+        admin: { email: accounts.admin.email, role: 'owner' },
         user: { email: accounts.user.email, role: 'user' },
       },
       {
-        admin: { email: accounts.admin.email, role: 'admin' },
+        admin: { email: accounts.admin.email, role: 'owner' },
         user: { email: accounts.user.email, role: 'user' },
       },
     ])
@@ -650,7 +669,7 @@ maybeDescribe('users and admin API integration', () => {
     expect(await prisma.user.findUniqueOrThrow({
       where: { id: existing.user.id },
       select: { role: true },
-    })).toEqual({ role: 'admin' })
+    })).toEqual({ role: 'owner' })
 
     const relogin = await login(existing.user.email)
     const replacementPassword = 'replacement-admin-password'

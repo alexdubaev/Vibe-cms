@@ -46,3 +46,25 @@ describe('a task payload that cannot be used', () => {
     }
   })
 })
+
+describe('publication wake-up task', () => {
+  test('runs one short reconcile pass and does not wait for the builder', async () => {
+    let calls = 0
+    await taskHandlers['website:rebuild:wakeup']!.run(
+      { attempt: 1, finalAttempt: false, now: new Date(), payload: { revision: 4 }, signal: new AbortController().signal },
+      { publicationRebuild: { reconcile: async () => { calls += 1; return { kind: 'dispatched' } } } } as never,
+    )
+    expect(calls).toBe(1)
+  })
+
+  test('rejects a malformed wake-up permanently and retries provider failures', async () => {
+    await expect(taskHandlers['website:rebuild:wakeup']!.run(
+      { attempt: 1, finalAttempt: false, now: new Date(), payload: {}, signal: new AbortController().signal },
+      {} as never,
+    )).rejects.toThrow(TerminalTaskError)
+    await expect(taskHandlers['website:rebuild:wakeup']!.run(
+      { attempt: 1, finalAttempt: false, now: new Date(), payload: { revision: 4 }, signal: new AbortController().signal },
+      {} as never,
+    )).rejects.toThrow('not configured')
+  })
+})

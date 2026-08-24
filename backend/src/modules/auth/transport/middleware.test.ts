@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 
 import { handleError } from '../../../http/errors'
 import { AuthFailure } from '../domain/errors'
-import { createRequireAuth, type AuthHttpEnv } from './middleware'
+import { createRequireAnyRole, createRequireAuth, type AuthHttpEnv } from './middleware'
 
 describe('requireAuth middleware', () => {
   test('rejects missing and invalid bearer tokens, and lets a valid one through', async () => {
@@ -23,6 +23,27 @@ describe('requireAuth middleware', () => {
       headers: { Authorization: 'Bearer valid-token' },
     })
     expect(valid.status).toBe(200)
+  })
+
+  test('allows CMS roles while rejecting regular users', async () => {
+    const app = new Hono<AuthHttpEnv>()
+    app.use('*', async (c, next) => {
+      c.set('user', {
+        id: 'user-1',
+        email: 'user@example.com',
+        displayName: null,
+        role: c.req.header('x-role') === 'owner' ? 'owner' : 'user',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        sessionId: 'session-1',
+      })
+      await next()
+    })
+    app.use('*', createRequireAnyRole('editor', 'owner'))
+    app.get('/protected', (c) => c.text('ok'))
+    app.onError(handleError)
+
+    expect((await app.request('/protected')).status).toBe(403)
+    expect((await app.request('/protected', { headers: { 'x-role': 'owner' } })).status).toBe(200)
   })
 })
 

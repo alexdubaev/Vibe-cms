@@ -276,23 +276,37 @@ function withDeadline<Result>(
   work: (signal: AbortSignal) => Promise<Result>,
   { deadlineMs, type }: { deadlineMs: number; type: string },
 ) {
-  const signal = AbortSignal.timeout(deadlineMs)
-  const running = work(signal)
+  // Use an explicit timer instead of AbortSignal.timeout. Bun's test runner (and a few older
+  // Node runtimes) do not advance the latter reliably, which can leave the drain waiting forever
+  // even though a normal setTimeout fires. The controller still gives handlers the same abort
+  // signal, while the timer is always cleared once the race settles.
+  const controller = new AbortController()
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort()
+      reject(new Error(`Task ${type} did not finish within its ${deadlineMs}ms deadline`))
+    }, deadlineMs)
+  })
+
+  let running: Promise<Result>
+  try {
+    running = Promise.resolve(work(controller.signal))
+  } catch (error) {
+    if (timeout) clearTimeout(timeout)
+    return Promise.reject(error)
+  }
 
   return Promise.race([
     // A rejection arriving after the race is lost would otherwise be unhandled.
     running.catch((error: unknown) => {
-      if (!signal.aborted) throw error
+      if (!controller.signal.aborted) throw error
       return undefined as Result
     }),
-    new Promise<never>((_, reject) => {
-      signal.addEventListener(
-        'abort',
-        () => reject(new Error(`Task ${type} did not finish within its ${deadlineMs}ms deadline`)),
-        { once: true },
-      )
-    }),
-  ])
+    deadline,
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
 }
 
 function errorMessage(error: unknown) {

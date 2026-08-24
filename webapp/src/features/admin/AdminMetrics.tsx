@@ -56,9 +56,9 @@ export function AdminMetrics() {
           value: query.data.totalUsers.toLocaleString(),
         },
         {
-          description: 'Accounts with administrator access.',
+          description: 'Accounts with owner access.',
           icon: UserShield01Icon,
-          label: 'Administrators',
+          label: 'Owners',
           value: query.data.totalAdmins.toLocaleString(),
         },
         {

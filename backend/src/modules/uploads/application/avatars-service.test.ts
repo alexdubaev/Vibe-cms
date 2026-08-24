@@ -59,6 +59,11 @@ function createFakeStorage() {
     async deleteObject(key) {
       objects.delete(key)
     },
+    async putObjectOnce(key, bytes, contentType) {
+      if (objects.has(key)) return { stored: false as const, reason: 'already_exists' as const }
+      objects.set(key, { bytes, contentType })
+      return { stored: true as const, etag: 'etag' }
+    },
   }
 
   return {

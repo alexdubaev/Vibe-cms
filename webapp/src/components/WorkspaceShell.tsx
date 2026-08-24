@@ -1,6 +1,9 @@
 import {
   DashboardSquare01Icon,
+  Album01Icon,
+  File01Icon,
   Home01Icon,
+  Rocket01Icon,
   Settings01Icon,
   UserGroupIcon,
   UserIcon,
@@ -26,6 +29,10 @@ const iconsByPath = {
   '/app/settings': Settings01Icon,
   '/admin': DashboardSquare01Icon,
   '/admin/users': UserGroupIcon,
+  '/admin/pages': File01Icon,
+  '/admin/content/service': File01Icon,
+  '/admin/media': Album01Icon,
+  '/admin/publications': Rocket01Icon,
   '/admin/settings': Settings01Icon,
 } as const
 
@@ -50,7 +57,7 @@ export function WorkspaceShell({
   const navigationItems = navigationItemsForRole(user.role)
   const activeItem = navigationItems.find((item) => item.to === pathname)
   const homePath = homePathForRole(user.role)
-  const settingsPath = user.role === 'admin' ? '/admin/settings' : '/app/settings'
+  const settingsPath = user.role === 'user' ? '/app/settings' : '/admin/settings'
   const items: ReadonlyArray<DashboardNavigationItem> = navigationItems.map((item) => ({
     ...item,
     icon: iconsByPath[item.to],
@@ -66,11 +73,11 @@ export function WorkspaceShell({
         onLogout={onLogout}
         settingsPath={settingsPath}
         user={user}
-        workspaceLabel={user.role === 'admin' ? 'Admin workspace' : 'User workspace'}
+        workspaceLabel={user.role === 'user' ? 'User workspace' : 'CMS workspace'}
       />
       <SidebarInset>
         <SiteHeader
-          title={activeItem?.label ?? (user.role === 'admin' ? 'Dashboard' : 'Home')}
+          title={activeItem?.label ?? (user.role === 'user' ? 'Home' : 'Dashboard')}
         />
         <div className="flex min-w-0 flex-1 flex-col">{children}</div>
       </SidebarInset>
