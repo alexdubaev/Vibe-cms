@@ -166,6 +166,16 @@ describe('CMS contracts', () => {
       ...input,
       media: [{ ...input.media[0], destinationPath: input.media[0].destinationPath.replace('/green/', '/blue/') }],
     })).toThrow()
+    for (const sourceUrl of [
+      'http://storage.example.test/signed-media',
+      'https://user:password@storage.example.test/signed-media',
+      'https://storage.example.test/signed-media#fragment',
+    ]) {
+      expect(() => publicationBuildInputSchema.parse({
+        ...input,
+        media: [{ ...input.media[0], sourceUrl }],
+      })).toThrow()
+    }
   })
 
   test('requires optimistic revisions and typed preview/conflict responses', () => {

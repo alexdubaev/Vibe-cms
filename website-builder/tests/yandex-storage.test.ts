@@ -196,6 +196,38 @@ describe('Yandex Object Storage adapter', () => {
     expect(calls).toHaveLength(1)
   })
 
+  test('requires credential-free HTTPS media URLs and keeps reads inside slots', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const fetcher: FetchLike = async (input, init) => {
+      calls.push({ url: String(input), init })
+      return response()
+    }
+    const adapter = createYandexObjectStorageAdapter({
+      endpoint,
+      bucket: 'vibe-media',
+      accessKeyId: 'access-key',
+      secretAccessKey: 'secret-key',
+      now: fixedDate,
+      fetcher,
+    })
+
+    for (const sourceUrl of [
+      'http://cdn.example/signed?token=one',
+      'https://user:password@cdn.example/signed?token=one',
+      'https://cdn.example/signed?token=one#fragment',
+    ]) {
+      await expect(adapter.copyFromSignedUrl({
+        sourceUrl,
+        destinationPath: '/green/media/site-1/asset-1/logo.png',
+        contentType: 'image/png',
+      })).rejects.toThrow()
+    }
+
+    await expect(adapter.headObject('media/private-key')).rejects.toThrow('outside the configured prefixes')
+    await expect(adapter.readObject('media/private-key')).rejects.toThrow('outside the configured prefixes')
+    expect(calls).toHaveLength(0)
+  })
+
   test('rejects media bodies larger than the configured maximum before writing', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     const fetcher: FetchLike = async (input, init) => {

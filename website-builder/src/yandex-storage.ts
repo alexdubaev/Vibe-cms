@@ -119,7 +119,7 @@ export function createYandexObjectStorageAdapter(options: YandexObjectStorageOpt
     },
 
     async copyFromSignedUrl(input: MediaCopyRequest) {
-      if (!isHttpUrl(input.sourceUrl)) throw new Error('Media source must be a signed HTTP URL')
+      if (!isSafeSignedUrl(input.sourceUrl)) throw new Error('Media source must be a credential-free HTTPS URL without a fragment')
       const destination = MEDIA_DESTINATION.exec(input.destinationPath)
       if (!destination || !allowedSlots.has(destination[1] as 'blue' | 'green')) throw new Error('Media destination path is invalid')
       if (!MEDIA_CONTENT_TYPES.has(input.contentType)) throw new Error('Media content type is invalid')
@@ -182,7 +182,7 @@ function isAllowedSlotPrefix(prefix: string, allowedSlots: Set<'blue' | 'green'>
 }
 
 function isReadableKey(key: string, allowedSlots: Set<'blue' | 'green'>) {
-  return isAllowedStaticKey(key, allowedSlots) || (key.startsWith('media/') && isSafeKey(key))
+  return isAllowedStaticKey(key, allowedSlots)
 }
 
 function isSafeKey(key: string) {
@@ -360,10 +360,10 @@ function decodeXml(value: string) {
   return value.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
 }
 
-function isHttpUrl(value: string) {
+function isSafeSignedUrl(value: string) {
   try {
     const url = new URL(value)
-    return url.protocol === 'https:' || url.protocol === 'http:'
+    return url.protocol === 'https:' && !url.username && !url.password && !url.hash
   } catch {
     return false
   }

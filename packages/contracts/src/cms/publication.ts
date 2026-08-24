@@ -61,16 +61,16 @@ export const publicationSnapshotSchema = z
   })
   .strict()
 
-const signedHttpUrlSchema = z
+const signedMediaUrlSchema = z
   .url()
   .refine((value) => {
-    const protocol = new URL(value).protocol
-    return protocol === 'https:' || protocol === 'http:'
-  }, 'Media source must be an HTTP(S) URL')
+    const url = new URL(value)
+    return url.protocol === 'https:' && !url.username && !url.password && !url.hash
+  }, 'Media source must be a credential-free HTTPS URL without a fragment')
 
 export const publicationMediaCopySchema = z
   .object({
-    sourceUrl: signedHttpUrlSchema,
+    sourceUrl: signedMediaUrlSchema,
     destinationPath: z.string().regex(/^\/(blue|green)\/media\/[a-z0-9-]+\/[a-z0-9-]+\/[A-Za-z0-9._-]+$/),
     contentType: mediaMimeTypeSchema,
   })
