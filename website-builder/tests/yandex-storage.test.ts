@@ -110,6 +110,31 @@ describe('Yandex Object Storage adapter', () => {
     expect(calls.filter((call) => call.init?.method === 'HEAD')).toHaveLength(2)
   })
 
+  test('reads release markers from configured slots and treats missing objects as absent', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    const fetcher: FetchLike = async (input, init) => {
+      calls.push({ url: String(input), init })
+      return String(input).endsWith('/missing.txt') ? response(404) : response(200, 'vibe-publication:4')
+    }
+    const adapter = createYandexObjectStorageAdapter({
+      endpoint,
+      bucket: 'vibe-public',
+      accessKeyId: 'access-key',
+      secretAccessKey: 'secret-key',
+      slots: ['blue'],
+      now: fixedDate,
+      fetcher,
+    })
+
+    await expect(adapter.readObject('blue/__publication_revision.txt')).resolves.toEqual(new TextEncoder().encode('vibe-publication:4'))
+    await expect(adapter.readObject('blue/missing.txt')).resolves.toBeNull()
+    await expect(adapter.readObject('green/__publication_revision.txt')).rejects.toThrow('outside the configured prefixes')
+    expect(calls.map((call) => `${call.init?.method}:${call.url}`)).toEqual([
+      'GET:https://storage.yandexcloud.net/vibe-public/blue/__publication_revision.txt',
+      'GET:https://storage.yandexcloud.net/vibe-public/blue/missing.txt',
+    ])
+  })
+
   test('copies media from a signed URL into the validated media prefix', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     const fetcher: FetchLike = async (input, init) => {

@@ -10,6 +10,8 @@ export type BuilderWorker = {
 export { publishBuiltRelease } from './release-pipeline'
 export { createYandexObjectStorageAdapter } from './yandex-storage'
 export type { YandexObjectStorageAdapter, YandexObjectStorageOptions } from './yandex-storage'
+export { createHttpPublicationPromotion, promotePublication } from './yandex-promotion'
+export type { PublicationPromotionPort, PublicationPromotionOptions } from './yandex-promotion'
 
 export function createBuilderHttpHandler(worker: BuilderWorker) {
   return async (request: Request): Promise<Response> => {

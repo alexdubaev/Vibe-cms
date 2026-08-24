@@ -383,7 +383,7 @@ Expected: transaction, deduplication, at-least-once delivery, heartbeat, and fol
 
 ## Task 6: Build the dedicated website-builder workspace
 
-> Progress note: the isolated `website-builder` workspace now parses YMQ envelopes, deduplicates and sequentially processes build ids, signs backend input/heartbeat/result calls, validates immutable snapshot artifacts, runs Astro in a temporary output directory, collects static output with cache policy, validates all slot keys before destructive work, uploads the inactive slot with a last-written marker, and provides a tested Yandex S3/SigV4 storage adapter with bounded signed-URL media copy. Promotion wiring and full snapshot-aware Astro block renderer remain pending.
+> Progress note: the isolated `website-builder` workspace now parses YMQ envelopes, deduplicates and sequentially processes build ids, signs backend input/heartbeat/result calls, validates immutable snapshot artifacts, runs Astro in a temporary output directory, collects static output with cache policy, validates all slot keys before destructive work, uploads the inactive slot with a last-written marker, provides a tested Yandex S3/SigV4 storage adapter with bounded signed-URL media copy, and wires production blue/green promotion through HTTPS selector/purge control endpoints plus public marker polling. Server-side media copy from the publication snapshot and the full snapshot-aware Astro block renderer remain pending.
 
 **Files:**
 
@@ -422,7 +422,7 @@ Fetch the signed artifact URL, download and validate the assigned publication sn
 
 Use S3 `CopyObject` from the private media bucket to `/media/<assetId>/<contentVersion>/<safe-name>` in the inactive slot. Upload immutable assets first, then HTML/XML/redirect objects, then the marker last. Redirect objects are zero-byte objects with `WebsiteRedirectLocation` metadata. Delete stale objects only from the assigned inactive bucket.
 
-- [ ] **Step 5: Implement promotion and verification**
+- [x] **Step 5: Implement promotion and verification**
 
 Verify the inactive marker and representative HTML directly. Switch the pre-created ALB selector, purge mutable CDN paths, and poll the public marker with a revision query parameter and `no-store`. Report success only after the marker matches.
 
@@ -438,6 +438,8 @@ docker build -f website-builder/Dockerfile -t vibe-cms-builder-test .
 ```
 
 Expected: unit tests, typecheck, architecture check, and image build pass without injecting backend/database credentials.
+
+Current evidence: builder tests (**19 pass**), typecheck and architecture check pass; the Docker image gate is blocked by the external `bun install --frozen-lockfile` hang, and the aggregate backend integration gate has the known Windows/Bun/Prisma transaction timeout.
 
 - [ ] **Checkpoint:** inspect image layers and environment declarations for secrets and unexpected build context.
 

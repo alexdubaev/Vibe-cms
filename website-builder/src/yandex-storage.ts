@@ -21,6 +21,7 @@ export type YandexObjectStorageOptions = {
 
 export type YandexObjectStorageAdapter = StaticUploadPort & MediaCopyPort & {
   headObject(key: string): Promise<boolean>
+  readObject(key: string): Promise<Uint8Array | null>
 }
 
 const EMPTY_HASH = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
@@ -100,6 +101,13 @@ export function createYandexObjectStorageAdapter(options: YandexObjectStorageOpt
       if (!isReadableKey(key, allowedSlots)) throw new Error('Object Storage HEAD key is outside the configured prefixes')
       const response = await request({ method: 'HEAD', key, allowNotFound: true })
       return response.status >= 200 && response.status < 300
+    },
+
+    async readObject(key: string) {
+      if (!isReadableKey(key, allowedSlots)) throw new Error('Object Storage GET key is outside the configured prefixes')
+      const response = await request({ method: 'GET', key, allowNotFound: true })
+      if (response.status === 404) return null
+      return new Uint8Array(await response.arrayBuffer())
     },
 
     async copyFromSignedUrl(input: MediaCopyRequest) {
