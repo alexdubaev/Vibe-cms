@@ -103,6 +103,7 @@ const cmsPublicationSummarySchema = z
       .nullable(),
   })
   .strict()
+const cmsPublicationPolicySchema = z.object({ editorCanPublish: z.boolean() }).strict()
 
 const cmsPendingApprovalSchema = z
   .object({
@@ -299,6 +300,13 @@ export function saveCmsPage(
 
 export function getCmsPublicationSummary(transport: AuthenticatedTransport) {
   return transport.request('/api/cms/publication', cmsPublicationSummaryResponseSchema)
+}
+
+export function saveCmsPublicationPolicy(transport: AuthenticatedTransport, editorCanPublish: boolean) {
+  return transport.request('/api/cms/publication/policy', cmsPublicationPolicySchema, {
+    method: 'PATCH',
+    body: { editorCanPublish: z.boolean().parse(editorCanPublish) },
+  })
 }
 
 export function getCmsSiteSettings(transport: AuthenticatedTransport) {

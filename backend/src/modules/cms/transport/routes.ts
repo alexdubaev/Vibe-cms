@@ -18,6 +18,7 @@ const revisionBody = z.object({ revision: z.number().int().positive() }).strict(
 const rejectBody = z.object({ note: z.string().trim().min(1).max(2_000) }).strict()
 const previewBody = z.object({ pageId: z.uuid() }).strict()
 const previewExchangeBody = z.object({ token: z.string().min(43).max(256) }).strict()
+const publicationPolicyBody = z.object({ editorCanPublish: z.boolean() }).strict()
 const entryIdParams = z.object({ entryId: z.uuid() }).strict()
 const menuIdParams = z.object({ menuId: z.uuid() }).strict()
 const assetIdParams = z.object({ assetId: z.uuid() }).strict()
@@ -50,6 +51,12 @@ export function createCmsRoutes({
 
   routes.get('/publication', async (c) => {
     const result = await executeCms(() => service.getPublicationSummary(c.var.user))
+    return c.json(result, 200)
+  })
+
+  routes.patch('/publication/policy', async (c) => {
+    const body = publicationPolicyBody.parse(await c.req.json())
+    const result = await executeCms(() => service.savePublicationPolicy(c.var.user, body))
     return c.json(result, 200)
   })
 

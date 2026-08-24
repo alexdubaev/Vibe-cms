@@ -55,6 +55,9 @@ describe('CMS HTTP routes', () => {
         draftPayload: { items: [{ label: 'О компании', href: '/about' }], internalNotes: 'Do not publish' },
         revision: 6,
       }),
+      savePublicationPolicy: async (_actor: unknown, input: { editorCanPublish: boolean }) => ({
+        editorCanPublish: input.editorCanPublish,
+      }),
     } as unknown as CmsService
     const app = new Hono<AuthHttpEnv>()
     app.route('/api/cms', createCmsRoutes({
@@ -109,6 +112,14 @@ describe('CMS HTTP routes', () => {
     })
     expect(savedSettings.status).toBe(200)
     expect(await savedSettings.json()).toEqual({ companyName: 'Новое имя', revision: 8 })
+
+    const policy = await app.request('/api/cms/publication/policy', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'x-role': 'owner' },
+      body: JSON.stringify({ editorCanPublish: true }),
+    })
+    expect(policy.status).toBe(200)
+    expect(await policy.json()).toEqual({ editorCanPublish: true })
   })
 
   test('serves a draft page and authorized media URL only with a preview session', async () => {

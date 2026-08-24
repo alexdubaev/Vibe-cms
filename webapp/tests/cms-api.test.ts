@@ -11,6 +11,7 @@ import {
   getCmsSiteSettings,
   saveCmsSiteSettings,
   saveCmsMenu,
+  saveCmsPublicationPolicy,
   createCmsPreviewGrant,
   publishCmsCurrent,
   rejectCmsApproval,
@@ -77,6 +78,21 @@ test('publication actions use safe response contracts and never send snapshots',
     { path: '/api/cms/approvals/00000000-0000-7000-8000-000000000001/reject', options: { method: 'POST', body: { note: 'Нужно уточнить' } } },
     { path: '/api/cms/publish', options: { method: 'POST', body: { revision: 2 } } },
   ])
+})
+
+test('publication policy lets an owner update one clear capability only', async () => {
+  let request: { path: string; options?: Record<string, unknown> } | undefined
+  const transport: AuthenticatedTransport = {
+    async request(path, _schema, options) {
+      request = { path, options: options as Record<string, unknown> | undefined }
+      return { editorCanPublish: true } as never
+    },
+  }
+  await saveCmsPublicationPolicy(transport, true)
+  expect(request).toEqual({
+    path: '/api/cms/publication/policy',
+    options: { method: 'PATCH', body: { editorCanPublish: true } },
+  })
 })
 
 test('page revision history reads safe metadata and restores through a scoped route', async () => {

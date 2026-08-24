@@ -84,6 +84,7 @@ export type PublicationSummaryDto = {
     createdAt: string
   } | null
 }
+export type PublicationPolicyDto = { editorCanPublish: boolean }
 
 export type EntryEditorDto = {
   id: string
@@ -154,6 +155,7 @@ type ServiceDependencies = {
   repository: Pick<
     CmsRepository,
     | 'getPolicy'
+    | 'ensurePolicy'
     | 'getPage'
     | 'listPages'
     | 'getPageForEditor'
@@ -296,6 +298,17 @@ export class CmsService {
       controller: controller ? toPublicationControllerDto(controller) : null,
       latestPublication: latestPublication ? toLatestPublicationDto(latestPublication) : null,
     }
+  }
+
+  async savePublicationPolicy(actor: CmsActor, input: PublicationPolicyDto): Promise<PublicationPolicyDto> {
+    if (actor.role !== 'owner') {
+      throw new CmsRepositoryError('Only an owner can change publication policy', 'FORBIDDEN')
+    }
+    const policy = await this.dependencies.repository.ensurePolicy({
+      editorCanPublish: z.boolean().parse(input.editorCanPublish),
+      updatedByUserId: actor.id,
+    })
+    return { editorCanPublish: policy.editorCanPublish }
   }
 
   async listPendingApprovals(actor: CmsActor): Promise<PendingApprovalDto[]> {

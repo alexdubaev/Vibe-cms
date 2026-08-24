@@ -3,7 +3,7 @@ import type { UserDto } from '@web-app-demo/contracts'
 import { PageContainer, PageHeader } from '@/components/PageLayout'
 import { AppearancePanel } from '@/features/settings'
 import { ProfilePanel } from '@/features/users'
-import { NavigationEditor, SiteIdentityPanel } from '@/features/cms'
+import { NavigationEditor, PublicationPolicyPanel, SiteIdentityPanel } from '@/features/cms'
 import { AdminMetrics } from './AdminMetrics'
 import { UserDirectory } from './UserDirectory'
 
@@ -42,6 +42,7 @@ export function AdminSettings({ user }: { user: UserDto }) {
         <SiteIdentityPanel />
         <ProfilePanel user={user} />
         <AppearancePanel />
+        {user.role === 'owner' && <PublicationPolicyPanel />}
       </div>
       <NavigationEditor />
     </PageContainer>

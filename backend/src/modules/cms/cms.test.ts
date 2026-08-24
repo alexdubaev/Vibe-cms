@@ -350,6 +350,20 @@ describe('CMS application service', () => {
     const enabled = createService({ getPolicy: async () => ({ key: 'default', editorCanPublish: true }) })
     await expect(enabled.service.publishCurrent({ id: 'editor', role: 'editor' }, 1)).resolves.toMatchObject({ revision: 1 })
   })
+
+  test('only an owner can change whether editors publish directly', async () => {
+    let policyInput: { editorCanPublish?: boolean; updatedByUserId?: string } | undefined
+    const { service } = createService({
+      ensurePolicy: async (input) => {
+        policyInput = input
+        return { key: 'default', editorCanPublish: Boolean(input?.editorCanPublish) }
+      },
+    })
+
+    await expect(service.savePublicationPolicy({ id: 'owner', role: 'owner' }, { editorCanPublish: true })).resolves.toEqual({ editorCanPublish: true })
+    expect(policyInput).toEqual({ editorCanPublish: true, updatedByUserId: 'owner' })
+    await expectRejected(service.savePublicationPolicy({ id: 'editor', role: 'editor' }, { editorCanPublish: false }), CmsRepositoryError)
+  })
 })
 
 describe('CMS preview grants', () => {

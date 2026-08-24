@@ -12,6 +12,7 @@ import {
   getCmsPages,
   getCmsPendingApprovals,
   getCmsPublicationSummary,
+  saveCmsPublicationPolicy,
   submitCmsApproval,
   deleteCmsMedia,
   createCmsMediaUpload,
@@ -174,6 +175,18 @@ export function useCmsPublicationSummaryQuery() {
   return useQuery({
     queryKey: cmsQueryKeys.publication(),
     queryFn: () => getCmsPublicationSummary(auth.transport),
+  })
+}
+
+export function useSaveCmsPublicationPolicyMutation() {
+  const auth = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (editorCanPublish: boolean) => saveCmsPublicationPolicy(auth.transport, editorCanPublish),
+    onSuccess: (policy) => queryClient.setQueryData(cmsQueryKeys.publication(), (current: unknown) => {
+      if (!current || typeof current !== 'object') return current
+      return { ...(current as Record<string, unknown>), policy }
+    }),
   })
 }
 
