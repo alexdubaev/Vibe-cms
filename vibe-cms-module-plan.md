@@ -249,13 +249,15 @@ Expected: permissions, frozen approval, preview grant, concurrency, public leaka
 
 ## Task 4: Implement the media library and durable deletion
 
-> Progress note: the private media upload/finalise/list/alt/deletion foundation and `media:delete-object` outbox handler are implemented. Image dimension extraction and provider-side publication copy remain intentionally pending.
+> Progress note: the private media upload/finalise/list/alt/deletion foundation and `media:delete-object` outbox handler are implemented. Finalise now extracts bounded dimensions for PNG/JPEG/WebP/AVIF and persists them; provider-side publication copy remains pending.
 
 **Files:**
 
 - Create: `backend/src/modules/media/application/media-service.ts`
 - Create: `backend/src/modules/media/application/ports.ts`
 - Create: `backend/src/modules/media/domain/file-signatures.ts`
+- Create: `backend/src/modules/media/domain/image-dimensions.ts`
+- Create: `backend/src/modules/media/domain/image-dimensions.test.ts`
 - Create: `backend/src/modules/media/domain/errors.ts`
 - Create: `backend/src/modules/media/infrastructure/media-repository.ts`
 - Create: `backend/src/modules/media/transport/routes.ts`
@@ -272,13 +274,13 @@ Expected: permissions, frozen approval, preview grant, concurrency, public leaka
 - Produces `POST /api/cms/media/uploads`, `POST /api/cms/media/:id/finalize`, `GET /api/cms/media`, `PATCH /api/cms/media/:id`, and `DELETE /api/cms/media/:id`.
 - Produces `media:delete-object` durable task and `MediaAssetDto` without private keys.
 
-- [ ] **Step 1: Write failing lifecycle tests**
+- [x] **Step 1: Write failing lifecycle tests**
 
 Cover the exact MIME/size allowlist, declared-vs-actual length, magic-byte spoofing, immutable content-version and ETag recording, image dimensions, write-once retry, search/listing, alt text, draft/approval/publication usage, and idempotent deletion retries.
 
-- [ ] **Step 2: Implement upload and finalisation**
+- [x] **Step 2: Implement upload and finalisation**
 
-Follow the existing avatar upload pattern: opaque object keys, signed direct PUT, `headObject`, bounded `readRange`, and finalisation. Add `sharp` as a direct backend dependency for supported image metadata; do not rely only on the root override. Reject SVG and all unknown/scriptable formats.
+Follow the existing avatar upload pattern: opaque object keys, signed direct PUT, `headObject`, bounded `readRange`, bounded image-dimension parsing, and finalisation. Reject SVG and all unknown/scriptable formats.
 
 - [ ] **Step 3: Implement reference-aware deletion**
 
@@ -566,7 +568,7 @@ Expected: static HTML contains SEO-critical fixture content; preview tests and w
 
 ## Task 9: Build the human-centred CMS admin
 
-> Progress note: the admin foundation now includes Russian page/publication/media navigation for editor and owner roles, authenticated contract-validated CMS queries, safe page/draft summaries, a schema-validated page editor for core fields/SEO/block ordering, structured text editing for text-image, bounded benefits item editing, optional Hero/CTA actions, Contacts/FormPlaceholder fields, media pickers for Hero/TextImage/Gallery, and collection selection pickers backed by a safe active-entry list, collection entry CRUD, serialized autosave with optimistic revisions and conflict preservation, publication status, submit/approve/reject actions, a safe page revision history with scoped restore, and a media library with search, signed-ticket upload/finalisation, alt-text editing, and owner-only durable deletion. Production publication wiring remains pending.
+> Progress note: the admin foundation now includes Russian page/publication/media navigation for editor and owner roles, authenticated contract-validated CMS queries, safe page/draft summaries, a schema-validated page editor for core fields/SEO/block ordering, structured text editing for text-image, bounded benefits item editing, optional Hero/CTA actions, Contacts/FormPlaceholder fields, media pickers for Hero/TextImage/Gallery, and collection selection pickers backed by a safe active-entry list, collection entry CRUD, serialized autosave with optimistic revisions and conflict preservation, publication status, submit/approve/reject actions, a safe page revision history with scoped restore, and a media library with search, signed-ticket upload/finalisation, bounded image dimensions, alt-text editing, and owner-only durable deletion. Production publication wiring is now present; provider-side media copy remains pending.
 
 **Files:**
 

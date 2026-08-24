@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { detectMediaMime, mediaSignatureByteLength, type SupportedMediaMime } from '../domain/file-signatures'
 import { MediaError } from '../domain/errors'
+import { extractImageDimensions } from '../domain/image-dimensions'
 import type { MediaActor, MediaAssetRecord, MediaServiceDependencies } from './ports'
 
 const mediaMimeSchema = z.enum([
@@ -27,6 +28,7 @@ const limits: Record<SupportedMediaMime, [number, number]> = {
   'video/mp4': [1_024, 100 * 1024 * 1024],
   'application/pdf': [100, 25 * 1024 * 1024],
 }
+const maxDimensionReadBytes = 512 * 1024
 
 export class MediaService {
   private readonly clock: { now(): Date }
@@ -75,14 +77,25 @@ export class MediaService {
     if (stored.contentLength !== asset.byteSize || stored.contentType !== asset.contentType) {
       throw new MediaError('Uploaded media does not match the declared content', 'MEDIA_REJECTED')
     }
+    const readEnd = Math.min(asset.byteSize, asset.contentType.startsWith('image/') ? maxDimensionReadBytes : mediaSignatureByteLength(asset.contentType as SupportedMediaMime)) - 1
     const signature = await this.dependencies.storage.readRange(asset.objectKey, {
       start: 0,
-      end: mediaSignatureByteLength(asset.contentType as SupportedMediaMime) - 1,
+      end: readEnd,
     })
     if (!signature || detectMediaMime(signature) !== asset.contentType) {
       throw new MediaError('Uploaded bytes are not a supported media format', 'MEDIA_REJECTED')
     }
-    const ready = await this.dependencies.repository.markReady({ assetId, storageEtag: stored.etag })
+    const dimensions = asset.contentType.startsWith('image/')
+      ? extractImageDimensions(signature, asset.contentType as SupportedMediaMime)
+      : null
+    if (asset.contentType.startsWith('image/') && !dimensions) {
+      throw new MediaError('Uploaded image dimensions could not be determined', 'MEDIA_REJECTED')
+    }
+    const ready = await this.dependencies.repository.markReady({
+      assetId,
+      storageEtag: stored.etag,
+      ...(dimensions ?? {}),
+    })
     if (!ready) throw new MediaError('Media upload was already finalized', 'MEDIA_NOT_FOUND')
     return { asset: this.toDto(ready) }
   }

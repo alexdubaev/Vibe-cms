@@ -5,13 +5,14 @@
 
 ## Что уже сделано
 
-Текущий функциональный прогресс оценивается примерно в 80%. Реализованы:
+Текущий функциональный прогресс оценивается примерно в 81%. Реализованы:
 
 - роли `user/editor/owner`, capability-политика и совместимость старого `admin` с `owner`;
 - Prisma-модели и миграции CMS: страницы, ревизии, media/usage, approvals, publications, controller/builds, preview grants/sessions, builder nonces, audit/outbox;
 - CMS backend API с приватными ответами и optimistic revision conflicts;
 - безопасная передача: approval/publication snapshots не возвращаются через HTTP mutation responses;
 - CMS media API: signed-ticket upload/finalize, list/search, alt-текст, owner-only durable delete;
+- media finalize извлекает bounded dimensions для PNG/JPEG/WebP/AVIF без декодирования пикселей и сохраняет их в asset record;
 - публикационная логика, immutable artifacts, builder HMAC/nonce, Yandex queue/storage adapters;
 - website snapshot loader, static rendering, robots/sitemap и fail-closed preview exchange helper;
 - request-time Astro preview runtime: Node adapter, external `/__preview/*` rewrite, one-time exchange,
@@ -61,6 +62,12 @@ Website publication promotion end-to-end:
 - публикация считается успешной только после polling публичного marker с `no-store` и revision query parameter;
 - server fail-closed при отсутствии storage, public origin, selector/purge или promotion token env.
 
+Media finalize dimensions:
+
+- parser читает только ограниченный prefix объекта и поддерживает PNG IHDR, JPEG SOF, WebP VP8/VP8L/VP8X и AVIF `ispe`;
+- image upload без подтверждённых положительных dimensions отклоняется, видео/PDF проходят прежний signature-only путь;
+- unit и PostgreSQL integration тесты подтверждают, что width/height доходят до persisted `cmsMediaAsset`.
+
 Проверки блока: `bun run test:webapp` — **56 pass, 0 fail**; CMS backend app/routes — **18 pass, 0 fail**; `bun run lint`, `bun run typecheck:webapp`, `bun run build:webapp`, `bun run architecture:check` — успешно.
 
 История ревизий end-to-end:
@@ -95,12 +102,13 @@ Website publication promotion end-to-end:
 Последние успешные результаты:
 
 - `bun run typecheck` — все workspace typechecks успешны; website оставляет только существующий hint о deprecated `verticalAlign`;
-- `bun run test:backend:unit` — успешно (включает новый список collection entries);
+- `bun run test:backend:unit` — **325 pass, 0 fail**;
 - CMS backend app/routes tests — **18 pass, 0 fail**;
 - CMS repository integration — **10 pass, 0 fail**;
 - `bun run test:webapp` — **56 pass, 0 fail**;
 - `bun run build:webapp` — успешно;
-- `bun run architecture:check` — успешно, 430 source files;
+- `bun run architecture:check` — успешно, 432 source files;
+- media PostgreSQL integration — **1 pass, 0 fail**;
 - `bun run --cwd website-builder test` — **19 pass, 0 fail**;
 - `bun run --cwd website-builder typecheck` — успешно;
 - `bun run typecheck`, `bun run lint`, `bun run build` — успешно; website оставляет только существующий hint о deprecated `verticalAlign`;
@@ -118,8 +126,7 @@ Website publication promotion end-to-end:
    - подключить server-side media copy из publication snapshot в inactive slot;
    - завершить snapshot-aware renderer для всех public media paths;
    - добавить rollback/операционную проверку selector и purge.
-2. Добавить image dimension extraction при media finalize.
-3. Закрыть Terraform/acceptance/operations checklist и проверить deploy smoke.
+2. Закрыть Terraform/acceptance/operations checklist и проверить deploy smoke.
 
 ## Известные ограничения и gotchas
 
@@ -133,7 +140,8 @@ Website publication promotion end-to-end:
 - Page autosave должен сохранять стабильный mutation ref и не пересоздавать queue на каждом React Query state change. Текущий `PageEditor` использует `mutationRef` и remount key `${id}:${draftRevision}`.
 - Signed media upload обязан отправлять ticket headers verbatim, `credentials: omit`; object keys и signed URLs не показывать в UI/DTO.
 - Основной CMS foundation закоммичен как `23ee9ae feat(cms): add content collections and preview foundations`;
-  preview runtime закоммичен как `ea7af76 feat(cms): ship protected website preview runtime`.
+  preview runtime закоммичен как `ea7af76 feat(cms): ship protected website preview runtime`,
+  blue/green publication — как `4ad4854 feat(cms): wire blue-green website publication`.
 
 ## Полезные команды
 

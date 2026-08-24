@@ -77,6 +77,22 @@ describe('media service', () => {
     await expectRejected(service.finalize({ id: 'editor', role: 'editor' }, uuid), MediaError)
   })
 
+  test('extracts image dimensions before marking an upload ready', async () => {
+    let readyInput: { assetId: string; storageEtag?: string; width?: number; height?: number } | undefined
+    const service = createService({
+      markReady: async (input) => {
+        readyInput = input
+        return { ...asset(), state: 'ready', storageEtag: input.storageEtag ?? null, width: input.width ?? null, height: input.height ?? null }
+      },
+    }, { readRange: async () => pngDimensions(640, 480) })
+
+    const result = await service.finalize({ id: 'editor', role: 'editor' }, uuid)
+
+    expect(readyInput).toEqual({ assetId: uuid, storageEtag: 'etag', width: 640, height: 480 })
+    expect(result.asset.width).toBe(640)
+    expect(result.asset.height).toBe(480)
+  })
+
   test('does not queue deletion while usage references remain', async () => {
     let deferred = false
     const service = new MediaService({
@@ -91,7 +107,16 @@ describe('media service', () => {
 })
 
 function pngSignature() {
-  return Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...new Array(24).fill(0)])
+  return pngDimensions(1, 1)
+}
+
+function pngDimensions(width: number, height: number) {
+  const bytes = new Uint8Array(24)
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  bytes.set([0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52], 8)
+  new DataView(bytes.buffer).setUint32(16, width)
+  new DataView(bytes.buffer).setUint32(20, height)
+  return bytes
 }
 
 async function expectRejected(operation: Promise<unknown>, type: new (...args: never[]) => Error) {

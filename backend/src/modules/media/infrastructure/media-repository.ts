@@ -24,7 +24,7 @@ export function createMediaRepository(db: DbClient): MediaRepository {
     async markReady(input) {
       const updated = await db.cmsMediaAsset.updateMany({
         where: { id: input.assetId, state: 'pending' },
-        data: { state: 'ready', storageEtag: input.storageEtag },
+        data: { state: 'ready', storageEtag: input.storageEtag, width: input.width, height: input.height },
       })
       if (updated.count !== 1) return null
       return toRecord(await db.cmsMediaAsset.findUniqueOrThrow({ where: { id: input.assetId } }))
