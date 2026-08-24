@@ -165,6 +165,7 @@ export type CmsRepository = {
     state?: 'pending' | 'ready' | 'deleting' | 'deleted'
   }): Promise<CmsMediaAssetRecord>
   getMenu(menuId: string): Promise<CmsMenuRecord | null>
+  listMenus(): Promise<CmsMenuRecord[]>
   updateMenuDraft(menuId: string, expectedRevision: number, payload: unknown): Promise<CmsOptimisticResult>
   getSiteSettings(): Promise<CmsSettingsRecord | null>
   updateSiteSettingsDraft(expectedRevision: number, payload: unknown): Promise<CmsOptimisticResult>

@@ -100,10 +100,29 @@ describe('CMS application service', () => {
       revision: 7,
     })
     await expect(service.getMenu({ id: 'owner', role: 'owner' }, menuId)).resolves.toEqual({
+      id: menuId,
       location: 'header',
       items: [{ label: 'О нас', href: '/about' }],
       revision: 5,
     })
+  })
+
+  test('lists menu navigation with only editable presentation fields', async () => {
+    const { service } = createService({
+      listMenus: async () => [{
+        id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a31',
+        location: 'footer',
+        draftPayload: { items: [{ label: 'Контакты', href: '/contacts' }], internalFlag: true },
+        draftRevision: 2,
+      }],
+    })
+
+    await expect(service.listMenus({ id: 'editor', role: 'editor' })).resolves.toEqual([{
+      id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a31',
+      location: 'footer',
+      items: [{ label: 'Контакты', href: '/contacts' }],
+      revision: 2,
+    }])
   })
 
   test('rejects regular users before reading CMS presentation data', async () => {

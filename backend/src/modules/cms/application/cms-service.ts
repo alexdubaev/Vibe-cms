@@ -103,6 +103,7 @@ export type EntryListItemDto = {
 export type MenuEditorDto = CmsMenuRecord & { revision: number }
 export type SiteSettingsEditorDto = CmsSettingsRecord & { revision: number }
 export type MenuPresentationDto = {
+  id: string
   location: CmsMenuRecord['location']
   items: Array<{ label: string; href: string }>
   revision: number
@@ -164,6 +165,7 @@ type ServiceDependencies = {
     | 'listPendingApprovals'
     | 'getContentEntry'
     | 'getMenu'
+    | 'listMenus'
     | 'getSiteSettings'
     | 'updatePageDraft'
     | 'updateContentEntryDraft'
@@ -237,11 +239,13 @@ export class CmsService {
     const menu = await this.dependencies.repository.getMenu(menuId)
     if (!menu) throw new CmsRepositoryError('Menu was not found', 'NOT_FOUND')
     const payload = menuPresentationPayloadSchema.parse(menu.draftPayload)
-    return {
-      location: menu.location,
-      items: payload.items.map(({ label, href }) => ({ label, href })),
-      revision: menu.draftRevision,
-    }
+    return toMenuPresentationDto(menu, payload)
+  }
+
+  async listMenus(actor: CmsActor): Promise<MenuPresentationDto[]> {
+    this.requireCapability(actor, 'cms:read')
+    const menus = await this.dependencies.repository.listMenus()
+    return menus.map((menu) => toMenuPresentationDto(menu, menuPresentationPayloadSchema.parse(menu.draftPayload)))
   }
 
   async getSiteSettings(actor: CmsActor): Promise<SiteSettingsPresentationDto> {
@@ -513,6 +517,18 @@ function toPageListItemDto(page: CmsPageRecord): PageListItemDto {
     path: page.path,
     draftRevision: page.draftRevision,
     archived: Boolean(page.archivedAt),
+  }
+}
+
+function toMenuPresentationDto(
+  menu: CmsMenuRecord,
+  payload: z.infer<typeof menuPresentationPayloadSchema>,
+): MenuPresentationDto {
+  return {
+    id: menu.id,
+    location: menu.location,
+    items: payload.items.map(({ label, href }) => ({ label, href })),
+    revision: menu.draftRevision,
   }
 }
 

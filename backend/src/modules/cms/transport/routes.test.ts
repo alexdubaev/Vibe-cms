@@ -32,6 +32,7 @@ describe('CMS HTTP routes', () => {
         draftPayload: { internalFlags: { preview: true } },
       }),
       getMenu: async () => ({
+        id: menuId,
         location: 'header',
         items: [{ label: 'О нас', href: '/about', analyticsTag: 'nav-about' }],
         revision: 5,
@@ -41,6 +42,18 @@ describe('CMS HTTP routes', () => {
         key: 'site-settings',
         draftPayload: { companyName: 'Новое имя', internalFlags: { preview: true } },
         revision: 8,
+      }),
+      listMenus: async () => [{
+        id: menuId,
+        location: 'header',
+        items: [{ label: 'О нас', href: '/about', analyticsTag: 'nav-about' }],
+        revision: 5,
+      }],
+      saveMenu: async () => ({
+        id: menuId,
+        location: 'header',
+        draftPayload: { items: [{ label: 'О компании', href: '/about' }], internalNotes: 'Do not publish' },
+        revision: 6,
       }),
     } as unknown as CmsService
     const app = new Hono<AuthHttpEnv>()
@@ -61,9 +74,32 @@ describe('CMS HTTP routes', () => {
     const menu = await app.request(`/api/cms/menus/${menuId}`, { headers: { 'x-role': 'owner' } })
     expect(menu.status).toBe(200)
     expect(await menu.json()).toEqual({
+      id: menuId,
       location: 'header',
       items: [{ label: 'О нас', href: '/about' }],
       revision: 5,
+    })
+
+    const menus = await app.request('/api/cms/menus', { headers: { 'x-role': 'editor' } })
+    expect(menus.status).toBe(200)
+    expect(await menus.json()).toEqual([{
+      id: menuId,
+      location: 'header',
+      items: [{ label: 'О нас', href: '/about' }],
+      revision: 5,
+    }])
+
+    const savedMenu = await app.request(`/api/cms/menus/${menuId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'x-role': 'owner' },
+      body: JSON.stringify({ items: [{ label: 'О компании', href: '/about' }], expectedRevision: 5 }),
+    })
+    expect(savedMenu.status).toBe(200)
+    expect(await savedMenu.json()).toEqual({
+      id: menuId,
+      location: 'header',
+      items: [{ label: 'О компании', href: '/about' }],
+      revision: 6,
     })
 
     const savedSettings = await app.request('/api/cms/settings', {

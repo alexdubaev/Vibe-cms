@@ -7,8 +7,10 @@ import {
   getCmsEntries,
   getCmsPageRevisions,
   getCmsMenu,
+  getCmsMenus,
   getCmsSiteSettings,
   saveCmsSiteSettings,
+  saveCmsMenu,
   createCmsPreviewGrant,
   publishCmsCurrent,
   rejectCmsApproval,
@@ -157,6 +159,29 @@ test('site navigation and settings use safe read routes', async () => {
   await getCmsSiteSettings(transport)
   await getCmsMenu(transport, menuId)
   expect(calls).toEqual(['/api/cms/settings', `/api/cms/menus/${menuId}`])
+})
+
+test('menu editor discovers navigation and saves only visible links with a revision', async () => {
+  const menuId = '00000000-0000-7000-8000-000000000004'
+  const calls: Array<{ path: string; options?: Record<string, unknown> }> = []
+  const transport: AuthenticatedTransport = {
+    async request(path, _schema, options) {
+      calls.push({ path, options: options as Record<string, unknown> | undefined })
+      return [] as never
+    },
+  }
+  await getCmsMenus(transport)
+  await saveCmsMenu(transport, menuId, {
+    items: [{ label: 'Главная', href: '/' }],
+    expectedRevision: 3,
+  })
+  expect(calls).toEqual([
+    { path: '/api/cms/menus', options: undefined },
+    {
+      path: `/api/cms/menus/${menuId}`,
+      options: { method: 'PATCH', body: { items: [{ label: 'Главная', href: '/' }], expectedRevision: 3 } },
+    },
+  ])
 })
 
 test('site settings save sends only the editable name and the concurrency revision', async () => {

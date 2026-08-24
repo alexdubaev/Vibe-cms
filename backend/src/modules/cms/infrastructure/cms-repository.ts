@@ -267,6 +267,10 @@ export function createCmsRepository(db: DbClient): CmsRepository {
       return db.cmsMenu.findUnique({ where: { id: menuId } })
     },
 
+    async listMenus() {
+      return db.cmsMenu.findMany({ orderBy: { location: 'asc' } })
+    },
+
     async updateMenuDraft(menuId, expectedRevision, payload) {
       const result = await db.cmsMenu.updateMany({
         where: { id: menuId, draftRevision: expectedRevision },

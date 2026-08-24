@@ -139,9 +139,14 @@ const cmsSiteSettingsDraftSchema = z.object({
   expectedRevision: z.number().int().nonnegative(),
 }).strict()
 const cmsMenuSchema = z.object({
+  id: z.uuid(),
   location: z.enum(['header', 'footer']),
   items: z.array(z.object({ label: z.string().trim().min(1).max(120), href: z.string().trim().min(1).max(500) }).strict()).max(100),
   revision: z.number().int().nonnegative(),
+}).strict()
+const cmsMenuDraftSchema = z.object({
+  items: z.array(z.object({ label: z.string().trim().min(1).max(120), href: z.string().trim().min(1).max(500) }).strict()).max(100),
+  expectedRevision: z.number().int().nonnegative(),
 }).strict()
 
 const cmsMediaUpdateSchema = z
@@ -312,6 +317,22 @@ export function saveCmsSiteSettings(
 
 export function getCmsMenu(transport: AuthenticatedTransport, menuId: string) {
   return transport.request(`/api/cms/menus/${encodeURIComponent(z.uuid().parse(menuId))}`, cmsMenuSchema)
+}
+
+export function getCmsMenus(transport: AuthenticatedTransport) {
+  return transport.request('/api/cms/menus', z.array(cmsMenuSchema))
+}
+
+export function saveCmsMenu(
+  transport: AuthenticatedTransport,
+  menuId: string,
+  input: { items: Array<{ label: string; href: string }>; expectedRevision: number },
+) {
+  return transport.request(
+    `/api/cms/menus/${encodeURIComponent(z.uuid().parse(menuId))}`,
+    cmsMenuSchema,
+    { method: 'PATCH', body: cmsMenuDraftSchema.parse(input) },
+  )
 }
 
 export function createCmsPreviewGrant(transport: AuthenticatedTransport, pageId: string) {

@@ -107,6 +107,11 @@ export function createCmsRoutes({
     return c.json(toSafeMenuPresentation(result), 200)
   })
 
+  routes.get('/menus', async (c) => {
+    const result = await executeCms(() => service.listMenus(c.var.user))
+    return c.json(result.map(toSafeMenuPresentation), 200)
+  })
+
   routes.get('/settings', async (c) => {
     const result = await executeCms(() => service.getSiteSettings(c.var.user))
     return c.json(toSafeSettingsPresentation(result), 200)
@@ -129,7 +134,12 @@ export function createCmsRoutes({
     const params = menuIdParams.parse(c.req.param())
     const body = menuDraftSchema.parse(await c.req.json())
     const result = await executeCms(() => service.saveMenu(c.var.user, params.menuId, body))
-    return c.json(result, 200)
+    return c.json(toSafeMenuPresentation({
+      id: result.id,
+      location: result.location,
+      items: menuResponsePayloadSchema.parse(result.draftPayload).items,
+      revision: result.revision,
+    }), 200)
   })
 
   routes.patch('/settings', async (c) => {
@@ -240,12 +250,18 @@ function toSafeEntry(input: {
   }
 }
 
+const menuResponsePayloadSchema = z.object({
+  items: z.array(z.object({ label: z.string().trim().min(1).max(120), href: z.string().trim().min(1).max(500) }).strip()).max(100),
+}).strip()
+
 function toSafeMenuPresentation(input: {
+  id: string
   location: 'header' | 'footer'
   items: Array<{ label: string; href: string }>
   revision: number
 }) {
   return {
+    id: input.id,
     location: input.location,
     items: input.items.map(({ label, href }) => ({ label, href })),
     revision: input.revision,

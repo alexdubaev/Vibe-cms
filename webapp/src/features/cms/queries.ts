@@ -19,8 +19,10 @@ import {
   getCmsMedia,
   getCmsMediaImageDownload,
   getCmsMenu,
+  getCmsMenus,
   getCmsSiteSettings,
   saveCmsSiteSettings,
+  saveCmsMenu,
   approveCmsApproval,
   publishCmsCurrent,
   rejectCmsApproval,
@@ -44,6 +46,7 @@ export const cmsQueryKeys = {
   media: (query = '') => [...cmsQueryKeys.mediaRoot(), query] as const,
   mediaImageDownload: (assetId: string) => [...cmsQueryKeys.mediaRoot(), 'download', assetId] as const,
   menu: (menuId: string) => [...cmsQueryKeys.all, 'menu', menuId] as const,
+  menus: () => [...cmsQueryKeys.all, 'menus'] as const,
   settings: () => [...cmsQueryKeys.all, 'settings'] as const,
 }
 
@@ -207,6 +210,24 @@ export function useSaveCmsSiteSettingsMutation() {
 export function useCmsMenuQuery(menuId: string) {
   const auth = useAuth()
   return useQuery({ queryKey: cmsQueryKeys.menu(menuId), queryFn: () => getCmsMenu(auth.transport, menuId), enabled: Boolean(menuId) })
+}
+
+export function useCmsMenusQuery() {
+  const auth = useAuth()
+  return useQuery({ queryKey: cmsQueryKeys.menus(), queryFn: () => getCmsMenus(auth.transport) })
+}
+
+export function useSaveCmsMenuMutation() {
+  const auth = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { menuId: string; items: Array<{ label: string; href: string }>; expectedRevision: number }) =>
+      saveCmsMenu(auth.transport, input.menuId, input),
+    onSuccess: (menu) => {
+      queryClient.setQueryData(cmsQueryKeys.menu(menu.id), menu)
+      return queryClient.invalidateQueries({ queryKey: cmsQueryKeys.menus() })
+    },
+  })
 }
 
 export function useSubmitCmsApprovalMutation() {
