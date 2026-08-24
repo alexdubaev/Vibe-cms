@@ -4,6 +4,7 @@ import type { CollectionEntryCreateInput, CollectionEntryDraft, PageDraft } from
 import { useAuth } from '@/features/auth'
 import {
   createCmsEntry,
+  createCmsPreviewGrant,
   getCmsPage,
   getCmsEntry,
   getCmsPageRevisions,
@@ -171,6 +172,13 @@ export function useCmsPendingApprovalsQuery() {
   return useQuery({
     queryKey: cmsQueryKeys.pendingApprovals(),
     queryFn: () => getCmsPendingApprovals(auth.transport),
+  })
+}
+
+export function useCmsPreviewGrantMutation() {
+  const auth = useAuth()
+  return useMutation({
+    mutationFn: (pageId: string) => createCmsPreviewGrant(auth.transport, pageId),
   })
 }
 

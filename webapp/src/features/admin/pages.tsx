@@ -10,8 +10,8 @@ export function AdminDashboard() {
   return (
     <PageContainer>
       <PageHeader
-        description="A live overview of accounts and owner coverage."
-        title="Dashboard"
+        description="Ключевые показатели рабочего пространства и доступ команды."
+        title="Обзор"
       />
       <AdminMetrics />
     </PageContainer>
@@ -22,8 +22,8 @@ export function AdminUsers({ currentUser }: { currentUser: UserDto }) {
   return (
     <PageContainer>
       <PageHeader
-        description="Find accounts and manage access without exposing credential data."
-        title="Users"
+        description="Управляйте доступом команды, не раскрывая учётные данные."
+        title="Доступ и команда"
       />
       <UserDirectory currentUser={currentUser} />
     </PageContainer>
@@ -34,8 +34,8 @@ export function AdminSettings({ user }: { user: UserDto }) {
   return (
     <PageContainer>
       <PageHeader
-        description="Manage your owner identity and workspace appearance."
-        title="Settings"
+        description="Управляйте профилем владельца и внешним видом рабочего пространства."
+        title="Настройки сайта"
       />
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
         <ProfilePanel user={user} />

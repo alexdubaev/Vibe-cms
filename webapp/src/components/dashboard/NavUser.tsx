@@ -61,7 +61,7 @@ export function NavUser({
     <>
       {logoutError && (
         <Typography role="alert" variant="caption" tone="destructive">
-          Logout failed. Please try again.
+          Не удалось выйти из аккаунта. Повторите попытку.
         </Typography>
       )}
       <SidebarMenu>
@@ -69,7 +69,7 @@ export function NavUser({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <SidebarMenuButton
-                aria-label="Open account menu"
+                aria-label="Открыть меню аккаунта"
                 size="lg"
                 tooltip={user.displayName ?? user.email}
                 className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
@@ -88,7 +88,7 @@ export function NavUser({
                       {user.email}
                     </Typography>
                     <Badge variant="outline" className="shrink-0 capitalize">
-                      {user.role}
+                      {user.role === 'owner' ? 'Владелец' : user.role === 'editor' ? 'Редактор' : 'Пользователь'}
                     </Badge>
                   </div>
                 </div>
@@ -128,14 +128,14 @@ export function NavUser({
                   <DropdownMenuItem asChild>
                     <DashboardLink to={accountPath}>
                       <HugeiconsIcon icon={UserCircle02Icon} strokeWidth={2} />
-                      Profile
+                      Профиль
                     </DashboardLink>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem asChild>
                   <DashboardLink to={settingsPath}>
                     <HugeiconsIcon icon={Settings01Icon} strokeWidth={2} />
-                    Settings
+                    Настройки
                   </DashboardLink>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
@@ -146,7 +146,7 @@ export function NavUser({
                 variant="destructive"
               >
                 <HugeiconsIcon icon={Logout01Icon} strokeWidth={2} />
-                {logoutPending ? 'Logging out…' : 'Log out'}
+                {logoutPending ? 'Выходим…' : 'Выйти'}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

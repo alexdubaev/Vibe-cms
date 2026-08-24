@@ -4,6 +4,7 @@ import {
   collectionTypeSchema,
   mediaAssetSchema,
   pageDraftSchema,
+  previewGrantResponseSchema,
   type CollectionEntryCreateInput,
   type CollectionEntryDraft,
   type PageDraft,
@@ -185,6 +186,7 @@ export type CmsMediaResponse = z.infer<typeof cmsMediaListSchema>
 export type CmsMediaUpdateResponse = z.infer<typeof cmsMediaUpdateSchema>
 export type CmsMediaDeleteResponse = z.infer<typeof cmsMediaDeleteSchema>
 export type CmsMediaUploadResponse = z.infer<typeof cmsMediaUploadSchema>
+export type CmsPreviewGrantResponse = z.infer<typeof previewGrantResponseSchema>
 
 export function getCmsPages(transport: AuthenticatedTransport) {
   return transport.request('/api/cms/pages', cmsPagesResponseSchema)
@@ -274,6 +276,13 @@ export function saveCmsPage(
 
 export function getCmsPublicationSummary(transport: AuthenticatedTransport) {
   return transport.request('/api/cms/publication', cmsPublicationSummaryResponseSchema)
+}
+
+export function createCmsPreviewGrant(transport: AuthenticatedTransport, pageId: string) {
+  return transport.request('/api/cms/preview/grants', previewGrantResponseSchema, {
+    method: 'POST',
+    body: { pageId: z.uuid().parse(pageId) },
+  })
 }
 
 export function getCmsPendingApprovals(transport: AuthenticatedTransport) {

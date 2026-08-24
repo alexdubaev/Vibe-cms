@@ -15,13 +15,18 @@ import { createSerializedAutosave, type AutosaveSnapshot } from '../editor'
 import { useCmsEntriesQuery, useCmsMediaQuery, useSaveCmsPageMutation } from '../queries'
 import {
   addBenefitItem,
+  createEditorBlock,
+  duplicateEditorBlock,
+  moveEditorBlock,
   plainTextToStructuredText,
+  removeEditorBlock,
   removeBenefitItem,
   structuredTextToPlainText,
   toggleMediaSelection,
   updateBenefitItem,
   type BenefitIcon,
   type BenefitItem,
+  type InsertableBlockType,
 } from '../editor-model'
 
 const blockLabels: Record<string, string> = {
@@ -37,6 +42,15 @@ const blockLabels: Record<string, string> = {
   contacts: 'Контакты',
   formPlaceholder: 'Форма заявки',
 }
+
+const insertableBlocks: ReadonlyArray<{ type: InsertableBlockType; label: string }> = [
+  { type: 'hero', label: 'Первый экран' },
+  { type: 'textImage', label: 'Текст и изображение' },
+  { type: 'benefits', label: 'Преимущества' },
+  { type: 'cta', label: 'Призыв к действию' },
+  { type: 'contacts', label: 'Контакты' },
+  { type: 'formPlaceholder', label: 'Связаться с нами' },
+]
 
 type PageEditorProps = { page: CmsPageEditor }
 
@@ -62,6 +76,7 @@ function PageEditorForm({ page, initialDraft }: PageEditorProps & { initialDraft
     mutationRef.current = mutation
   }, [mutation])
   const [draft, setDraft] = useState(initialDraft)
+  const [selectedBlockId, setSelectedBlockId] = useState(initialDraft.blocks[0]?.id ?? '')
   const [saveState, setSaveState] = useState<AutosaveSnapshot<PageDraft>>({ status: 'idle', revision: page.draftRevision })
   const queue = useRef<ReturnType<typeof createSerializedAutosave<PageDraft, { draftRevision: number }>> | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -95,12 +110,30 @@ function PageEditorForm({ page, initialDraft }: PageEditorProps & { initialDraft
     enqueue({ ...draft, seo: seo.title || seo.description ? seo : undefined })
   }
   const moveBlock = (index: number, direction: -1 | 1) => {
-    const target = index + direction
-    if (target < 0 || target >= draft.blocks.length) return
+    enqueue({ ...draft, blocks: moveEditorBlock(draft.blocks, index, direction) })
+  }
+
+  const addBlock = (type: InsertableBlockType) => {
+    const block = createEditorBlock(type, `block-${crypto.randomUUID()}`)
+    enqueue({ ...draft, blocks: [...draft.blocks, block] })
+    setSelectedBlockId(block.id)
+  }
+
+  const duplicateBlock = (block: ContentBlock) => {
+    const copy = duplicateEditorBlock(block, `block-${crypto.randomUUID()}`)
+    const index = draft.blocks.findIndex((item) => item.id === block.id)
     const blocks = [...draft.blocks]
-    const [item] = blocks.splice(index, 1)
-    blocks.splice(target, 0, item)
+    blocks.splice(index + 1, 0, copy)
     enqueue({ ...draft, blocks })
+    setSelectedBlockId(copy.id)
+  }
+
+  const removeBlock = (block: ContentBlock) => {
+    const index = draft.blocks.findIndex((item) => item.id === block.id)
+    const blocks = removeEditorBlock(draft.blocks, index)
+    if (blocks.length === draft.blocks.length) return
+    enqueue({ ...draft, blocks })
+    setSelectedBlockId(blocks[Math.min(index, blocks.length - 1)]?.id ?? '')
   }
 
   const updateBlockData = (index: number, data: Record<string, unknown>) => {
@@ -156,16 +189,46 @@ function PageEditorForm({ page, initialDraft }: PageEditorProps & { initialDraft
           </div>
         </div>
 
-        <div className="grid gap-3">
-          <div>
-            <Typography variant="bodySmMedium">Блоки страницы</Typography>
-            <Typography tone="muted" variant="caption">Порядок можно изменить кнопками. Детальные поля блоков подключаются из общего каталога.</Typography>
+        <div className="grid gap-4 border-t pt-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <Typography variant="bodySmMedium">Секции страницы</Typography>
+              <Typography tone="muted" variant="caption">Выберите секцию слева, чтобы редактировать её в фокусе. Порядок меняется без потери данных.</Typography>
+            </div>
+            <Typography tone="muted" variant="caption">{draft.blocks.length} {draft.blocks.length === 1 ? 'секция' : 'секции'}</Typography>
           </div>
-          {draft.blocks.map((block, index) => (
-            <div className="flex items-center justify-between gap-3 rounded-lg border p-3" key={block.id}>
-              <div className="grid min-w-0 flex-1 gap-1">
-                <Typography variant="bodySmMedium">{blockLabels[block.type] ?? 'Блок'}</Typography>
-                <Typography tone="muted" variant="caption">Позиция {index + 1}</Typography>
+          <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)]">
+            <nav aria-label="Секции страницы" className="grid content-start gap-2 rounded-xl border bg-muted/20 p-2">
+              {draft.blocks.map((block, index) => (
+                <Button
+                  aria-current={selectedBlockId === block.id ? 'step' : undefined}
+                  className="h-auto min-h-11 justify-start whitespace-normal px-3 py-2 text-left"
+                  key={block.id}
+                  onClick={() => setSelectedBlockId(block.id)}
+                  type="button"
+                  variant={selectedBlockId === block.id ? 'secondary' : 'ghost'}
+                >
+                  <span className="grid gap-0.5">
+                    <Typography as="span" variant="bodySmMedium">{index + 1}. {blockLabels[block.type] ?? 'Секция'}</Typography>
+                    <Typography as="span" tone="muted" variant="caption">Нажмите, чтобы открыть</Typography>
+                  </span>
+                </Button>
+              ))}
+            </nav>
+            {draft.blocks.map((block, index) => selectedBlockId === block.id && (
+              <div className="grid gap-5 rounded-xl border bg-card p-4 shadow-sm sm:p-5" key={block.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
+                  <div className="grid gap-1">
+                    <Typography variant="bodySmMedium">{blockLabels[block.type] ?? 'Секция'}</Typography>
+                    <Typography tone="muted" variant="caption">Секция {index + 1} из {draft.blocks.length}</Typography>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button aria-label="Переместить секцию выше" disabled={index === 0} onClick={() => moveBlock(index, -1)} size="sm" type="button" variant="outline">Выше</Button>
+                    <Button aria-label="Переместить секцию ниже" disabled={index === draft.blocks.length - 1} onClick={() => moveBlock(index, 1)} size="sm" type="button" variant="outline">Ниже</Button>
+                    <Button onClick={() => duplicateBlock(block)} size="sm" type="button" variant="outline">Дублировать</Button>
+                    <Button aria-label="Удалить секцию" disabled={draft.blocks.length <= 1} onClick={() => removeBlock(block)} size="sm" type="button" variant="ghost">Удалить</Button>
+                  </div>
+                </div>
                 <BlockFields
                   block={block}
                   collectionEntries={entries.data ?? []}
@@ -173,12 +236,17 @@ function PageEditorForm({ page, initialDraft }: PageEditorProps & { initialDraft
                   onChange={(data) => updateBlockData(index, data)}
                 />
               </div>
-              <div className="flex gap-2">
-                <Button aria-label={`Поднять блок ${index + 1}`} disabled={index === 0} onClick={() => moveBlock(index, -1)} size="sm" variant="outline">Выше</Button>
-                <Button aria-label={`Опустить блок ${index + 1}`} disabled={index === draft.blocks.length - 1} onClick={() => moveBlock(index, 1)} size="sm" variant="outline">Ниже</Button>
-              </div>
+            ))}
+          </div>
+          <div className="grid gap-2 rounded-xl border border-dashed bg-muted/20 p-4">
+            <Typography variant="bodySmMedium">Добавить секцию</Typography>
+            <Typography tone="muted" variant="caption">Новая секция появится внизу страницы, а затем её можно переместить.</Typography>
+            <div className="flex flex-wrap gap-2">
+              {insertableBlocks.map((block) => (
+                <Button key={block.type} onClick={() => addBlock(block.type)} size="sm" type="button" variant="outline">+ {block.label}</Button>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">

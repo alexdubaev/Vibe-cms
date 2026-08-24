@@ -6,6 +6,7 @@ import {
   getCmsEntry,
   getCmsEntries,
   getCmsPageRevisions,
+  createCmsPreviewGrant,
   publishCmsCurrent,
   rejectCmsApproval,
   restoreCmsPageRevision,
@@ -119,6 +120,24 @@ test('collection entry list uses a type filter and safe labels', async () => {
 
   await getCmsEntries(transport, 'service')
   expect(request).toEqual({ path: '/api/cms/entries?type=service', options: undefined })
+})
+
+test('preview grant posts only the page id and preserves the opaque URL contract', async () => {
+  const pageId = '00000000-0000-7000-8000-000000000001'
+  let request: { path: string; options?: Record<string, unknown> } | undefined
+  const transport: AuthenticatedTransport = {
+    async request(path, _schema, options) {
+      request = { path, options: options as Record<string, unknown> | undefined }
+      return {
+        token: 'a'.repeat(43),
+        expiresAt: '2026-08-25T08:00:00.000Z',
+        previewUrl: `https://preview.example.test/__preview/${pageId}?token=${'a'.repeat(43)}`,
+      } as never
+    },
+  }
+
+  await createCmsPreviewGrant(transport, pageId)
+  expect(request).toEqual({ path: '/api/cms/preview/grants', options: { method: 'POST', body: { pageId } } })
 })
 
 test('collection editor API uses separate create, read, and optimistic update contracts', async () => {

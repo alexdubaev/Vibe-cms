@@ -1,13 +1,45 @@
+import { contentBlockSchema } from '@web-app-demo/contracts'
 import { expect, test } from 'bun:test'
 
 import {
   addBenefitItem,
+  createEditorBlock,
+  duplicateEditorBlock,
+  moveEditorBlock,
   plainTextToStructuredText,
+  removeEditorBlock,
   removeBenefitItem,
   structuredTextToPlainText,
   toggleMediaSelection,
   updateBenefitItem,
 } from '@/features/cms/editor-model'
+
+test('page block helpers create contract-valid human defaults', () => {
+  const hero = createEditorBlock('hero', 'hero-1')
+  const benefits = createEditorBlock('benefits', 'benefits-1')
+
+  expect(contentBlockSchema.safeParse(hero).success).toBe(true)
+  expect(contentBlockSchema.safeParse(benefits).success).toBe(true)
+  expect(hero).toMatchObject({
+    id: 'hero-1',
+    type: 'hero',
+    data: { title: 'Новый первый экран', primaryAction: { label: 'Подробнее', href: '/' } },
+  })
+  expect(benefits).toMatchObject({ id: 'benefits-1', type: 'benefits' })
+})
+
+test('page block helpers duplicate, reorder, and protect the final section', () => {
+  const hero = createEditorBlock('hero', 'hero-1')
+  const cta = createEditorBlock('cta', 'cta-1')
+  const copy = duplicateEditorBlock(hero, 'hero-2')
+
+  expect(copy).toEqual({ ...hero, id: 'hero-2' })
+  expect(copy.data).not.toBe(hero.data)
+  expect(moveEditorBlock([hero, cta], 0, 1).map((block) => block.id)).toEqual(['cta-1', 'hero-1'])
+  expect(moveEditorBlock([hero, cta], 0, -1).map((block) => block.id)).toEqual(['hero-1', 'cta-1'])
+  expect(removeEditorBlock([hero], 0).map((block) => block.id)).toEqual(['hero-1'])
+  expect(removeEditorBlock([hero, cta], 0).map((block) => block.id)).toEqual(['cta-1'])
+})
 
 test('toggleMediaSelection adds and removes media without duplicates', () => {
   expect(toggleMediaSelection(['one'], 'two', true)).toEqual(['one', 'two'])

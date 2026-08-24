@@ -18,6 +18,18 @@ test('role navigation exposes only the current workspace', () => {
   expect(homePathForRole('owner')).toBe('/admin')
 })
 
+test('CMS navigation uses human Russian labels instead of internal workspace terms', () => {
+  expect(navigationItemsForRole('editor').map((item) => item.label)).toEqual([
+    'Обзор',
+    'Страницы',
+    'Контент',
+    'Медиатека',
+    'Публикации',
+    'Настройки сайта',
+  ])
+  expect(navigationItemsForRole('owner').map((item) => item.label)).toContain('Доступ и команда')
+})
+
 test('cross-role destinations resolve to the current role home', () => {
   expect(resolveRoleDestination('user', '/app/profile')).toBe('/app/profile')
   expect(resolveRoleDestination('user', '/admin/users')).toBe('/app')

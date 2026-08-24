@@ -1,4 +1,5 @@
 import type { StructuredTextDocument } from '@web-app-demo/contracts'
+import type { ContentBlock } from '@web-app-demo/contracts'
 
 export type BenefitIcon = 'check' | 'star' | 'shield' | 'spark'
 
@@ -6,6 +7,86 @@ export type BenefitItem = {
   title: string
   text: string
   icon: BenefitIcon
+}
+
+/** Blocks that can be inserted without first selecting an existing media or catalogue item. */
+export type InsertableBlockType = Extract<
+  ContentBlock['type'],
+  'hero' | 'textImage' | 'benefits' | 'cta' | 'contacts' | 'formPlaceholder'
+>
+
+export function createEditorBlock(type: InsertableBlockType, id: string): ContentBlock {
+  switch (type) {
+    case 'hero':
+      return {
+        id,
+        type,
+        data: {
+          eyebrow: 'Новый раздел',
+          title: 'Новый первый экран',
+          text: 'Расскажите посетителю, почему это важно.',
+          primaryAction: { label: 'Подробнее', href: '/' },
+        },
+      }
+    case 'textImage':
+      return {
+        id,
+        type,
+        data: {
+          title: 'Новый раздел',
+          content: { type: 'document', blocks: [{ type: 'paragraph', children: [{ type: 'text', text: 'Добавьте текст.', marks: [] }] }] },
+          imageSide: 'right',
+        },
+      }
+    case 'benefits':
+      return {
+        id,
+        type,
+        data: {
+          title: 'Почему выбирают нас',
+          items: [
+            { title: 'Первое преимущество', text: 'Коротко опишите ценность.', icon: 'check' },
+            { title: 'Второе преимущество', text: 'Коротко опишите ценность.', icon: 'star' },
+          ],
+        },
+      }
+    case 'cta':
+      return {
+        id,
+        type,
+        data: { title: 'Готовы начать?', text: 'Свяжитесь с нами, чтобы обсудить задачу.', primaryAction: { label: 'Связаться', href: '/' } },
+      }
+    case 'contacts':
+      return {
+        id,
+        type,
+        data: { title: 'Контакты', showAddress: true, showHours: true, showContacts: true, showSocials: false, showMap: false },
+      }
+    case 'formPlaceholder':
+      return {
+        id,
+        type,
+        data: { title: 'Свяжитесь с нами', text: 'Выберите удобный способ связи.', contactMethod: 'phone' },
+      }
+  }
+}
+
+export function duplicateEditorBlock(block: ContentBlock, id: string): ContentBlock {
+  return { ...structuredClone(block), id }
+}
+
+export function moveEditorBlock(blocks: readonly ContentBlock[], index: number, direction: -1 | 1): ContentBlock[] {
+  const target = index + direction
+  if (index < 0 || index >= blocks.length || target < 0 || target >= blocks.length) return [...blocks]
+  const next = [...blocks]
+  const [block] = next.splice(index, 1)
+  next.splice(target, 0, block)
+  return next
+}
+
+export function removeEditorBlock(blocks: readonly ContentBlock[], index: number): ContentBlock[] {
+  if (blocks.length <= 1 || index < 0 || index >= blocks.length) return [...blocks]
+  return blocks.filter((_, blockIndex) => blockIndex !== index)
 }
 
 export function toggleMediaSelection(

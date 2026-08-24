@@ -13,26 +13,26 @@ export type WorkspaceRoutePath = UserRoutePath | AdminRoutePath
 
 const navigationByRole = {
   user: [
-    { label: 'Home', to: '/app' },
-    { label: 'Profile', to: '/app/profile' },
-    { label: 'Settings', to: '/app/settings' },
+    { label: 'Главная', to: '/app' },
+    { label: 'Профиль', to: '/app/profile' },
+    { label: 'Настройки', to: '/app/settings' },
   ],
   editor: [
-    { label: 'Dashboard', to: '/admin' },
+    { label: 'Обзор', to: '/admin' },
     { label: 'Страницы', to: '/admin/pages' },
     { label: 'Контент', to: '/admin/content/service' },
     { label: 'Медиатека', to: '/admin/media' },
     { label: 'Публикации', to: '/admin/publications' },
-    { label: 'Settings', to: '/admin/settings' },
+    { label: 'Настройки сайта', to: '/admin/settings' },
   ],
   owner: [
-    { label: 'Dashboard', to: '/admin' },
-    { label: 'Users', to: '/admin/users' },
+    { label: 'Обзор', to: '/admin' },
+    { label: 'Доступ и команда', to: '/admin/users' },
     { label: 'Страницы', to: '/admin/pages' },
     { label: 'Контент', to: '/admin/content/service' },
     { label: 'Медиатека', to: '/admin/media' },
     { label: 'Публикации', to: '/admin/publications' },
-    { label: 'Settings', to: '/admin/settings' },
+    { label: 'Настройки сайта', to: '/admin/settings' },
   ],
 } as const satisfies Record<UserRole, ReadonlyArray<{ label: string; to: WorkspaceRoutePath }>>
 

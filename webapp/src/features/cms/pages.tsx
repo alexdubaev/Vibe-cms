@@ -32,6 +32,7 @@ import {
   useCmsPagesQuery,
   useCmsPendingApprovalsQuery,
   useCmsPublicationSummaryQuery,
+  useCmsPreviewGrantMutation,
   useApproveCmsApprovalMutation,
   usePublishCmsCurrentMutation,
   useRejectCmsApprovalMutation,
@@ -56,7 +57,7 @@ export function CmsPagesPage() {
   return (
     <PageContainer>
       <PageHeader
-        description="Просматривайте страницы сайта и текущие версии черновиков."
+        description="Выберите страницу, чтобы продолжить работу над содержанием и проверить готовность к публикации."
         title="Страницы"
       />
       {state === 'loading' && <CmsLoading />}
@@ -65,8 +66,8 @@ export function CmsPagesPage() {
       {state === 'ready' && query.data && (
         <Card>
           <CardHeader>
-            <CardTitle>Контент сайта</CardTitle>
-            <CardDescription>Выберите страницу, чтобы посмотреть сводку черновика.</CardDescription>
+            <CardTitle>Страницы сайта</CardTitle>
+            <CardDescription>Статус и содержимое доступны в самой странице — без технических деталей.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -74,7 +75,7 @@ export function CmsPagesPage() {
                 <TableRow>
                   <TableHead>Название</TableHead>
                   <TableHead>Путь</TableHead>
-                  <TableHead>Версия черновика</TableHead>
+                  <TableHead>Изменения</TableHead>
                   <TableHead>Статус</TableHead>
                 </TableRow>
               </TableHeader>
@@ -95,7 +96,7 @@ export function CmsPagesPage() {
                     <TableCell>
                       <Typography variant="codeXs">{page.path}</Typography>
                     </TableCell>
-                    <TableCell>{page.draftRevision}</TableCell>
+                    <TableCell>{page.draftRevision === 0 ? 'Ещё не сохранялась' : `Сохранений: ${page.draftRevision}`}</TableCell>
                     <TableCell>
                       <Badge variant={page.archived ? 'outline' : 'secondary'}>
                         {page.archived ? 'Архив' : 'Черновик'}
@@ -185,6 +186,8 @@ export function CmsPageDetailPage() {
   const revisions = useCmsPageRevisionsQuery(pageId)
   const submit = useSubmitCmsApprovalMutation()
   const restore = useRestoreCmsPageRevisionMutation()
+  const preview = useCmsPreviewGrantMutation()
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
   return (
     <PageContainer>
@@ -193,29 +196,42 @@ export function CmsPageDetailPage() {
         title={query.data?.title ?? 'Страница'}
         actions={
           query.data ? (
-            <Button
-              disabled={submit.isPending}
-              onClick={() => submit.mutate(query.data!.draftRevision)}
-            >
-              {submit.isPending ? 'Отправляем…' : 'Отправить на согласование'}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={preview.isPending}
+                onClick={() => preview.mutate(pageId, { onSuccess: (grant) => setPreviewUrl(grant.previewUrl) })}
+                variant="outline"
+              >
+                {preview.isPending ? 'Открываем…' : 'Предпросмотр'}
+              </Button>
+              <Button
+                disabled={submit.isPending}
+                onClick={() => submit.mutate(query.data!.draftRevision)}
+              >
+                {submit.isPending ? 'Отправляем…' : 'Отправить на согласование'}
+              </Button>
+            </div>
           ) : undefined
         }
       />
       {query.isPending && <CmsLoading />}
       {query.isError && <CmsError />}
       {submit.isError && <CmsActionError />}
+      {preview.isError && <CmsPreviewError />}
       {query.data && !query.isPending && !query.isError && (
-        <div className="grid gap-6">
-          <PageEditor key={`${query.data.id}:${query.data.draftRevision}`} page={query.data} />
-          <CmsDraftSummaryCard page={query.data} />
-          <RevisionHistoryCard
-            error={revisions.isError || restore.isError}
-            isPending={revisions.isPending}
-            revisions={revisions.data}
-            restoringId={restore.isPending ? restore.variables?.revisionId : undefined}
-            onRestore={(revisionId) => restore.mutate({ pageId, revisionId })}
-          />
+        <div className={previewUrl ? 'grid gap-6 2xl:grid-cols-[minmax(0,1fr)_minmax(23rem,0.8fr)]' : 'grid gap-6'}>
+          <div className="grid gap-6">
+            <PageEditor key={`${query.data.id}:${query.data.draftRevision}`} page={query.data} />
+            <CmsDraftSummaryCard page={query.data} />
+            <RevisionHistoryCard
+              error={revisions.isError || restore.isError}
+              isPending={revisions.isPending}
+              revisions={revisions.data}
+              restoringId={restore.isPending ? restore.variables?.revisionId : undefined}
+              onRestore={(revisionId) => restore.mutate({ pageId, revisionId })}
+            />
+          </div>
+          {previewUrl && <CmsPreviewPanel onClose={() => setPreviewUrl(null)} previewUrl={previewUrl} />}
         </div>
       )}
     </PageContainer>
@@ -269,19 +285,16 @@ function CmsDraftSummaryCard({ page }: { page: Parameters<typeof summarizeCmsDra
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Сводка черновика</CardTitle>
-        <CardDescription>Данные показаны без сырого JSON и служебных идентификаторов.</CardDescription>
+        <CardTitle>Готовность страницы</CardTitle>
+        <CardDescription>Быстрая проверка перед предпросмотром и согласованием.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2">
         <SummaryItem label="Путь" value={page.path} />
-        <SummaryItem label="Версия" value={String(page.draftRevision)} />
-        <SummaryItem label="Блоки" value={String(summary.blockCount)} />
+        <SummaryItem label="Сохранений" value={String(page.draftRevision)} />
+        <SummaryItem label="Секций" value={String(summary.blockCount)} />
         <SummaryItem label="SEO" value={summary.hasSeo ? 'Заполнено' : 'Не заполнено'} />
         <SummaryItem label="Метка навигации" value={summary.navigationLabel ?? 'Не задана'} />
-        <SummaryItem
-          label="Типы блоков"
-          value={summary.blockTypes.length > 0 ? summary.blockTypes.join(', ') : 'Нет блоков'}
-        />
+        <SummaryItem label="Содержание" value={summary.blockTypes.length > 0 ? `${summary.blockTypes.length} типов секций` : 'Нет секций'} />
       </CardContent>
     </Card>
   )
@@ -319,12 +332,12 @@ function RevisionHistoryCard({
             {revisions.map((revision) => (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3" key={revision.id}>
                 <div className="grid gap-1">
-                  <Typography variant="bodySmMedium">Версия {revision.revision}</Typography>
+                  <Typography variant="bodySmMedium">Сохранённая версия</Typography>
                   <Typography tone="muted" variant="caption">
-                    Снимок черновика {revision.sourceDraftRevision} · {new Date(revision.createdAt).toLocaleString('ru-RU')}
+                    {new Date(revision.createdAt).toLocaleString('ru-RU')}
                   </Typography>
                   {revision.publicationRevision && (
-                    <Badge variant="secondary">Публиковалась: {revision.publicationRevision}</Badge>
+                    <Badge variant="secondary">Была опубликована</Badge>
                   )}
                 </div>
                 {confirmId === revision.id ? (
@@ -373,21 +386,21 @@ function PublicationStatusCard({
     <Card>
       <CardHeader>
         <CardTitle>Состояние публикации</CardTitle>
-        <CardDescription>Публикация запускается отдельным защищённым процессом сборки.</CardDescription>
+        <CardDescription>Сайт обновляется безопасно: сначала проверяется новая версия, затем она становится доступна посетителям.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryItem label="Статус" value={cmsPublicationStatusLabel(status)} />
         <SummaryItem
-          label="Опубликованная версия"
-          value={String(data.controller?.publishedRevision ?? 'Нет')}
+          label="На сайте сейчас"
+          value={data.controller?.publishedRevision ? 'Актуальная версия опубликована' : 'Пока не опубликовано'}
         />
         <SummaryItem
-          label="Ожидаемая версия"
-          value={String(data.controller?.desiredRevision ?? 'Нет')}
+          label="Изменения"
+          value={data.controller?.desiredRevision && data.controller.desiredRevision !== data.controller.publishedRevision ? 'Ждут публикации' : 'Синхронизированы'}
         />
         <SummaryItem
-          label="Последний артефакт"
-          value={data.latestPublication?.artifactState ?? 'Нет данных'}
+          label="Подготовка"
+          value={publicationArtifactLabel(data.latestPublication?.artifactState)}
         />
         {data.controller?.lastError && (
           <div className="sm:col-span-2 lg:col-span-4">
@@ -510,6 +523,43 @@ function CmsActionError() {
       <AlertDescription>Проверьте соединение и повторите попытку.</AlertDescription>
     </Alert>
   )
+}
+
+function CmsPreviewError() {
+  return (
+    <Alert variant="destructive">
+      <AlertTitle>Предпросмотр недоступен</AlertTitle>
+      <AlertDescription>Не удалось открыть защищённый предпросмотр. Сохраните изменения и повторите попытку.</AlertDescription>
+    </Alert>
+  )
+}
+
+function CmsPreviewPanel({ onClose, previewUrl }: { onClose: () => void; previewUrl: string }) {
+  return (
+    <aside className="sticky top-20 grid h-fit gap-3 rounded-xl border bg-card p-3 shadow-sm" aria-label="Предпросмотр страницы">
+      <div className="flex items-start justify-between gap-3 px-1">
+        <div className="grid gap-1">
+          <Typography variant="bodySmMedium">Предпросмотр</Typography>
+          <Typography tone="muted" variant="caption">Показывает последнюю сохранённую версию и доступен только вам.</Typography>
+        </div>
+        <Button onClick={onClose} size="sm" type="button" variant="ghost">Закрыть</Button>
+      </div>
+      <iframe
+        className="min-h-[42rem] w-full rounded-lg border bg-background"
+        referrerPolicy="no-referrer"
+        sandbox="allow-forms allow-popups allow-same-origin allow-scripts"
+        src={previewUrl}
+        title="Защищённый предпросмотр страницы"
+      />
+    </aside>
+  )
+}
+
+function publicationArtifactLabel(state: 'missing' | 'uploading' | 'ready' | undefined) {
+  if (state === 'ready') return 'Готово к публикации'
+  if (state === 'uploading') return 'Подготавливается'
+  if (state === 'missing') return 'Готовится'
+  return 'Нет данных'
 }
 
 function SummaryItem({ label, value }: { label: string; value: string }) {

@@ -73,11 +73,11 @@ export function WorkspaceShell({
         onLogout={onLogout}
         settingsPath={settingsPath}
         user={user}
-        workspaceLabel={user.role === 'user' ? 'User workspace' : 'CMS workspace'}
+        workspaceLabel={user.role === 'user' ? 'Личный кабинет' : 'Рабочее пространство'}
       />
       <SidebarInset>
         <SiteHeader
-          title={activeItem?.label ?? (user.role === 'user' ? 'Home' : 'Dashboard')}
+          title={activeItem?.label ?? (user.role === 'user' ? 'Главная' : 'Обзор')}
         />
         <div className="flex min-w-0 flex-1 flex-col">{children}</div>
       </SidebarInset>

@@ -38,7 +38,7 @@ export function LoginForm({ returnTo }: { returnTo?: string }) {
         await auth.login(result.data as LoginRequest)
       } catch (caughtError) {
         setFormError(
-          caughtError instanceof ApiRequestError ? caughtError.message : 'Unexpected auth error',
+          caughtError instanceof ApiRequestError ? caughtError.message : 'Не удалось войти. Повторите попытку.',
         )
       }
     },
@@ -55,10 +55,10 @@ export function LoginForm({ returnTo }: { returnTo?: string }) {
       <FieldGroup className="gap-5">
         <div className="flex flex-col items-center gap-1 text-center">
           <Typography as="h1" variant="h3" balance>
-            Login to your account
+            Войдите в рабочее пространство
           </Typography>
           <Typography variant="bodySm" tone="muted" balance>
-            Enter your email below to login to your account
+            Используйте рабочую почту и пароль.
           </Typography>
         </div>
 
@@ -66,7 +66,7 @@ export function LoginForm({ returnTo }: { returnTo?: string }) {
           name="email"
           children={(field) => (
             <Field data-invalid={hasErrors(fieldErrors.email)}>
-              <FieldLabel htmlFor={emailId}>Email</FieldLabel>
+              <FieldLabel htmlFor={emailId}>Электронная почта</FieldLabel>
               <Input
                 aria-describedby={errorId(fieldErrors.email, emailErrorId)}
                 aria-invalid={hasErrors(fieldErrors.email)}
@@ -95,10 +95,10 @@ export function LoginForm({ returnTo }: { returnTo?: string }) {
           children={(field) => (
             <Field data-invalid={hasErrors(fieldErrors.password)}>
               <div className="flex items-center">
-                <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
+                <FieldLabel htmlFor={passwordId}>Пароль</FieldLabel>
                 <Typography asChild variant="bodySm">
                   <Link className="ml-auto underline-offset-4 hover:underline" to="/forgot-password">
-                    Forgot your password?
+                    Забыли пароль?
                   </Link>
                 </Typography>
               </div>
@@ -129,16 +129,16 @@ export function LoginForm({ returnTo }: { returnTo?: string }) {
             selector={(state) => state.isSubmitting}
             children={(isSubmitting) => (
               <Button disabled={isSubmitting} type="submit">
-                {isSubmitting ? 'Signing in…' : 'Login'}
+                {isSubmitting ? 'Входим…' : 'Войти'}
               </Button>
             )}
           />
         </Field>
 
         <FieldDescription className="text-center">
-          Don&apos;t have an account?{' '}
+          Нет аккаунта?{' '}
           <Link search={{ returnTo }} to="/signup">
-            Sign up
+            Зарегистрироваться
           </Link>
         </FieldDescription>
       </FieldGroup>
