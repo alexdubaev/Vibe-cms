@@ -21,6 +21,7 @@ const previewExchangeBody = z.object({ token: z.string().min(43).max(256) }).str
 const entryIdParams = z.object({ entryId: z.uuid() }).strict()
 const menuIdParams = z.object({ menuId: z.uuid() }).strict()
 const assetIdParams = z.object({ assetId: z.uuid() }).strict()
+const siteSettingsResponsePayloadSchema = z.object({ companyName: z.string().trim().min(1).max(160) }).strip()
 const previewSessionHeader = 'x-cms-preview-session'
 
 type CreateCmsRoutesOptions = {
@@ -134,7 +135,10 @@ export function createCmsRoutes({
   routes.patch('/settings', async (c) => {
     const body = siteSettingsDraftSchema.parse(await c.req.json())
     const result = await executeCms(() => service.saveSettings(c.var.user, body))
-    return c.json(result, 200)
+    return c.json(toSafeSettingsPresentation({
+      companyName: siteSettingsResponsePayloadSchema.parse(result.draftPayload).companyName,
+      revision: result.revision,
+    }), 200)
   })
 
   routes.post('/approvals', async (c) => {

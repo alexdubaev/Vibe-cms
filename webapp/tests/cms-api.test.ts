@@ -8,6 +8,7 @@ import {
   getCmsPageRevisions,
   getCmsMenu,
   getCmsSiteSettings,
+  saveCmsSiteSettings,
   createCmsPreviewGrant,
   publishCmsCurrent,
   rejectCmsApproval,
@@ -156,6 +157,22 @@ test('site navigation and settings use safe read routes', async () => {
   await getCmsSiteSettings(transport)
   await getCmsMenu(transport, menuId)
   expect(calls).toEqual(['/api/cms/settings', `/api/cms/menus/${menuId}`])
+})
+
+test('site settings save sends only the editable name and the concurrency revision', async () => {
+  let request: { path: string; options?: Record<string, unknown> } | undefined
+  const transport: AuthenticatedTransport = {
+    async request(path, _schema, options) {
+      request = { path, options: options as Record<string, unknown> | undefined }
+      return { companyName: 'Vibe Studio', revision: 3 } as never
+    },
+  }
+
+  await saveCmsSiteSettings(transport, { companyName: ' Vibe Studio ', expectedRevision: 2 })
+  expect(request).toEqual({
+    path: '/api/cms/settings',
+    options: { method: 'PATCH', body: { companyName: 'Vibe Studio', expectedRevision: 2 } },
+  })
 })
 
 test('collection editor API uses separate create, read, and optimistic update contracts', async () => {

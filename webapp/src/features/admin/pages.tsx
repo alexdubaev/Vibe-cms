@@ -3,6 +3,7 @@ import type { UserDto } from '@web-app-demo/contracts'
 import { PageContainer, PageHeader } from '@/components/PageLayout'
 import { AppearancePanel } from '@/features/settings'
 import { ProfilePanel } from '@/features/users'
+import { SiteIdentityPanel } from '@/features/cms'
 import { AdminMetrics } from './AdminMetrics'
 import { UserDirectory } from './UserDirectory'
 
@@ -34,10 +35,11 @@ export function AdminSettings({ user }: { user: UserDto }) {
   return (
     <PageContainer>
       <PageHeader
-        description="Управляйте профилем владельца и внешним видом рабочего пространства."
+        description="Настройте название сайта, профиль владельца и внешний вид рабочего пространства."
         title="Настройки сайта"
       />
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+        <SiteIdentityPanel />
         <ProfilePanel user={user} />
         <AppearancePanel />
       </div>

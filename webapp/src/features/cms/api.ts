@@ -130,6 +130,10 @@ const cmsMediaListSchema = z
   .strict()
 
 const cmsSiteSettingsSchema = z.object({ companyName: z.string().trim().min(1).max(160), revision: z.number().int().nonnegative() }).strict()
+const cmsSiteSettingsDraftSchema = z.object({
+  companyName: z.string().trim().min(1).max(160),
+  expectedRevision: z.number().int().nonnegative(),
+}).strict()
 const cmsMenuSchema = z.object({
   location: z.enum(['header', 'footer']),
   items: z.array(z.object({ label: z.string().trim().min(1).max(120), href: z.string().trim().min(1).max(500) }).strict()).max(100),
@@ -289,6 +293,16 @@ export function getCmsPublicationSummary(transport: AuthenticatedTransport) {
 
 export function getCmsSiteSettings(transport: AuthenticatedTransport) {
   return transport.request('/api/cms/settings', cmsSiteSettingsSchema)
+}
+
+export function saveCmsSiteSettings(
+  transport: AuthenticatedTransport,
+  input: { companyName: string; expectedRevision: number },
+) {
+  return transport.request('/api/cms/settings', cmsSiteSettingsSchema, {
+    method: 'PATCH',
+    body: cmsSiteSettingsDraftSchema.parse(input),
+  })
 }
 
 export function getCmsMenu(transport: AuthenticatedTransport, menuId: string) {

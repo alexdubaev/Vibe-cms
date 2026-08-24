@@ -19,6 +19,7 @@ import {
   getCmsMedia,
   getCmsMenu,
   getCmsSiteSettings,
+  saveCmsSiteSettings,
   approveCmsApproval,
   publishCmsCurrent,
   rejectCmsApproval,
@@ -189,6 +190,16 @@ export function useCmsPreviewGrantMutation() {
 export function useCmsSiteSettingsQuery(enabled = true) {
   const auth = useAuth()
   return useQuery({ queryKey: cmsQueryKeys.settings(), queryFn: () => getCmsSiteSettings(auth.transport), enabled })
+}
+
+export function useSaveCmsSiteSettingsMutation() {
+  const auth = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { companyName: string; expectedRevision: number }) =>
+      saveCmsSiteSettings(auth.transport, input),
+    onSuccess: (settings) => queryClient.setQueryData(cmsQueryKeys.settings(), settings),
+  })
 }
 
 export function useCmsMenuQuery(menuId: string) {

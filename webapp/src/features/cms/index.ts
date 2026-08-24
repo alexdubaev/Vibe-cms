@@ -25,6 +25,7 @@ export {
   getCmsPublicationSummary,
   getCmsMenu,
   getCmsSiteSettings,
+  saveCmsSiteSettings,
   saveCmsPage,
   restoreCmsPageRevision,
   deleteCmsMedia,
@@ -71,6 +72,7 @@ export {
   useCmsPublicationSummaryQuery,
   useCmsMenuQuery,
   useCmsSiteSettingsQuery,
+  useSaveCmsSiteSettingsMutation,
   usePublishCmsCurrentMutation,
   useRejectCmsApprovalMutation,
   useSaveCmsPageMutation,
@@ -102,3 +104,4 @@ export {
 } from './media-upload'
 export { CmsContentPage, CmsPageDetailPage, CmsPagesPage, CmsPublicationsPage } from './pages'
 export { MediaLibraryPage } from './components/MediaLibrary'
+export { SiteIdentityPanel } from './components/SiteIdentityPanel'
