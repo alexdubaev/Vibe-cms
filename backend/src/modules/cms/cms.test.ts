@@ -73,6 +73,46 @@ function createService(overrides: Partial<CmsRepository> = {}) {
 }
 
 describe('CMS application service', () => {
+  test('projects site settings and menus into strict presentation DTOs', async () => {
+    const menuId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a30'
+    const { service } = createService({
+      getSiteSettings: async () => ({
+        key: 'default',
+        draftPayload: {
+          companyName: 'Северный ветер',
+          internalFlags: { preview: true },
+        },
+        draftRevision: 7,
+      }),
+      getMenu: async () => ({
+        id: menuId,
+        location: 'header',
+        draftPayload: {
+          items: [{ label: 'О нас', href: '/about', analyticsTag: 'nav-about' }],
+          internalNotes: 'Do not publish',
+        },
+        draftRevision: 5,
+      }),
+    })
+
+    await expect(service.getSiteSettings({ id: 'editor', role: 'editor' })).resolves.toEqual({
+      companyName: 'Северный ветер',
+      revision: 7,
+    })
+    await expect(service.getMenu({ id: 'owner', role: 'owner' }, menuId)).resolves.toEqual({
+      location: 'header',
+      items: [{ label: 'О нас', href: '/about' }],
+      revision: 5,
+    })
+  })
+
+  test('rejects regular users before reading CMS presentation data', async () => {
+    const { service } = createService()
+
+    await expectRejected(service.getSiteSettings({ id: 'user', role: 'user' }), CmsRepositoryError)
+    await expectRejected(service.getMenu({ id: 'user', role: 'user' }, '018f8c8d-5f34-7db2-8b98-2c7bf3d80a30'), CmsRepositoryError)
+  })
+
   test('returns safe read DTOs for pages, publication status, and pending approvals', async () => {
     const { service, page, approval } = createService({
       listPages: async () => [page],

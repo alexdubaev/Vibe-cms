@@ -100,6 +100,17 @@ export function createCmsRoutes({
     return c.json(toSafeEntryEditor(result), 200)
   })
 
+  routes.get('/menus/:menuId', async (c) => {
+    const params = menuIdParams.parse(c.req.param())
+    const result = await executeCms(() => service.getMenu(c.var.user, params.menuId))
+    return c.json(toSafeMenuPresentation(result), 200)
+  })
+
+  routes.get('/settings', async (c) => {
+    const result = await executeCms(() => service.getSiteSettings(c.var.user))
+    return c.json(toSafeSettingsPresentation(result), 200)
+  })
+
   routes.post('/entries', async (c) => {
     const body = collectionEntryCreateSchema.parse(await c.req.json())
     const result = await executeCms(() => service.createEntry(c.var.user, body))
@@ -222,6 +233,25 @@ function toSafeEntry(input: {
     summary: input.summary,
     revision: input.revision,
     archived: input.archived,
+  }
+}
+
+function toSafeMenuPresentation(input: {
+  location: 'header' | 'footer'
+  items: Array<{ label: string; href: string }>
+  revision: number
+}) {
+  return {
+    location: input.location,
+    items: input.items.map(({ label, href }) => ({ label, href })),
+    revision: input.revision,
+  }
+}
+
+function toSafeSettingsPresentation(input: { companyName: string; revision: number }) {
+  return {
+    companyName: input.companyName,
+    revision: input.revision,
   }
 }
 

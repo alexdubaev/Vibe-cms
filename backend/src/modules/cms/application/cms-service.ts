@@ -102,6 +102,15 @@ export type EntryListItemDto = {
 }
 export type MenuEditorDto = CmsMenuRecord & { revision: number }
 export type SiteSettingsEditorDto = CmsSettingsRecord & { revision: number }
+export type MenuPresentationDto = {
+  location: CmsMenuRecord['location']
+  items: Array<{ label: string; href: string }>
+  revision: number
+}
+export type SiteSettingsPresentationDto = {
+  companyName: string
+  revision: number
+}
 
 export const menuDraftSchema = z.object({
   items: z.array(z.object({ label: z.string().trim().min(1).max(120), href: z.string().trim().min(1).max(500) }).strict()).max(100),
@@ -111,6 +120,12 @@ export const siteSettingsDraftSchema = z.object({
   companyName: z.string().trim().min(1).max(160),
   expectedRevision: z.number().int().nonnegative(),
 }).strict()
+const menuPresentationPayloadSchema = z.object({
+  items: z.array(z.object({ label: z.string().trim().min(1).max(120), href: z.string().trim().min(1).max(500) }).strip()).max(100),
+}).strip()
+const siteSettingsPresentationPayloadSchema = z.object({
+  companyName: z.string().trim().min(1).max(160),
+}).strip()
 type MenuDraft = z.infer<typeof menuDraftSchema>
 type SiteSettingsDraft = z.infer<typeof siteSettingsDraftSchema>
 
@@ -215,6 +230,29 @@ export class CmsService {
     const entry = await this.dependencies.repository.getContentEntry(entryId)
     if (!entry) throw new CmsRepositoryError('Collection entry was not found', 'NOT_FOUND')
     return toEntryEditorDto(entry)
+  }
+
+  async getMenu(actor: CmsActor, menuId: string): Promise<MenuPresentationDto> {
+    this.requireCapability(actor, 'cms:read')
+    const menu = await this.dependencies.repository.getMenu(menuId)
+    if (!menu) throw new CmsRepositoryError('Menu was not found', 'NOT_FOUND')
+    const payload = menuPresentationPayloadSchema.parse(menu.draftPayload)
+    return {
+      location: menu.location,
+      items: payload.items.map(({ label, href }) => ({ label, href })),
+      revision: menu.draftRevision,
+    }
+  }
+
+  async getSiteSettings(actor: CmsActor): Promise<SiteSettingsPresentationDto> {
+    this.requireCapability(actor, 'cms:read')
+    const settings = await this.dependencies.repository.getSiteSettings()
+    if (!settings) throw new CmsRepositoryError('Site settings were not initialised', 'NOT_FOUND')
+    const payload = siteSettingsPresentationPayloadSchema.parse(settings.draftPayload)
+    return {
+      companyName: payload.companyName,
+      revision: settings.draftRevision,
+    }
   }
 
   async createEntry(actor: CmsActor, input: CollectionEntryCreateInput): Promise<EntryEditorDto> {

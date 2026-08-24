@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test'
 import { Hono } from 'hono'
 import { createMiddleware } from 'hono/factory'
 
+import { handleError } from '../../../http/errors'
 import type { AuthHttpEnv } from '../../auth'
+import { createRequireAnyRole } from '../../auth/transport/middleware'
 import type { CmsService } from '../application/cms-service'
 import type { CmsPreviewService } from '../application/preview-service'
 import { createCmsPreviewRuntimeRoutes, createCmsRoutes } from './routes'
@@ -10,6 +12,57 @@ import { createCmsPreviewRuntimeRoutes, createCmsRoutes } from './routes'
 const pageId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10'
 
 describe('CMS HTTP routes', () => {
+  test('serves strict settings and menu presentation DTOs only to CMS roles', async () => {
+    const menuId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a30'
+    const auth = createMiddleware<AuthHttpEnv>(async (c, next) => {
+      const requestedRole = c.req.header('x-role')
+      c.set('user', {
+        id: requestedRole ?? 'user',
+        role: requestedRole === 'owner' ? 'owner' : requestedRole === 'editor' ? 'editor' : 'user',
+        email: 'cms@example.com',
+        displayName: null,
+        createdAt: new Date().toISOString(),
+        sessionId: 'session',
+      })
+      await next()
+    })
+    const service = {
+      getSiteSettings: async () => ({
+        companyName: 'Северный ветер',
+        revision: 7,
+        draftPayload: { internalFlags: { preview: true } },
+      }),
+      getMenu: async () => ({
+        location: 'header',
+        items: [{ label: 'О нас', href: '/about', analyticsTag: 'nav-about' }],
+        revision: 5,
+        draftPayload: { internalNotes: 'Do not publish' },
+      }),
+    } as unknown as CmsService
+    const app = new Hono<AuthHttpEnv>()
+    app.route('/api/cms', createCmsRoutes({
+      requireAuth: auth,
+      requireCmsAccess: createRequireAnyRole('editor', 'owner'),
+      service,
+      preview: {} as CmsPreviewService,
+    }))
+    app.onError(handleError)
+
+    expect((await app.request('/api/cms/settings')).status).toBe(403)
+
+    const settings = await app.request('/api/cms/settings', { headers: { 'x-role': 'editor' } })
+    expect(settings.status).toBe(200)
+    expect(await settings.json()).toEqual({ companyName: 'Северный ветер', revision: 7 })
+
+    const menu = await app.request(`/api/cms/menus/${menuId}`, { headers: { 'x-role': 'owner' } })
+    expect(menu.status).toBe(200)
+    expect(await menu.json()).toEqual({
+      location: 'header',
+      items: [{ label: 'О нас', href: '/about' }],
+      revision: 5,
+    })
+  })
+
   test('serves a draft page and authorized media URL only with a preview session', async () => {
     const service = {
       getPageForEditor: async () => ({
