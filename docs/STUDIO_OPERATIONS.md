@@ -15,7 +15,9 @@ diagnostics, and storage credentials are excluded. The media manifest contains t
 path and stored content hash only; media bytes are delivered separately from the customer's backup
 or publication destination. Credential-bearing URL values are removed even when stored under an
 otherwise ordinary field such as `url`, `href`, or `downloadUrl`; ordinary public HTTP(S) links
-without authority-bearing query or fragment parameters remain exportable.
+without authority-bearing query or fragment parameters remain exportable. Matching is structural:
+recognized token, credential, provider-signature, or signature-companion parameters must carry a
+value, so benign vocabulary such as `tokenization` and `credentialing` is preserved.
 
 Run with the isolated installation's read-capable runtime database URL and an explicit output file:
 

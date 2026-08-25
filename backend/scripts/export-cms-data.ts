@@ -56,8 +56,20 @@ const forbiddenPayloadKeys = new Set([
 ])
 const omittedPayloadValue = Symbol('omitted-payload-value')
 const knownUrlAuthorityParameters = new Set([
+  'accesstoken',
+  'apikey',
   'awsaccesskeyid',
+  'authtoken',
+  'bearertoken',
+  'clientsecret',
+  'credential',
+  'credentials',
   'googleaccessid',
+  'idtoken',
+  'refreshtoken',
+  'securitytoken',
+  'sessiontoken',
+  'token',
   'xamzcredential',
   'xamzsecuritytoken',
   'xamzsignature',
@@ -271,15 +283,16 @@ function isCredentialBearingUrl(value: string) {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
   if (url.username || url.password) return true
 
-  const queryNames = [...url.searchParams.keys()].map(normalizeUrlParameter)
+  const queryEntries = normalizedUrlEntries(url.searchParams)
   const fragment = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash
-  const fragmentNames = fragment.includes('=')
-    ? [...new URLSearchParams(fragment).keys()].map(normalizeUrlParameter)
+  const fragmentEntries = fragment.includes('=')
+    ? normalizedUrlEntries(new URLSearchParams(fragment))
     : []
-  const names = [...queryNames, ...fragmentNames]
+  const authorityEntries = [...queryEntries, ...fragmentEntries]
+    .filter(({ value: parameterValue }) => parameterValue.trim().length > 0)
+  const names = authorityEntries.map(({ name }) => name)
 
   if (names.some((name) => knownUrlAuthorityParameters.has(name))) return true
-  if (names.some((name) => name.includes('token') || name.includes('credential'))) return true
 
   const hasGenericSignature = names.includes('signature') || names.includes('sig')
   const hasSignatureCompanion = names.some((name) => [
@@ -291,6 +304,13 @@ function isCredentialBearingUrl(value: string) {
     'sv',
   ].includes(name))
   return hasGenericSignature && hasSignatureCompanion
+}
+
+function normalizedUrlEntries(parameters: URLSearchParams) {
+  return [...parameters.entries()].map(([name, value]) => ({
+    name: normalizeUrlParameter(name),
+    value,
+  }))
 }
 
 function normalizeUrlParameter(value: string) {

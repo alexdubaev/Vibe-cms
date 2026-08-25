@@ -37,6 +37,8 @@ function fixtureSource(): CmsExportSource {
         accountUrl: 'https://app.example/reset#token=fake-reset-token',
         publicUrl: 'https://www.example/services?utm_source=cms#diagnostics',
         styleReferenceUrl: 'https://design.example/pattern?signature=diagonal',
+        nlpDocsUrl: 'https://docs.example/nlp?tokenization=byte-pair',
+        schoolProgramUrl: 'https://school.example/program?credentialing=medical',
       },
       installationId: 'other-customer',
     }),
@@ -115,6 +117,8 @@ describe('CMS customer export', () => {
         siteName: 'Автосервис',
         publicUrl: 'https://www.example/services?utm_source=cms#diagnostics',
         styleReferenceUrl: 'https://design.example/pattern?signature=diagonal',
+        nlpDocsUrl: 'https://docs.example/nlp?tokenization=byte-pair',
+        schoolProgramUrl: 'https://school.example/program?credentialing=medical',
       },
     })
     expect(exported).toMatchObject({
