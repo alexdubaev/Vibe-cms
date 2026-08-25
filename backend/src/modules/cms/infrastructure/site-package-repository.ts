@@ -11,6 +11,7 @@ import type {
 
 const DEFAULT_KEY = 'default'
 const MIGRATION_TRANSACTION_TIMEOUT_MS = 60_000
+const CMS_SITE_PACKAGE_MIGRATION_LOCK = 'cms-site-package-migration'
 
 export function createCmsSitePackageMigrationRepository(
   db: DbClient,
@@ -18,13 +19,23 @@ export function createCmsSitePackageMigrationRepository(
   return {
     transaction(operation) {
       return db.$transaction(async (transaction) => {
-        await transaction.$executeRaw(
-          Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended('cms-site-package-migration', 0))`,
-        )
+        await acquireCmsSitePackageMigrationLock(transaction)
         return operation(createTransactionRepository(transaction))
       }, { timeout: MIGRATION_TRANSACTION_TIMEOUT_MS })
     },
   }
+}
+
+export function acquireCmsSitePackageMigrationLock(db: Pick<Prisma.TransactionClient, '$executeRaw'>) {
+  return db.$executeRaw(
+    Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${CMS_SITE_PACKAGE_MIGRATION_LOCK}, 0))`,
+  )
+}
+
+export function acquireCmsSitePackageWriteLock(db: Pick<Prisma.TransactionClient, '$executeRaw'>) {
+  return db.$executeRaw(
+    Prisma.sql`SELECT pg_advisory_xact_lock_shared(hashtextextended(${CMS_SITE_PACKAGE_MIGRATION_LOCK}, 0))`,
+  )
 }
 
 function createTransactionRepository(

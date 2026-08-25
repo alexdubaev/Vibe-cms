@@ -5,13 +5,17 @@ import type { CmsRepository } from '../application/ports'
 import type { PreviewStore } from '../application/preview-service'
 import { CmsConflictError, CmsImmutableRevisionError, CmsPublicationConflictError, CmsRepositoryError } from '../domain/errors'
 import { normalizeCmsPath } from '../domain/path-policy'
+import { acquireCmsSitePackageWriteLock } from './site-package-repository'
 
 const DEFAULT_KEY = 'default'
 const DEFAULT_SITE_SETTINGS_PAYLOAD = { companyName: 'Vibe CMS' }
 
 const asJson = (value: unknown) => value as Prisma.InputJsonValue
 
-export function createCmsRepository(db: DbClient): CmsRepository {
+export function createCmsRepository(
+  db: DbClient,
+  sitePackage: { id: string; schemaVersion: number },
+): CmsRepository {
   return {
     async getPolicy() {
       return db.cmsPolicy.findUnique({ where: { key: DEFAULT_KEY } })
@@ -99,13 +103,14 @@ export function createCmsRepository(db: DbClient): CmsRepository {
     async createPage(input) {
       const path = normalizeCmsPath(input.path)
       try {
-        return await db.cmsPage.create({
-          data: {
-            path,
-            title: input.title,
-            draftPayload: asJson(input.payload),
-          },
-        })
+        return await withMutableDraftWrite(db, sitePackage, (transaction) =>
+          transaction.cmsPage.create({
+            data: {
+              path,
+              title: input.title,
+              draftPayload: asJson(input.payload),
+            },
+          }))
       } catch (error) {
         if (isUniqueViolation(error)) throw new CmsConflictError(path)
         throw error
@@ -149,21 +154,23 @@ export function createCmsRepository(db: DbClient): CmsRepository {
     },
 
     async updatePageDraft(pageId, expectedRevision, payload) {
-      const result = await db.cmsPage.updateMany({
-        where: { id: pageId, draftRevision: expectedRevision },
-        data: {
-          draftPayload: asJson(payload),
-          draftRevision: { increment: 1 },
-        },
+      return withMutableDraftWrite(db, sitePackage, async (transaction) => {
+        const result = await transaction.cmsPage.updateMany({
+          where: { id: pageId, draftRevision: expectedRevision },
+          data: {
+            draftPayload: asJson(payload),
+            draftRevision: { increment: 1 },
+          },
+        })
+
+        if (result.count === 1) return { updated: true as const, revision: expectedRevision + 1 }
+
+        const current = await transaction.cmsPage.findUnique({ where: { id: pageId }, select: { draftRevision: true } })
+        return {
+          updated: false as const,
+          conflict: { aggregateId: pageId, currentRevision: current?.draftRevision },
+        }
       })
-
-      if (result.count === 1) return { updated: true as const, revision: expectedRevision + 1 }
-
-      const current = await db.cmsPage.findUnique({ where: { id: pageId }, select: { draftRevision: true } })
-      return {
-        updated: false as const,
-        conflict: { aggregateId: pageId, currentRevision: current?.draftRevision },
-      }
     },
 
     async createPageRevision(input) {
@@ -217,9 +224,10 @@ export function createCmsRepository(db: DbClient): CmsRepository {
     },
 
     async createContentEntry(input) {
-      return db.cmsContentEntry.create({
-        data: { type: input.type, draftPayload: asJson(input.payload) },
-      })
+      return withMutableDraftWrite(db, sitePackage, (transaction) =>
+        transaction.cmsContentEntry.create({
+          data: { type: input.type, draftPayload: asJson(input.payload) },
+        }))
     },
 
     async listContentEntries(type) {
@@ -244,13 +252,15 @@ export function createCmsRepository(db: DbClient): CmsRepository {
     },
 
     async updateContentEntryDraft(entryId, expectedRevision, payload) {
-      const result = await db.cmsContentEntry.updateMany({
-        where: { id: entryId, draftRevision: expectedRevision },
-        data: { draftPayload: asJson(payload), draftRevision: { increment: 1 } },
+      return withMutableDraftWrite(db, sitePackage, async (transaction) => {
+        const result = await transaction.cmsContentEntry.updateMany({
+          where: { id: entryId, draftRevision: expectedRevision },
+          data: { draftPayload: asJson(payload), draftRevision: { increment: 1 } },
+        })
+        if (result.count === 1) return { updated: true as const, revision: expectedRevision + 1 }
+        const current = await transaction.cmsContentEntry.findUnique({ where: { id: entryId }, select: { draftRevision: true } })
+        return { updated: false as const, conflict: { aggregateId: entryId, currentRevision: current?.draftRevision } }
       })
-      if (result.count === 1) return { updated: true as const, revision: expectedRevision + 1 }
-      const current = await db.cmsContentEntry.findUnique({ where: { id: entryId }, select: { draftRevision: true } })
-      return { updated: false as const, conflict: { aggregateId: entryId, currentRevision: current?.draftRevision } }
     },
 
     async createContentEntryRevision(input) {
@@ -302,36 +312,41 @@ export function createCmsRepository(db: DbClient): CmsRepository {
     },
 
     async updateMenuDraft(menuId, expectedRevision, payload) {
-      const result = await db.cmsMenu.updateMany({
-        where: { id: menuId, draftRevision: expectedRevision },
-        data: { draftPayload: asJson(payload), draftRevision: { increment: 1 } },
+      return withMutableDraftWrite(db, sitePackage, async (transaction) => {
+        const result = await transaction.cmsMenu.updateMany({
+          where: { id: menuId, draftRevision: expectedRevision },
+          data: { draftPayload: asJson(payload), draftRevision: { increment: 1 } },
+        })
+        if (result.count === 1) return { updated: true as const, revision: expectedRevision + 1 }
+        const current = await transaction.cmsMenu.findUnique({ where: { id: menuId }, select: { draftRevision: true } })
+        return { updated: false as const, conflict: { aggregateId: menuId, currentRevision: current?.draftRevision } }
       })
-      if (result.count === 1) return { updated: true as const, revision: expectedRevision + 1 }
-      const current = await db.cmsMenu.findUnique({ where: { id: menuId }, select: { draftRevision: true } })
-      return { updated: false as const, conflict: { aggregateId: menuId, currentRevision: current?.draftRevision } }
     },
 
     async getSiteSettings() {
       // The CMS shell and editor both require this singleton. Initialise it lazily so migrated
       // installations and test/dev databases do not depend on an out-of-band seed step.
-      return db.cmsSiteSettings.upsert({
-        where: { key: DEFAULT_KEY },
-        create: {
-          key: DEFAULT_KEY,
-          draftPayload: asJson(DEFAULT_SITE_SETTINGS_PAYLOAD),
-        },
-        update: {},
-      })
+      return withMutableDraftWrite(db, sitePackage, (transaction) =>
+        transaction.cmsSiteSettings.upsert({
+          where: { key: DEFAULT_KEY },
+          create: {
+            key: DEFAULT_KEY,
+            draftPayload: asJson(DEFAULT_SITE_SETTINGS_PAYLOAD),
+          },
+          update: {},
+        }))
     },
 
     async updateSiteSettingsDraft(expectedRevision, payload) {
-      const result = await db.cmsSiteSettings.updateMany({
-        where: { key: DEFAULT_KEY, draftRevision: expectedRevision },
-        data: { draftPayload: asJson(payload), draftRevision: { increment: 1 } },
+      return withMutableDraftWrite(db, sitePackage, async (transaction) => {
+        const result = await transaction.cmsSiteSettings.updateMany({
+          where: { key: DEFAULT_KEY, draftRevision: expectedRevision },
+          data: { draftPayload: asJson(payload), draftRevision: { increment: 1 } },
+        })
+        if (result.count === 1) return { updated: true as const, revision: expectedRevision + 1 }
+        const current = await transaction.cmsSiteSettings.findUnique({ where: { key: DEFAULT_KEY }, select: { draftRevision: true } })
+        return { updated: false as const, conflict: { aggregateId: DEFAULT_KEY, currentRevision: current?.draftRevision } }
       })
-      if (result.count === 1) return { updated: true as const, revision: expectedRevision + 1 }
-      const current = await db.cmsSiteSettings.findUnique({ where: { key: DEFAULT_KEY }, select: { draftRevision: true } })
-      return { updated: false as const, conflict: { aggregateId: DEFAULT_KEY, currentRevision: current?.draftRevision } }
     },
 
     async replaceMediaUsage(assetId, usages) {
@@ -451,6 +466,33 @@ export function createCmsRepository(db: DbClient): CmsRepository {
 
 export function isUniqueViolation(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+}
+
+async function withMutableDraftWrite<Result>(
+  db: DbClient,
+  sitePackage: { id: string; schemaVersion: number },
+  operation: (transaction: Prisma.TransactionClient) => Promise<Result>,
+) {
+  return db.$transaction(async (transaction) => {
+    await acquireCmsSitePackageWriteLock(transaction)
+    const state = await transaction.cmsSitePackageState.findUnique({
+      where: { key: DEFAULT_KEY },
+      select: { packageId: true, schemaVersion: true },
+    })
+    if (state === null && sitePackage.schemaVersion !== 1) {
+      throw new CmsRepositoryError(
+        `CMS site package state is not initialised for schema version ${sitePackage.schemaVersion}`,
+        'CMS_VALIDATION',
+      )
+    }
+    if (state && (state.packageId !== sitePackage.id || state.schemaVersion !== sitePackage.schemaVersion)) {
+      throw new CmsRepositoryError(
+        `CMS site package schema version ${state.packageId}@${state.schemaVersion} does not match writer ${sitePackage.id}@${sitePackage.schemaVersion}`,
+        'CMS_VALIDATION',
+      )
+    }
+    return operation(transaction)
+  }, { timeout: 60_000 })
 }
 
 export function pagePathFromRecord(page: CmsPage) {

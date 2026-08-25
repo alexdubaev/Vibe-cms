@@ -68,7 +68,7 @@ export function createApp({
 }: CreateAppOptions) {
   const storage = privateStorage ?? createPrivateStorage(env)
   const auth = createAuthModule({ db: prisma, emailDelivery, env })
-  const cmsRepository = createCmsRepository(prisma)
+  const cmsRepository = createCmsRepository(prisma, selectedSitePackageDescriptor)
   const cmsValidation = {
     pageDraftSchema: selectedPageDraftSchema,
     blockDefinitions: selectedBlockDefinitions,

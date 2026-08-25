@@ -9,6 +9,7 @@ import type {
 
 type Dependencies = {
   repository: CmsSitePackageMigrationRepository
+  adoptionValidation: CmsSitePackageValidation
   validation: CmsSitePackageValidation
   clock?: { now(): Date }
 }
@@ -42,7 +43,7 @@ export class CmsSitePackageMigrationService {
       const drafts = await repository.readMutableDrafts()
       if (!existingState) {
         try {
-          validateDrafts(drafts, this.dependencies.validation)
+          validateDrafts(drafts, this.dependencies.adoptionValidation)
         } catch (cause) {
           throw new Error('Cannot adopt mutable CMS content as site package schema version 1', { cause })
         }

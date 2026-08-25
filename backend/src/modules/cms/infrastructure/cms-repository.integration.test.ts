@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createPrisma, type DbClient } from '../../../db'
+import { selectedSitePackageDescriptor } from '@vibe-cms/selected-site-package/contract'
 import { CmsConflictError, CmsImmutableRevisionError, CmsPublicationConflictError } from '../domain/errors'
 import { createCmsRepository } from './cms-repository'
 import { createCmsSitePackageMigrationRepository } from './site-package-repository'
@@ -24,7 +25,7 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
 
   beforeAll(async () => {
     db = createPrisma(databaseUrl!)
-    repository = createCmsRepository(db)
+    repository = createCmsRepository(db, selectedSitePackageDescriptor)
   })
 
   beforeEach(async () => {
@@ -252,4 +253,54 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
     expect(await db.cmsSitePackageState.findUnique({ where: { key: 'default' } })).toBeNull()
     expect((await repository.getPageRevision(revision.id))?.sourcePayload).toEqual({ version: 1 })
   })
+
+  test('rejects a stale-schema create that starts while package state advances', async () => {
+    const staleDb = createPrisma(databaseUrl!)
+    const packageRepository = createCmsSitePackageMigrationRepository(db)
+    await packageRepository.transaction((transaction) => transaction.setState({
+      packageId: 'vibe-core',
+      packageVersion: '1.0.0',
+      schemaVersion: 1,
+      migratedAt: new Date(),
+    }))
+    const staleRepository = createCmsRepository(staleDb, {
+      id: 'vibe-core',
+      schemaVersion: 1,
+    })
+    const migrationHasLock = Promise.withResolvers<void>()
+    const finishMigration = Promise.withResolvers<void>()
+    const migration = packageRepository.transaction(async (transaction) => {
+      migrationHasLock.resolve()
+      await finishMigration.promise
+      await transaction.setState({
+        packageId: 'vibe-core',
+        packageVersion: '2.0.0',
+        schemaVersion: 2,
+        migratedAt: new Date(),
+      })
+    })
+    let staleCreate: Promise<unknown> | undefined
+    try {
+      await migrationHasLock.promise
+
+      let createSettled = false
+      staleCreate = staleRepository
+        .createPage({ path: '/stale-create', title: 'Stale', payload: { version: 1 } })
+        .finally(() => { createSettled = true })
+      await Bun.sleep(75)
+      expect(createSettled).toBe(false)
+
+      finishMigration.resolve()
+      await migration
+      await expect(staleCreate).rejects.toThrow('schema version')
+      expect(await db.cmsPage.count({ where: { path: '/stale-create' } })).toBe(0)
+      expect(await db.cmsSitePackageState.findUnique({ where: { key: 'default' } })).toMatchObject({
+        schemaVersion: 2,
+      })
+    } finally {
+      finishMigration.resolve()
+      await Promise.allSettled([migration, ...(staleCreate ? [staleCreate] : [])])
+      await staleDb.$disconnect()
+    }
+  }, 15_000)
 })

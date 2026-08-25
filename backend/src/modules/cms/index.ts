@@ -1,4 +1,5 @@
 import type { DbClient } from '../../db'
+import { selectedSitePackageDescriptor } from '@vibe-cms/selected-site-package/contract'
 
 import { createCmsRepository } from './infrastructure/cms-repository'
 
@@ -26,5 +27,5 @@ export * from './domain/registry'
 export * from './domain/site-package-state'
 
 export function createCmsModule(db: DbClient) {
-  return { repository: createCmsRepository(db) }
+  return { repository: createCmsRepository(db, selectedSitePackageDescriptor) }
 }

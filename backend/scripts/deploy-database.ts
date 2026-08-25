@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import { collectionEntryDraftSchema } from '@web-app-demo/contracts'
 import {
   selectedPageDraftSchema,
+  selectedSitePackageSchemaOneValidation,
   selectedSitePackageDescriptor,
   selectedSitePackageMigrations,
 } from '@vibe-cms/selected-site-package/contract'
@@ -230,25 +231,42 @@ export async function grantRuntimeDatabaseAccess(
 export async function migrateSelectedSitePackage(db: DbClient) {
   const service = new CmsSitePackageMigrationService({
     repository: createCmsSitePackageMigrationRepository(db),
-    validation: {
-      validateSettings(payload, draftRevision) {
-        siteSettingsDraftSchema.parse({ ...asObject(payload), expectedRevision: draftRevision })
-      },
-      validatePage(payload, draftRevision) {
-        selectedPageDraftSchema.parse({ ...asObject(payload), expectedRevision: draftRevision })
-      },
-      validateContentEntry(payload, type, draftRevision) {
-        collectionEntryDraftSchema.parse({ ...asObject(payload), type, expectedRevision: draftRevision })
-      },
-      validateMenu(payload, _location, draftRevision) {
-        menuDraftSchema.parse({ ...asObject(payload), expectedRevision: draftRevision })
-      },
-    },
+    adoptionValidation: createSitePackageValidation(selectedSitePackageSchemaOneValidation),
+    validation: createSitePackageValidation({
+      pageDraftSchema: selectedPageDraftSchema,
+      contentEntryDraftSchema: collectionEntryDraftSchema,
+      menuDraftSchema,
+      siteSettingsDraftSchema,
+    }),
   })
   await service.migrateSelectedPackage(
     selectedSitePackageDescriptor,
     selectedSitePackageMigrations,
   )
+}
+
+type SitePackageValidationSchemas = {
+  pageDraftSchema: { parse(input: unknown): unknown }
+  contentEntryDraftSchema: { parse(input: unknown): unknown }
+  menuDraftSchema: { parse(input: unknown): unknown }
+  siteSettingsDraftSchema: { parse(input: unknown): unknown }
+}
+
+function createSitePackageValidation(schemas: SitePackageValidationSchemas) {
+  return {
+    validateSettings(payload, draftRevision) {
+      schemas.siteSettingsDraftSchema.parse({ ...asObject(payload), expectedRevision: draftRevision })
+    },
+    validatePage(payload, draftRevision) {
+      schemas.pageDraftSchema.parse({ ...asObject(payload), expectedRevision: draftRevision })
+    },
+    validateContentEntry(payload, type, draftRevision) {
+      schemas.contentEntryDraftSchema.parse({ ...asObject(payload), type, expectedRevision: draftRevision })
+    },
+    validateMenu(payload, _location, draftRevision) {
+      schemas.menuDraftSchema.parse({ ...asObject(payload), expectedRevision: draftRevision })
+    },
+  }
 }
 
 function asObject(payload: unknown): Record<string, unknown> {

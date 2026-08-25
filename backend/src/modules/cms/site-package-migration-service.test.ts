@@ -122,11 +122,24 @@ describe('selected site-package content migration', () => {
 function createService(repository: CmsSitePackageMigrationRepository) {
   return new CmsSitePackageMigrationService({
     repository,
+    adoptionValidation: {
+      validateSettings: requireObject,
+      validatePage(payload) {
+        requireObject(payload)
+        if (typeof payload.price !== 'number' || 'unitPrice' in payload || 'currency' in payload) {
+          throw new Error('not a schema-one page')
+        }
+      },
+      validateContentEntry: requireObject,
+      validateMenu: requireObject,
+    },
     validation: {
       validateSettings: requireObject,
       validatePage(payload) {
         requireObject(payload)
-        if ('invalid' in payload) throw new Error('invalid page')
+        if (typeof payload.unitPrice !== 'number' || payload.currency !== 'RUB' || 'price' in payload) {
+          throw new Error('not a selected-schema page')
+        }
       },
       validateContentEntry: requireObject,
       validateMenu: requireObject,
