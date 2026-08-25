@@ -55,7 +55,9 @@ const forbiddenPayloadKeys = new Set([
   'privatekey',
 ])
 const omittedPayloadValue = Symbol('omitted-payload-value')
-const knownUrlAuthorityParameters = new Set([
+const sensitiveUrlParameterNames = new Set([
+  'accesskey',
+  'accesskeyid',
   'accesstoken',
   'apikey',
   'awsaccesskeyid',
@@ -66,13 +68,21 @@ const knownUrlAuthorityParameters = new Set([
   'credentials',
   'googleaccessid',
   'idtoken',
+  'password',
   'refreshtoken',
+  'resettoken',
+  'secret',
+  'secretaccesskey',
   'securitytoken',
   'sessiontoken',
   'token',
+  'xamzalgorithm',
   'xamzcredential',
+  'xamzdate',
+  'xamzexpires',
   'xamzsecuritytoken',
   'xamzsignature',
+  'xamzsignedheaders',
   'xgoogcredential',
   'xgoogsignature',
   'xsig',
@@ -292,7 +302,7 @@ function isCredentialBearingUrl(value: string) {
     .filter(({ value: parameterValue }) => parameterValue.trim().length > 0)
   const names = authorityEntries.map(({ name }) => name)
 
-  if (names.some((name) => knownUrlAuthorityParameters.has(name))) return true
+  if (names.some((name) => sensitiveUrlParameterNames.has(name))) return true
 
   const hasGenericSignature = names.includes('signature') || names.includes('sig')
   const hasSignatureCompanion = names.some((name) => [
