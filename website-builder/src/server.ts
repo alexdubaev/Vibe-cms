@@ -4,27 +4,23 @@ import { createBuilderBackendClient } from './backend-client'
 import { createAstroSiteRunner, createSnapshotDownloader } from './build-site'
 import { createBuilderHttpHandler, createBuilderWorker } from './index'
 import { publishBuiltRelease } from './release-pipeline'
+import {
+  createS3PublicationStorageAdapter,
+  s3PublicationStorageOptionsFromEnvironment,
+} from './s3-storage'
 import { createHttpPublicationPromotion } from './yandex-promotion'
-import { createYandexObjectStorageAdapter } from './yandex-storage'
 
 const requiredEnvironment = readRequiredEnvironment([
   'CMS_BACKEND_INTERNAL_BASE_URL',
   'CMS_BUILDER_HMAC_SECRET',
-  'CMS_WEBSITE_STORAGE_ENDPOINT',
-  'CMS_WEBSITE_STORAGE_BUCKET',
-  'CMS_WEBSITE_STORAGE_ACCESS_KEY_ID',
-  'CMS_WEBSITE_STORAGE_SECRET_ACCESS_KEY',
   'CMS_WEBSITE_PUBLIC_ORIGIN',
   'CMS_WEBSITE_SELECTOR_URL',
   'CMS_WEBSITE_PURGE_URL',
   'CMS_WEBSITE_PROMOTION_TOKEN',
 ])
 
-const websiteStorage = createYandexObjectStorageAdapter({
-  endpoint: requiredEnvironment.CMS_WEBSITE_STORAGE_ENDPOINT,
-  bucket: requiredEnvironment.CMS_WEBSITE_STORAGE_BUCKET,
-  accessKeyId: requiredEnvironment.CMS_WEBSITE_STORAGE_ACCESS_KEY_ID,
-  secretAccessKey: requiredEnvironment.CMS_WEBSITE_STORAGE_SECRET_ACCESS_KEY,
+const websiteStorage = createS3PublicationStorageAdapter({
+  ...s3PublicationStorageOptionsFromEnvironment(process.env),
   slots: ['blue', 'green'],
 })
 const publicationPromotion = createHttpPublicationPromotion({

@@ -8,6 +8,16 @@ export type BuilderWorker = {
 }
 
 export { publishBuiltRelease } from './release-pipeline'
+export {
+  createS3PublicationStorageAdapter,
+  s3PublicationStorageOptionsFromEnvironment,
+} from './s3-storage'
+export type {
+  PublicationObjectReader,
+  S3PublicationStorageAdapter,
+  S3PublicationStorageEnvironment,
+  S3PublicationStorageOptions,
+} from './s3-storage'
 export { createYandexObjectStorageAdapter } from './yandex-storage'
 export type { YandexObjectStorageAdapter, YandexObjectStorageOptions } from './yandex-storage'
 export { createHttpPublicationPromotion, promotePublication } from './yandex-promotion'

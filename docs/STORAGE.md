@@ -86,6 +86,37 @@ One capability is worth checking before you commit to a provider: **conditional 
 
 Whichever you pick, the bucket must be private. These objects carry no ACL: privacy comes from the bucket default, because per-object ACLs are unavailable or discouraged on several of these providers.
 
+## Static Website Publication Storage
+
+The isolated website builder has a separate S3-compatible destination for public blue/green
+releases. It does not use the backend's `PRIVATE_STORAGE_*` media settings: each customer builder
+receives its own bucket-scoped publication credentials through the existing
+`CMS_WEBSITE_STORAGE_*` group.
+
+```bash
+CMS_WEBSITE_STORAGE_ENDPOINT=https://storage.yandexcloud.net
+CMS_WEBSITE_STORAGE_BUCKET=customer-website
+CMS_WEBSITE_STORAGE_ACCESS_KEY_ID=
+CMS_WEBSITE_STORAGE_SECRET_ACCESS_KEY=
+CMS_WEBSITE_STORAGE_REGION=ru-central1
+CMS_WEBSITE_STORAGE_FORCE_PATH_STYLE=true
+```
+
+All six values are required together. The builder trims them at startup, rejects an empty region,
+and accepts only the exact strings `true` or `false` for force-path-style. Use `true` for Yandex
+Object Storage and local/self-hosted endpoints that address objects as
+`<endpoint>/<bucket>/<key>`. Use `false` for providers such as DigitalOcean Spaces that address
+objects as `https://<bucket>.<endpoint>/<key>`; virtual-host addressing also requires a
+DNS-compatible bucket name.
+
+The provider-neutral adapter keeps publication objects inside the configured `blue/` and `green/`
+slots. It permits deletion only of one exact slot prefix, signs immutable cache and redirect
+metadata, and reads only slot-confined marker/static keys. Published media copies continue to
+require credential-free HTTPS source URLs, refuse redirects, enforce the configured byte limit,
+and write only the narrow `<slot>/media/<site>/<asset>/<file>` destination form. The older
+`createYandexObjectStorageAdapter` export remains as a compatibility alias to this adapter while
+provider-specific infrastructure imports are migrated.
+
 ## The Upload Contract
 
 1. The browser asks the backend for an upload ticket, declaring content type and exact byte size.
