@@ -75,7 +75,7 @@ export function AvatarPanel({ user }: { user: UserDto }) {
                   disabled={busy}
                   onClick={() => {
                     setNotice(null)
-                    remove.mutate(undefined, { onSuccess: () => setNotice('Photo removed.') })
+                    remove.mutate(undefined, { onSuccess: () => setNotice('Фотография удалена.') })
                   }}
                   type="button"
                   variant="ghost"
