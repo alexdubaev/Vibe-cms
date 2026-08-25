@@ -25,6 +25,7 @@ import {
   type ContentBlock,
   type PageDraft,
   type PublicationSnapshot,
+  type RegisteredContentBlock,
 } from './cms'
 
 describe('CMS contracts', () => {
@@ -59,7 +60,8 @@ describe('CMS contracts', () => {
     } satisfies CmsBlockContractDefinition
 
     const schema = createContentBlockSchema([...coreBlockContractDefinitions, calculator])
-    expect(schema.parse({ id: 'calculator-1', type: 'estimateCalculator', data: calculator.defaultData }).type)
+    const parsedCalculator: RegisteredContentBlock = schema.parse({ id: 'calculator-1', type: 'estimateCalculator', data: calculator.defaultData })
+    expect(parsedCalculator.type)
       .toBe('estimateCalculator')
     expect(schema.safeParse({ id: 'calculator-1', type: 'estimateCalculator', data: { title: '', unitPrice: -1 } }).success)
       .toBe(false)
@@ -93,7 +95,24 @@ describe('CMS contracts', () => {
 
     const pageBlock: ContentBlock = page.blocks[0]
     const snapshotBlock: ContentBlock = snapshot.pages[0].blocks[0]
+    const parsedPage: PageDraft = pageDraftSchema.parse({
+      title: 'Главная',
+      path: '/',
+      blocks: [block],
+      expectedRevision: 0,
+    })
+    const parsedSnapshot: PublicationSnapshot = publicationSnapshotSchema.parse({
+      revision: 1,
+      generatedAt: '2026-08-24T00:00:00.000Z',
+      settings: { companyName: 'Demo' },
+      pages: [{ id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10', title: 'Главная', path: '/', blocks: [block] }],
+      collections: [],
+      menus: [],
+      redirects: [],
+      media: [],
+    })
     expect(pageBlock.type === 'hero' && snapshotBlock.type === 'hero' && snapshotBlock.data.title).toBe('Заголовок')
+    expect(parsedPage.blocks[0].type === 'hero' && parsedSnapshot.pages[0].blocks[0].type).toBe('hero')
   })
 
   test('keeps preview responses safe for a private server-to-server boundary', () => {

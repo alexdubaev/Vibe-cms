@@ -11,7 +11,7 @@ const publicSettingsSchema = z
   })
   .strict()
 
-const createPublicPageSchema = (blockSchema: z.ZodType) => z
+const createPublicPageSchema = <BlockSchema extends z.ZodType>(blockSchema: BlockSchema) => z
   .object({
     id: z.uuid(),
     title: z.string().trim().min(1).max(120),
@@ -48,7 +48,7 @@ const publicRedirectSchema = z
   .object({ source: contentPathSchema, destination: contentPathSchema })
   .strict()
 
-export const createPublicationSnapshotSchema = (blockSchema: z.ZodType) => z
+export const createPublicationSnapshotSchema = <BlockSchema extends z.ZodType>(blockSchema: BlockSchema) => z
   .object({
     revision: z.number().int().positive(),
     generatedAt: z.string().datetime(),

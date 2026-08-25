@@ -266,7 +266,7 @@ export const coreBlockContractDefinitions = [
   { type: 'formPlaceholder', label: 'Форма', description: 'Форма обратной связи', dataSchema: formPlaceholderDataSchema, defaultData: { title: 'Оставьте заявку', text: 'Мы свяжемся с вами', contactMethod: 'phone' }, editor: { kind: 'descriptor', fields: [] } },
 ] satisfies readonly CmsBlockContractDefinition[]
 
-export const contentBlockSchema = createContentBlockSchema(coreBlockContractDefinitions)
+export const contentBlockSchema = createContentBlockSchema(coreBlockContractDefinitions) as unknown as z.ZodType<ContentBlock>
 
 export const seoSchema = z
   .object({
@@ -287,7 +287,7 @@ export const seoSchema = z
     }
   })
 
-export const createPageDraftSchema = (blockSchema: z.ZodType) => z
+export const createPageDraftSchema = <BlockSchema extends z.ZodType>(blockSchema: BlockSchema) => z
   .object({
     title: safeText(120),
     path: contentPathSchema,
