@@ -93,3 +93,12 @@ backup, restore, queue delivery, and image/package compatibility before rollout.
 Runtime mutation commands are deliberately omitted. Cloud apply, database migration, container
 start, DNS changes, and Caddy reload require a separately reviewed customer rollout with real
 values and explicit authorization.
+
+## Export, backup, restore, retention, and capacity
+
+Customer-safe export, encrypted off-host database/media backup planning, exact-name restore-test
+guards, retention boundaries, and controlled fake capacity evidence are documented in
+[../../docs/STUDIO_OPERATIONS.md](../../docs/STUDIO_OPERATIONS.md). The backup planner revalidates
+the isolated database and customer bucket prefixes and never prints the database URL or storage
+credentials. No backup or restore command is implied by Compose startup; every mutating operation
+requires a separate reviewed invocation and explicit confirmation.
