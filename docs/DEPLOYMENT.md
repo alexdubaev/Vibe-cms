@@ -309,13 +309,25 @@ operations state. Never force-unlock an active holder or a different root.
 
 ## Own server
 
-The own-server option remains deliberately separate from the two Terraform stacks. Build
-`backend/Dockerfile`, run PostgreSQL 18+, apply `bun run --cwd backend db:deploy` before promotion,
-serve `webapp/dist` and `website/dist` behind Caddy/nginx, run
-`bun run --cwd backend start:scheduler` as a supervised service, and provide an S3-compatible
-private media bucket. Use Ansible only when it reduces repeatable host configuration (packages,
-users, firewall, systemd, proxy); keep database data, credentials, and releases out of playbook
-templates. The operator owns TLS, backups, restore tests, patching, monitoring, and rollback.
+The own-server option remains deliberately separate from the two Terraform stacks. For the shared
+studio VDS, [`../deploy/studio/README.md`](../deploy/studio/README.md) is the repeatable customer
+profile: one Compose project and bridge network per installation, a customer database/runtime role
+on an external PostgreSQL 18+ network, private working-media storage, a customer publication
+destination, and digest-pinned backend/scheduler/admin/preview/builder images with explicit
+resource limits.
+
+Only the selected Site Package builder mounts the VDS-wide Astro lock volume. No runtime mounts the
+repository or Docker socket, and the database owner URL is excluded from every service. A
+host-level Caddy instance exposes loopback-bound admin, API, and preview services with automatic
+TLS and request-size limits. The public static site and its published media are served from the
+customer destination/CDN, never from the studio stack.
+
+The studio runbook contains configuration dry-runs only. It does not authorize a cloud apply,
+database migration, container start, DNS mutation, or Caddy reload. Those operations require an
+explicit customer rollout review with real values. Use Ansible only when it reduces repeatable host
+configuration (packages, users, firewall, systemd, proxy); keep database data, credentials, and
+releases out of playbook templates. The operator owns TLS, backups, restore tests, patching,
+monitoring, queue delivery, resource/disk retention, and rollback.
 
 ## Local validation
 

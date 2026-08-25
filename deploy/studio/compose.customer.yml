@@ -1,0 +1,169 @@
+name: vibe-${INSTALLATION_SLUG:?Set INSTALLATION_SLUG}
+
+x-backend-environment: &backend-environment
+  NODE_ENV: production
+  PORT: "3000"
+  DATABASE_URL: ${DATABASE_URL:?Set the customer runtime database URL}
+  JWT_SECRET: ${JWT_SECRET:?Set a unique JWT secret}
+  CORS_ORIGINS: ${ADMIN_ORIGIN:?Set ADMIN_ORIGIN}
+  WEBAPP_ORIGIN: ${ADMIN_ORIGIN:?Set ADMIN_ORIGIN}
+  COOKIE_SECURE: "true"
+  TRUST_PROXY: "true"
+  TRUSTED_PROXY_CLIENT_IP_HEADER: x-forwarded-for
+  TRUSTED_PROXY_CLIENT_IP_POSITION: first
+  EMAIL_DELIVERY: disabled
+  PRIVATE_STORAGE_DRIVER: s3
+  PRIVATE_STORAGE_ENDPOINT: ${PRIVATE_STORAGE_ENDPOINT:?Set the private media endpoint}
+  PRIVATE_STORAGE_REGION: ${PRIVATE_STORAGE_REGION:?Set the private media region}
+  PRIVATE_STORAGE_BUCKET: ${PRIVATE_STORAGE_BUCKET:?Set the private media bucket}
+  PRIVATE_STORAGE_ACCESS_KEY_ID: ${PRIVATE_STORAGE_ACCESS_KEY_ID:?Set the private media access key}
+  PRIVATE_STORAGE_SECRET_ACCESS_KEY: ${PRIVATE_STORAGE_SECRET_ACCESS_KEY:?Set the private media secret key}
+  PRIVATE_STORAGE_FORCE_PATH_STYLE: ${PRIVATE_STORAGE_FORCE_PATH_STYLE:-false}
+  PRIVATE_STORAGE_ALLOW_REMOTE_ENDPOINT: "true"
+  CMS_BUILDER_HMAC_ACTIVE_SECRET: ${CMS_BUILDER_HMAC_SECRET:?Set the customer builder HMAC secret}
+  CMS_BUILDER_QUEUE_URL: ${CMS_BUILDER_QUEUE_URL:?Set the customer publication queue URL}
+  CMS_BUILDER_YMQ_ENDPOINT: ${CMS_BUILDER_YMQ_ENDPOINT:?Set the publication queue endpoint}
+  CMS_BUILDER_YMQ_REGION: ${CMS_BUILDER_YMQ_REGION:?Set the publication queue region}
+  CMS_BUILDER_YMQ_ACCESS_KEY_ID: ${CMS_BUILDER_YMQ_ACCESS_KEY_ID:?Set the publication queue access key}
+  CMS_BUILDER_YMQ_SECRET_ACCESS_KEY: ${CMS_BUILDER_YMQ_SECRET_ACCESS_KEY:?Set the publication queue secret key}
+
+x-runtime-hardening: &runtime-hardening
+  restart: unless-stopped
+  read_only: true
+  init: true
+  labels:
+    com.vibe-cms.installation: ${INSTALLATION_SLUG:?Set INSTALLATION_SLUG}
+    com.vibe-cms.site-package: ${CMS_SITE_PACKAGE_ID:?Set CMS_SITE_PACKAGE_ID}
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  backend:
+    <<: *runtime-hardening
+    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE}@${BACKEND_IMAGE_DIGEST:?Set BACKEND_IMAGE_DIGEST}
+    pull_policy: always
+    environment: *backend-environment
+    ports:
+      - 127.0.0.1:${API_BIND_PORT:?Set API_BIND_PORT}:3000
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cpus: "0.50"
+    mem_limit: 512m
+    mem_reservation: 256m
+    pids_limit: 256
+    stop_grace_period: 30s
+    networks:
+      - customer
+      - postgres
+
+  scheduler:
+    <<: *runtime-hardening
+    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE}@${BACKEND_IMAGE_DIGEST:?Set BACKEND_IMAGE_DIGEST}
+    pull_policy: always
+    command:
+      - bun
+      - run
+      - start:scheduler
+    environment: *backend-environment
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cpus: "0.35"
+    mem_limit: 384m
+    mem_reservation: 192m
+    pids_limit: 192
+    stop_grace_period: 45s
+    networks:
+      - customer
+      - postgres
+
+  webapp:
+    <<: *runtime-hardening
+    image: ${WEBAPP_IMAGE:?Set WEBAPP_IMAGE}@${WEBAPP_IMAGE_DIGEST:?Set WEBAPP_IMAGE_DIGEST}
+    pull_policy: always
+    # The stock nginx image listens on privileged port 80; retain only that one capability.
+    cap_add:
+      - NET_BIND_SERVICE
+    ports:
+      - 127.0.0.1:${ADMIN_BIND_PORT:?Set ADMIN_BIND_PORT}:80
+    tmpfs:
+      - /var/cache/nginx:size=32m,uid=101,gid=101
+      - /var/run:size=4m,uid=101,gid=101
+      - /tmp:size=16m,mode=1777
+    cpus: "0.25"
+    mem_limit: 128m
+    mem_reservation: 64m
+    pids_limit: 96
+    networks:
+      - customer
+
+  preview:
+    <<: *runtime-hardening
+    image: ${PREVIEW_IMAGE:?Set PREVIEW_IMAGE}@${PREVIEW_IMAGE_DIGEST:?Set PREVIEW_IMAGE_DIGEST}
+    pull_policy: always
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "4321"
+      CMS_BACKEND_ORIGIN: http://backend:3000
+    ports:
+      - 127.0.0.1:${PREVIEW_BIND_PORT:?Set PREVIEW_BIND_PORT}:4321
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cpus: "0.50"
+    mem_limit: 512m
+    mem_reservation: 256m
+    pids_limit: 192
+    networks:
+      - customer
+
+  builder:
+    <<: *runtime-hardening
+    image: ${BUILDER_IMAGE:?Set BUILDER_IMAGE}@${BUILDER_IMAGE_DIGEST:?Set BUILDER_IMAGE_DIGEST}
+    pull_policy: always
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      CMS_BACKEND_INTERNAL_BASE_URL: http://backend:3000
+      CMS_BUILDER_HMAC_SECRET: ${CMS_BUILDER_HMAC_SECRET:?Set the customer builder HMAC secret}
+      CMS_BUILDER_RUNTIME_MODE: studio-production
+      CMS_ASTRO_BUILD_LOCK_FILE: ${CMS_ASTRO_BUILD_LOCK_FILE:?Set the absolute shared build-lock file}
+      CMS_WEBSITE_PUBLIC_ORIGIN: ${CMS_WEBSITE_PUBLIC_ORIGIN:?Set the public website origin}
+      CMS_WEBSITE_SELECTOR_URL: ${CMS_WEBSITE_SELECTOR_URL:?Set the promotion selector URL}
+      CMS_WEBSITE_PURGE_URL: ${CMS_WEBSITE_PURGE_URL:?Set the promotion purge URL}
+      CMS_WEBSITE_PROMOTION_TOKEN: ${CMS_WEBSITE_PROMOTION_TOKEN:?Set the promotion token}
+      CMS_WEBSITE_STORAGE_ENDPOINT: ${CMS_WEBSITE_STORAGE_ENDPOINT:?Set the publication storage endpoint}
+      CMS_WEBSITE_STORAGE_REGION: ${CMS_WEBSITE_STORAGE_REGION:?Set the publication storage region}
+      CMS_WEBSITE_STORAGE_BUCKET: ${CMS_WEBSITE_STORAGE_BUCKET:?Set the public destination bucket}
+      CMS_WEBSITE_STORAGE_ACCESS_KEY_ID: ${CMS_WEBSITE_STORAGE_ACCESS_KEY_ID:?Set the publication storage access key}
+      CMS_WEBSITE_STORAGE_SECRET_ACCESS_KEY: ${CMS_WEBSITE_STORAGE_SECRET_ACCESS_KEY:?Set the publication storage secret key}
+      CMS_WEBSITE_STORAGE_FORCE_PATH_STYLE: ${CMS_WEBSITE_STORAGE_FORCE_PATH_STYLE:-false}
+    tmpfs:
+      - /tmp:size=2g,mode=1777
+    volumes:
+      - build-lock:/var/lock/vibe-cms
+    cpus: "1.50"
+    mem_limit: 1536m
+    mem_reservation: 512m
+    pids_limit: 512
+    stop_grace_period: 60s
+    networks:
+      - customer
+
+networks:
+  customer:
+    driver: bridge
+  postgres:
+    external: true
+    name: ${STUDIO_POSTGRES_NETWORK:?Set the external PostgreSQL network}
+
+volumes:
+  build-lock:
+    external: true
+    name: ${STUDIO_BUILD_LOCK_VOLUME:?Set the shared build-lock volume}

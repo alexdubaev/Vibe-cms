@@ -101,6 +101,8 @@ and report exact remaining account/domain authorizations without printing secret
 - `docs/CMS_SITE_WORKFLOW.md` - context-free agent runbook for creating a CMS-managed public site.
 - `docs/CMS_SITE_BRIEF.md` - reusable product brief and ready-to-copy prompt for a CMS-managed site.
 - `examples/cms-site-starter/` - neutral schema-compatible CMS page fixture that does not replace `/`.
+- `deploy/studio/` - validated, digest-pinned Compose/Caddy profile for one isolated CMS customer
+  on a shared studio VDS; it never serves the customer's public site.
 - `docs/YANDEX_CLOUD.md` - the Yandex Cloud hosting path, chosen when users or data must stay in Russia.
 - `docs/DIGITALOCEAN.md` - the DigitalOcean hosting path for audiences without Russian data residency.
 
@@ -231,6 +233,15 @@ VITE_API_URL=http://localhost:3000
 
 Test runners use the separate Docker Compose `postgres_test` service and the `TEST_DATABASE_URL` shape from `backend/.env.example`. Webapp Playwright E2E starts `postgres_test`, applies migrations to `web_app_demo_test`, runs the browser flow, and tears down its test database volume by default.
 
+## Studio customer deployment profile
+
+[`deploy/studio/README.md`](deploy/studio/README.md) is the own-server profile for one isolated CMS
+customer. It validates a per-customer env file, resolves a separate Compose project with immutable
+image digests and resource limits, and provides a host-level Caddy fragment for admin, API, and
+preview only. The public static site and published media remain on the customer's S3-compatible
+destination/CDN. The runbook intentionally contains dry-run validation only; it does not authorize
+cloud apply, database mutation, container start, DNS changes, or real credentials.
+
 ## Workspace Commands
 
 - `bun run dev` - start all workspace projects in parallel dev mode.
@@ -290,6 +301,8 @@ Test runners use the separate Docker Compose `postgres_test` service and the `TE
 - [docs/EMAIL.md](docs/EMAIL.md) - transactional email: the four drivers, Postbox and Resend, and how delivery reaches the outbox.
 - [docs/STORAGE.md](docs/STORAGE.md) - private file storage: the filesystem and S3 drivers, the local S3 container, and the upload contract.
 - [docs/WEB_SURFACES.md](docs/WEB_SURFACES.md) - SSG product data, rebuilds, browser cart/checkout ownership, and mobile payment boundaries.
+- [deploy/studio/README.md](deploy/studio/README.md) - isolated studio VDS customer configuration
+  and dry-run validation.
 - [docs/YANDEX_CLOUD.md](docs/YANDEX_CLOUD.md) - the Yandex Cloud hosting path, used when the checklist records it.
 - [webapp/README.md](webapp/README.md) - CSR browser client setup, env, and Playwright smoke.
 - [mobile/README.md](mobile/README.md) - pointer to the full mobile template branch.

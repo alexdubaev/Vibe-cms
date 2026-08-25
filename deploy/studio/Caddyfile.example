@@ -1,0 +1,37 @@
+# Requires Caddy 2.10+ for the standard request_body limiter.
+# Copy one fragment per customer into the host-level Caddy configuration and replace only the
+# three fake origins and three loopback ports below. Keep secrets out of Caddy's environment.
+# Automatic HTTPS provisions certificates for these three public origins only.
+
+https://admin.auto.example {
+	request_body {
+		max_size 1MB
+	}
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	reverse_proxy 127.0.0.1:18101
+}
+
+https://api.auto.example {
+	request_body {
+		max_size 2MB
+	}
+	encode zstd gzip
+	header X-Content-Type-Options nosniff
+	reverse_proxy 127.0.0.1:18102
+}
+
+https://preview.auto.example {
+	request_body {
+		max_size 1MB
+	}
+	header {
+		Cache-Control "private, no-store"
+		X-Content-Type-Options nosniff
+		X-Robots-Tag "noindex, nofollow"
+	}
+	reverse_proxy 127.0.0.1:18103
+}

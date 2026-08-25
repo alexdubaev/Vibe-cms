@@ -28,6 +28,8 @@ bun-debug.log*
 !website/.env*.example
 !mobile/.env*.example
 !mobile/.maestro/.env*.example
+deploy/studio/*.env
+!deploy/studio/*.env.example
 
 # Terraform working data and secret-bearing local inputs
 **/.terraform/
