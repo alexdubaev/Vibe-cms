@@ -4,14 +4,11 @@ import {
   assertTestDatabaseUrl,
   composeEnv,
   composeProjectName,
-  defaultPostgresTestPort,
-  defaultTestDatabaseUrl,
-  postgresPortFromDatabaseUrl,
   postgresTestDataVolume,
-  postgresTestService,
   repositoryHash,
   repositoryRoot,
 } from '../../scripts/repo-env.mjs'
+import { createBackendDockerSmokeIdentity } from './docker-smoke-config.mjs'
 
 const imageName = process.env.BACKEND_DOCKER_SMOKE_IMAGE ?? 'vibecoding-template-backend:smoke'
 const sitePackageId = process.env.CMS_SITE_PACKAGE_ID ?? 'reference-calculator'
@@ -22,10 +19,16 @@ const containerName =
   process.env.BACKEND_DOCKER_SMOKE_CONTAINER ??
   `vibecoding-template-backend-smoke-${repositoryHash}-${process.pid}`
 const hostPort = process.env.BACKEND_DOCKER_SMOKE_PORT ?? String(await findOpenPort())
-const networkName = `${composeProjectName}_default`
-const composeArgs = ['compose', '-p', composeProjectName]
+const databaseHostPort = process.env.BACKEND_DOCKER_SMOKE_DATABASE_PORT ?? String(await findOpenPort())
+const smokeIdentity = createBackendDockerSmokeIdentity({
+  integrationComposeProjectName: composeProjectName,
+  repositoryHash,
+  processId: process.pid,
+  postgresVolumeKey: postgresTestDataVolume,
+})
+const composeArgs = ['compose', '-p', smokeIdentity.composeProjectName]
 const databaseUrlForHost =
-  process.env.TEST_DATABASE_URL ?? defaultTestDatabaseUrl(defaultPostgresTestPort)
+  `postgresql://superuser:superpassword@localhost:${databaseHostPort}/web_app_demo_test?schema=public`
 const databaseUrlForContainer =
   process.env.BACKEND_DOCKER_SMOKE_DATABASE_URL ??
   'postgresql://superuser:superpassword@postgres_test:5432/web_app_demo_test?schema=public'
@@ -34,7 +37,8 @@ assertTestDatabaseUrl(databaseUrlForContainer, {
   allowEnvName: 'BACKEND_DOCKER_SMOKE_ALLOW_NON_TEST_DATABASE',
 })
 const dockerEnv = composeEnv({
-  POSTGRES_TEST_PORT: postgresPortFromDatabaseUrl(databaseUrlForHost),
+  COMPOSE_PROJECT_NAME: smokeIdentity.composeProjectName,
+  POSTGRES_TEST_PORT: databaseHostPort,
 })
 
 function run(command, args, options = {}) {
@@ -179,7 +183,7 @@ try {
     'run',
     '--rm',
     '--network',
-    networkName,
+    smokeIdentity.networkName,
     '-e',
     `DATABASE_URL=${databaseUrlForContainer}`,
     '-e',
@@ -199,7 +203,7 @@ try {
     '--name',
     containerName,
     '--network',
-    networkName,
+    smokeIdentity.networkName,
     '-p',
     `127.0.0.1:${hostPort}:3000`,
     '-e',
@@ -236,16 +240,11 @@ try {
   await smokeAuthApi()
 } finally {
   spawnSync('docker', ['rm', '-f', containerName], { stdio: 'ignore' })
-  // Only the database this smoke test started. `down --volumes` cannot be scoped to a service,
-  // so it would also delete the optional local storage volume and the uploads inside it.
+  // This invocation owns a unique validated Compose project, so its database, network and volume
+  // can be removed together without touching integration-test or developer data.
   spawnSync(
     'docker',
-    [...composeArgs, 'rm', '--stop', '--force', '--volumes', postgresTestService],
+    [...composeArgs, 'down', '--volumes', '--remove-orphans'],
     { cwd: repositoryRoot, env: dockerEnv, stdio: 'inherit' },
-  )
-  spawnSync(
-    'docker',
-    ['volume', 'rm', '--force', `${composeProjectName}_${postgresTestDataVolume}`],
-    { cwd: repositoryRoot, env: dockerEnv, stdio: 'ignore' },
   )
 }
