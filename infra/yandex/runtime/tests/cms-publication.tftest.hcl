@@ -107,4 +107,12 @@ run "cms_publication_runtime_is_isolated" {
     )
     error_message = "Builder and preview must receive only their dedicated Lockbox bindings."
   }
+
+  assert {
+    condition = (
+      yandex_serverless_container.builder[0].image[0].environment["CMS_WEBSITE_STORAGE_REGION"] == "ru-central1" &&
+      yandex_serverless_container.builder[0].image[0].environment["CMS_WEBSITE_STORAGE_FORCE_PATH_STYLE"] == "true"
+    )
+    error_message = "The Yandex builder must explicitly configure its S3 signing region and path-style addressing."
+  }
 }

@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process'
 import { createServer } from 'node:net'
 
+import { builderSmokeEnvironment } from './docker-smoke-site-package-config.ts'
+
 const packageId = process.argv[2]
 if (!packageId) throw new Error('Usage: bun scripts/docker-smoke-site-package.mjs <site-package-id>')
 
@@ -96,16 +98,7 @@ const smokeBuilderHealth = async () => {
     'run', '-d', '--name', containers.builder,
     '-p', `127.0.0.1:${port}:3000`,
     '-e', 'PORT=3000',
-    '-e', 'CMS_BACKEND_INTERNAL_BASE_URL=http://backend.invalid',
-    '-e', 'CMS_BUILDER_HMAC_SECRET=builder-smoke-secret',
-    '-e', 'CMS_WEBSITE_STORAGE_ENDPOINT=http://storage.invalid',
-    '-e', 'CMS_WEBSITE_STORAGE_BUCKET=builder-smoke-bucket',
-    '-e', 'CMS_WEBSITE_STORAGE_ACCESS_KEY_ID=builder-smoke-key',
-    '-e', 'CMS_WEBSITE_STORAGE_SECRET_ACCESS_KEY=builder-smoke-secret',
-    '-e', 'CMS_WEBSITE_PUBLIC_ORIGIN=https://site.example',
-    '-e', 'CMS_WEBSITE_SELECTOR_URL=https://selector.invalid',
-    '-e', 'CMS_WEBSITE_PURGE_URL=https://purge.invalid',
-    '-e', 'CMS_WEBSITE_PROMOTION_TOKEN=builder-smoke-token',
+    ...Object.entries(builderSmokeEnvironment).flatMap(([name, value]) => ['-e', `${name}=${value}`]),
     images.builder,
   ])
   await waitForHttp(`http://127.0.0.1:${port}/`, [405])

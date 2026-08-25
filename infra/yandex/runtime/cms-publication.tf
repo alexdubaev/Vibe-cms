@@ -3,6 +3,8 @@ locals {
     CMS_BACKEND_INTERNAL_BASE_URL            = var.api_domain == "" ? "" : "https://${var.api_domain}"
     CMS_WEBSITE_STORAGE_ENDPOINT             = var.website_storage_endpoint
     CMS_WEBSITE_STORAGE_BUCKET               = var.website_bucket
+    CMS_WEBSITE_STORAGE_REGION               = "ru-central1"
+    CMS_WEBSITE_STORAGE_FORCE_PATH_STYLE     = "true"
     CMS_WEBSITE_PUBLIC_ORIGIN                = var.website_public_origin
     CMS_WEBSITE_SELECTOR_URL                 = var.website_selector_url
     CMS_WEBSITE_PURGE_URL                    = var.website_purge_url
