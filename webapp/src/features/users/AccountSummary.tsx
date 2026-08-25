@@ -3,7 +3,7 @@ import type { UserDto } from '@web-app-demo/contracts'
 
 import { SectionCards } from '@/components/dashboard'
 
-const dateFormatter = new Intl.DateTimeFormat('en', {
+const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'medium',
 })
 
@@ -14,13 +14,13 @@ export function AccountSummary({ user }: { user: UserDto }) {
         {
           description: user.email,
           icon: UserCircle02Icon,
-          label: 'Account',
-          value: user.displayName ?? 'No display name',
+          label: 'Учётная запись',
+          value: user.displayName ?? 'Имя не указано',
         },
         {
-          description: `Workspace role: ${formatRole(user.role)}`,
+          description: `Роль в рабочем пространстве: ${formatRole(user.role)}`,
           icon: Calendar03Icon,
-          label: 'Member since',
+          label: 'Участник с',
           value: dateFormatter.format(new Date(user.createdAt)),
         },
       ]}
@@ -29,5 +29,5 @@ export function AccountSummary({ user }: { user: UserDto }) {
 }
 
 function formatRole(role: UserDto['role']) {
-  return role.charAt(0).toUpperCase() + role.slice(1)
+  return role === 'owner' ? 'владелец' : role === 'editor' ? 'редактор' : 'участник'
 }
