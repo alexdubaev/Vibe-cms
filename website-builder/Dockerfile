@@ -28,6 +28,12 @@ FROM oven/bun:1.3.14 AS runtime
 
 WORKDIR /app
 
+# util-linux owns flock, which bounds Astro build concurrency across customer containers
+# when they mount the same studio lock directory.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends util-linux \
+  && rm -rf /var/lib/apt/lists/*
+
 # The runtime contains only the selected package and its consumers. The source package
 # catalogue remains confined to the disposable build stage.
 COPY --from=build /app/package.json /app/bun.lock /app/bunfig.toml ./

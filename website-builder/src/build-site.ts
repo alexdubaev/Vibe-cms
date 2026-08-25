@@ -47,6 +47,17 @@ export type BuildProcessRunner = (input: {
   env: Record<string, string>
 }) => Promise<void>
 
+export class BuildProcessExitError extends Error {
+  constructor(
+    readonly command: string,
+    readonly exitCode: number,
+    readonly diagnostics: string,
+  ) {
+    super(`Astro build failed (${exitCode}): ${diagnostics.trim().slice(0, 500)}`)
+    this.name = 'BuildProcessExitError'
+  }
+}
+
 export function createSnapshotDownloader(options: {
   fetchImpl?: FetchLike
   maxBytes?: number
@@ -101,7 +112,7 @@ export function createAstroSiteRunner(options: {
   tempDirectory?: string
   run?: BuildProcessRunner
 }): SiteBuildRunner {
-  const run = options.run ?? runProcess
+  const run = options.run ?? runBuildProcess
   return async ({ buildId, publicationRevision, slot, snapshot }) => {
     assertSelectedSitePackage(snapshot, options.descriptor)
     const workDirectory = await mkdtemp(join(options.tempDirectory ?? tmpdir(), 'vibe-site-build-'))
@@ -124,7 +135,7 @@ export function createAstroSiteRunner(options: {
   }
 }
 
-async function runProcess(input: Parameters<BuildProcessRunner>[0]): Promise<void> {
+export const runBuildProcess: BuildProcessRunner = async (input) => {
   const child = Bun.spawn([input.command, ...input.args], {
     cwd: input.cwd,
     env: { ...process.env, ...input.env } as Record<string, string>,
@@ -134,6 +145,6 @@ async function runProcess(input: Parameters<BuildProcessRunner>[0]): Promise<voi
   const exitCode = await child.exited
   if (exitCode !== 0) {
     const stderr = child.stderr ? await new Response(child.stderr).text() : ''
-    throw new Error(`Astro build failed (${exitCode}): ${stderr.trim().slice(0, 500)}`)
+    throw new BuildProcessExitError(input.command, exitCode, stderr)
   }
 }

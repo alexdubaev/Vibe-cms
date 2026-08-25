@@ -5,6 +5,7 @@ import { join } from 'node:path'
 
 import type { CmsSitePackageDescriptor } from '@web-app-demo/contracts'
 
+import { createBuilderWorker } from '../src'
 import { createAstroSiteRunner, createSnapshotDownloader } from '../src/build-site'
 
 const temporaryRoots: string[] = []
@@ -125,5 +126,53 @@ describe('createSnapshotDownloader', () => {
       expiresAt: '2026-08-24T10:05:00.000Z',
       etag: 'snapshot-etag',
     })).rejects.toThrow()
+  })
+})
+
+describe('locked Astro build failure safety', () => {
+  test('reports a lock timeout without publishing over the prior live release', async () => {
+    const tempDirectory = await mkdtemp(join(tmpdir(), 'vibe-builder-lock-timeout-'))
+    temporaryRoots.push(tempDirectory)
+    const results: unknown[] = []
+    let liveRelease = 'blue:3'
+    const buildSite = createAstroSiteRunner({
+      descriptor: customerA,
+      publicWebsiteUrl: 'https://site.example',
+      websiteDirectory: '/app/website',
+      tempDirectory,
+      run: async () => { throw new Error('Astro build lock timed out after 600 seconds') },
+    })
+    const worker = createBuilderWorker({
+      backend: {
+        getBuildInput: async () => ({
+          buildId: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10',
+          publicationRevision: 4,
+          slot: 'green',
+          snapshotArtifact: {
+            url: 'https://storage.example/snapshot',
+            expiresAt: '2026-08-24T10:05:00.000Z',
+            etag: 'etag-4',
+          },
+          media: [],
+        }),
+        heartbeat: async () => undefined,
+        result: async (_buildId, result) => { results.push(result) },
+      },
+      downloadSnapshot: async () => snapshot,
+      buildSite,
+      publishRelease: async () => {
+        liveRelease = 'green:4'
+        return { markerVerified: true }
+      },
+    })
+
+    await expect(worker.processBuild('018f8c8d-5f34-7db2-8b98-2c7bf3d80a10'))
+      .rejects.toThrow('Astro build lock timed out after 600 seconds')
+    expect(results).toEqual([{
+      status: 'failed',
+      markerVerified: false,
+      diagnostics: 'Astro build lock timed out after 600 seconds',
+    }])
+    expect(liveRelease).toBe('blue:3')
   })
 })

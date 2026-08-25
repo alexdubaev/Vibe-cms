@@ -28,6 +28,33 @@ test('boots the builder composition root with the Docker smoke environment', asy
   }
 }, 15_000)
 
+test('rejects a configured relative Astro build lock path before startup', async () => {
+  const server = Bun.spawn([process.execPath, 'run', 'src/server.ts'], {
+    cwd: builderRoot,
+    env: {
+      ...process.env,
+      ...builderSmokeEnvironment,
+      CMS_ASTRO_BUILD_LOCK_FILE: 'var/lock/vibe-cms/astro-build.lock',
+    },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+
+  try {
+    const exitCode = await Promise.race([
+      server.exited,
+      Bun.sleep(1_000).then(() => null),
+    ])
+    expect(exitCode).not.toBeNull()
+    const diagnostics = await new Response(server.stderr).text()
+    expect(exitCode).not.toBe(0)
+    expect(diagnostics).toContain('Astro build lock file must be an absolute path')
+  } finally {
+    server.kill()
+    await server.exited
+  }
+})
+
 function findOpenPort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
     const server = createServer()
