@@ -1,11 +1,10 @@
 import { createApp } from './app'
 import { createBackendRuntime } from './runtime'
+import { assertBackendRuntimeSitePackage } from './site-package-startup'
 import { shutdownBackend } from './shutdown'
-import { selectedSitePackageDescriptor } from '@vibe-cms/selected-site-package/contract'
-import { assertSelectedSitePackageState } from './modules/cms'
 
 const runtime = createBackendRuntime()
-await assertSelectedSitePackageState(runtime.prisma, selectedSitePackageDescriptor)
+await assertBackendRuntimeSitePackage(runtime)
 const app = createApp({
   backgroundTasks: runtime.backgroundTasks,
   emailDelivery: runtime.emailDelivery,

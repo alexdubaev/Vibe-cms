@@ -3,6 +3,7 @@ import { Cron } from 'croner'
 import { defaultJobLockTimeoutMs, isJobLockExpiry, runWithJobLock } from './db'
 import scheduleDefinitions from './job-schedules.json' with { type: 'json' }
 import { createBackendRuntime, type BackendRuntime } from './runtime'
+import { assertBackendRuntimeSitePackage } from './site-package-startup'
 import {
   isBackgroundJobName,
   runBackgroundJob,
@@ -85,6 +86,14 @@ export function startSchedules(
   }
 }
 
+export async function startValidatedSchedules(
+  runtime: BackendRuntime,
+  entries: ScheduleEntry[] = schedules,
+) {
+  await assertBackendRuntimeSitePackage(runtime)
+  return startSchedules(runtime, entries)
+}
+
 export async function runLockedBackgroundJob(
   runtime: BackendRuntime,
   entry: ScheduleEntry,
@@ -124,7 +133,14 @@ export async function runScheduledJob(
 
 export async function main() {
   const runtime = createBackendRuntime()
-  const { jobs, stop: stopSchedules } = startSchedules(runtime)
+  let scheduler: SchedulerHandle
+  try {
+    scheduler = await startValidatedSchedules(runtime)
+  } catch (error) {
+    await runtime.close()
+    throw error
+  }
+  const { jobs, stop: stopSchedules } = scheduler
 
   if (jobs.length === 0) {
     // Only reachable once a project empties `schedules`, which is a legitimate thing to do.

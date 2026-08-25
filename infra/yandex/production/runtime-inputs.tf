@@ -3,6 +3,7 @@ locals {
     NODE_ENV                                   = "production"
     CORS_ORIGINS                               = local.webapp_origin
     WEBAPP_ORIGIN                              = local.webapp_origin
+    PREVIEW_ORIGIN                             = var.cms_publication_enabled ? "https://${var.preview_domain}" : local.webapp_origin
     ACCESS_TOKEN_TTL_SECONDS                   = "900"
     REFRESH_TOKEN_TTL_DAYS                     = "30"
     REFRESH_REUSE_GRACE_SECONDS                = "10"

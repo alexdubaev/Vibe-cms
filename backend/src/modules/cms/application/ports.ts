@@ -193,6 +193,11 @@ export type CmsRepository = {
     candidateSnapshot: unknown
     requesterUserId: string
   }): Promise<CmsApprovalRecord>
+  approveAndCreatePublication(input: {
+    approvalId: string
+    reviewerUserId: string
+    actorRole?: 'editor' | 'owner'
+  }): Promise<CmsPublicationRecord | null>
   getApproval(approvalId: string): Promise<CmsApprovalRecord | null>
   decideApproval(input: {
     approvalId: string

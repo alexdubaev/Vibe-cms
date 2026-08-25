@@ -419,6 +419,11 @@ run "cms_publication_is_opt_in_and_slot_scoped" {
   }
 
   assert {
+    condition     = output.runtime_inputs.runtime_environment.PREVIEW_ORIGIN == "https://${var.preview_domain}"
+    error_message = "The API must issue preview grants for the dedicated preview gateway domain."
+  }
+
+  assert {
     condition = (
       length(yandex_iam_service_account.builder) == 1 &&
       length(yandex_iam_service_account.preview) == 1 &&

@@ -9,6 +9,11 @@ import { createCmsSitePackageMigrationRepository } from './site-package-reposito
 const databaseUrl = process.env.TEST_DATABASE_URL
 const maybeDescribe = databaseUrl ? describe : describe.skip
 
+const publicationSnapshot = (
+  revision: number,
+  sitePackage = selectedSitePackageDescriptor,
+) => ({ revision, sitePackage })
+
 async function expectRejected<T extends Error>(operation: Promise<unknown>, errorType: new (...args: never[]) => T) {
   let error: unknown
   try {
@@ -215,18 +220,103 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
         migratedAt: new Date(),
       },
     })
-    const first = await repository.createPublication({ revision: 1, snapshot: { pages: [] } })
+    const first = await repository.createPublication({ revision: 1, snapshot: publicationSnapshot(1) })
 
-    await expectRejected(repository.createPublication({ revision: 1, snapshot: { pages: [] } }),
+    await expectRejected(repository.createPublication({ revision: 1, snapshot: publicationSnapshot(1) }),
       CmsPublicationConflictError,
     )
-    await expectRejected(repository.createPublication({ revision: 0, snapshot: { pages: [] } }),
-      CmsPublicationConflictError,
-    )
+    await expect(repository.createPublication({ revision: 0, snapshot: publicationSnapshot(0) }))
+      .rejects.toThrow('snapshot does not match selected package')
 
     expect(first.revision).toBe(1)
-    expect((await repository.createPublication({ revision: 2, snapshot: { pages: [] } })).revision).toBe(2)
+    expect((await repository.createPublication({ revision: 2, snapshot: publicationSnapshot(2) })).revision).toBe(2)
   })
+
+  test('does not approve or publish a frozen snapshot from before a package migration', async () => {
+    const oldDescriptor = { id: 'vibe-core', version: '1.0.0', schemaVersion: 1 }
+    const newDescriptor = { id: 'vibe-core', version: '2.0.0', schemaVersion: 2 }
+    const oldRepository = createCmsRepository(db, oldDescriptor)
+    const packageRepository = createCmsSitePackageMigrationRepository(db)
+    await packageRepository.transaction((transaction) => transaction.setState({
+      packageId: oldDescriptor.id,
+      packageVersion: oldDescriptor.version,
+      schemaVersion: oldDescriptor.schemaVersion,
+      migratedAt: new Date(),
+    }))
+    const approval = await oldRepository.createApproval({
+      revisionMap: { revision: 1 },
+      candidateSnapshot: publicationSnapshot(1, oldDescriptor),
+      requesterUserId: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a12',
+    })
+    await packageRepository.transaction((transaction) => transaction.setState({
+      packageId: newDescriptor.id,
+      packageVersion: newDescriptor.version,
+      schemaVersion: newDescriptor.schemaVersion,
+      migratedAt: new Date(),
+    }))
+
+    const newRepository = createCmsRepository(db, newDescriptor)
+    await expect(newRepository.approveAndCreatePublication({
+      approvalId: approval.id,
+      reviewerUserId: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a21',
+      actorRole: 'owner',
+    })).rejects.toThrow('snapshot does not match selected package')
+    expect((await db.cmsApprovalRequest.findUniqueOrThrow({ where: { id: approval.id } })).status).toBe('pending')
+    expect(await db.cmsPublication.count()).toBe(0)
+    expect(await db.taskOutbox.count({ where: { type: 'website:rebuild:wakeup' } })).toBe(0)
+  })
+
+  test('serializes approval publication behind migration without stranding an approved request', async () => {
+    const staleDb = createPrisma(databaseUrl!)
+    const oldDescriptor = { id: 'vibe-core', version: '1.0.0', schemaVersion: 1 }
+    const oldRepository = createCmsRepository(staleDb, oldDescriptor)
+    const packageRepository = createCmsSitePackageMigrationRepository(db)
+    await packageRepository.transaction((transaction) => transaction.setState({
+      packageId: oldDescriptor.id,
+      packageVersion: oldDescriptor.version,
+      schemaVersion: oldDescriptor.schemaVersion,
+      migratedAt: new Date(),
+    }))
+    const approval = await oldRepository.createApproval({
+      revisionMap: { revision: 1 },
+      candidateSnapshot: publicationSnapshot(1, oldDescriptor),
+      requesterUserId: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a12',
+    })
+    const migrationHasLock = Promise.withResolvers<void>()
+    const finishMigration = Promise.withResolvers<void>()
+    const migration = packageRepository.transaction(async (transaction) => {
+      migrationHasLock.resolve()
+      await finishMigration.promise
+      await transaction.setState({
+        packageId: oldDescriptor.id,
+        packageVersion: '2.0.0',
+        schemaVersion: 2,
+        migratedAt: new Date(),
+      })
+    })
+    let approvalAttempt: Promise<unknown> | undefined
+    try {
+      await migrationHasLock.promise
+      let approvalSettled = false
+      approvalAttempt = oldRepository.approveAndCreatePublication({
+        approvalId: approval.id,
+        reviewerUserId: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a21',
+        actorRole: 'owner',
+      }).finally(() => { approvalSettled = true })
+      await Bun.sleep(75)
+      expect(approvalSettled).toBe(false)
+
+      finishMigration.resolve()
+      await migration
+      await expect(approvalAttempt).rejects.toThrow('does not match runtime')
+      expect((await db.cmsApprovalRequest.findUniqueOrThrow({ where: { id: approval.id } })).status).toBe('pending')
+      expect(await db.cmsPublication.count()).toBe(0)
+    } finally {
+      finishMigration.resolve()
+      await Promise.allSettled([migration, ...(approvalAttempt ? [approvalAttempt] : [])])
+      await staleDb.$disconnect()
+    }
+  }, 15_000)
 
   test('cascades page revisions while restricting deletion of used media', async () => {
     const page = await repository.createPage({ path: '/cascade', title: 'Каскад', payload: { blocks: [] } })

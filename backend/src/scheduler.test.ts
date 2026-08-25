@@ -5,6 +5,7 @@ import {
   runScheduledJob,
   schedules,
   startSchedules,
+  startValidatedSchedules,
   type ScheduleEntry,
 } from './scheduler'
 import type { BackendRuntime } from './runtime'
@@ -29,7 +30,28 @@ function runtimeWithLock(options: { acquired: boolean }) {
   return { calls, runtime: { prisma } as unknown as BackendRuntime }
 }
 
+function runtimeWithPackageState(state: { packageId: string; packageVersion: string; schemaVersion: number }) {
+  return {
+    prisma: {
+      $transaction: async (operation: (transaction: unknown) => Promise<unknown>) => operation({
+        $executeRaw: async () => 1,
+        cmsSitePackageState: { findUnique: async () => state },
+      }),
+    },
+  } as unknown as BackendRuntime
+}
+
 const pingEntry: ScheduleEntry = { expression: '* * * * *', job: 'db:ping' }
+
+test('the production scheduler rejects a package mismatch before registering schedules', async () => {
+  const runtime = runtimeWithPackageState({
+    packageId: 'wrong-package',
+    packageVersion: '1.0.0',
+    schemaVersion: 1,
+  })
+
+  await expect(startValidatedSchedules(runtime, [pingEntry])).rejects.toThrow('does not match runtime')
+})
 
 test('the production scheduler runs every required maintenance job in UTC', () => {
   expect(schedules).toEqual([

@@ -394,6 +394,16 @@ describe('Terraform configuration helpers', () => {
     expect(runtime).not.toContain('var.runtime_secret_bindings')
   })
 
+  test('routes Yandex API preview grants to the provisioned preview gateway', () => {
+    const runtimeInputs = readFileSync(
+      resolve(repoRoot, 'infra/yandex/production/runtime-inputs.tf'),
+      'utf8',
+    )
+
+    expect(runtimeInputs).toContain('PREVIEW_ORIGIN')
+    expect(runtimeInputs).toMatch(/PREVIEW_ORIGIN\s*=\s*var\.cms_publication_enabled\s*\?\s*"https:\/\/\$\{var\.preview_domain\}"\s*:\s*local\.webapp_origin/)
+  })
+
   test('resumes local-to-remote migration after an interrupted bootstrap', () => {
     expect(
       bootstrapStateMode({ hasStateEnvironment: false, hasLocalState: false }),

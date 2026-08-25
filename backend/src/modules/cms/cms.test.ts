@@ -71,6 +71,7 @@ function createService(overrides: Partial<CmsRepository> = {}, validation: CmsVa
     createContentEntryRevision: async () => ({ id: 'entry-revision', entryId: 'entry', revision: 1 }),
     getPolicy: async () => ({ key: 'default', editorCanPublish: false }),
     createApproval: async () => approval,
+    approveAndCreatePublication: async () => publication,
     getApproval: async () => approval,
     decideApproval: async ({ status }) => ({ ...approval, status, reviewerUserId: 'owner' }),
     createPublication: async () => publication,
@@ -437,7 +438,10 @@ describe('CMS application service', () => {
   })
 
   test('approval publishes the exact frozen candidate snapshot', async () => {
-    const { service, approval } = createService()
+    const { service, approval } = createService({
+      decideApproval: async () => { throw new Error('approval decision must be atomic with publication') },
+      createPublication: async () => { throw new Error('publication must be atomic with approval') },
+    })
     const submitted = await service.submitForApproval({ id: 'editor', role: 'editor' }, 1)
     expect(submitted.candidateSnapshot).toEqual(approval.candidateSnapshot)
 

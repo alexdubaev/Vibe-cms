@@ -191,6 +191,7 @@ type ServiceDependencies = {
     | 'createPageRevision'
     | 'createContentEntryRevision'
     | 'createApproval'
+    | 'approveAndCreatePublication'
     | 'getApproval'
     | 'decideApproval'
     | 'createPublication'
@@ -464,24 +465,12 @@ export class CmsService {
 
   async approve(actor: CmsActor, approvalId: string): Promise<PublicationDto> {
     this.requireCapability(actor, 'cms:approve')
-    const approval = await this.requireApproval(approvalId)
-    if (approval.status !== 'pending') throw new CmsRepositoryError('Approval is no longer pending', 'CMS_APPROVAL_STALE')
-    const decided = await this.dependencies.repository.decideApproval({
+    const publication = await this.dependencies.repository.approveAndCreatePublication({
       approvalId,
-      expectedStatus: 'pending',
-      status: 'approved',
       reviewerUserId: actor.id,
-    })
-    if (!decided) throw new CmsRepositoryError('Approval is no longer pending', 'CMS_APPROVAL_STALE')
-    const snapshot = approval.candidateSnapshot as { revision?: unknown }
-    const revision = typeof snapshot.revision === 'number' ? snapshot.revision : 1
-    const publication = await this.dependencies.repository.createPublication({
-      revision,
-      snapshot: approval.candidateSnapshot,
-      sourceApprovalId: approval.id,
-      actorUserId: actor.id,
       actorRole: publicationActorRole(actor),
     })
+    if (!publication) throw new CmsRepositoryError('Approval is no longer pending', 'CMS_APPROVAL_STALE')
     return toPublicationDto(publication)
   }
 

@@ -14,6 +14,14 @@ const asJson = (value: unknown) => value as Prisma.InputJsonValue
 
 type RuntimeSitePackage = { id: string; version: string; schemaVersion: number }
 
+type PublicationWriteInput = {
+  revision: number
+  snapshot: unknown
+  sourceApprovalId?: string
+  actorUserId?: string
+  actorRole?: 'editor' | 'owner'
+}
+
 export async function withSelectedSitePackageLock<Result>(
   db: DbClient,
   sitePackage: RuntimeSitePackage,
@@ -52,6 +60,90 @@ async function assertSelectedSitePackageTransactionState(
       'CMS_VALIDATION',
     )
   }
+}
+
+export function assertSnapshotMatchesSelectedSitePackage(
+  snapshot: unknown,
+  sitePackage: RuntimeSitePackage,
+  errorCode: 'CMS_APPROVAL_STALE' | 'CMS_VALIDATION' = 'CMS_VALIDATION',
+) {
+  const record = snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+    ? snapshot as Record<string, unknown>
+    : null
+  const descriptor = record?.sitePackage && typeof record.sitePackage === 'object' && !Array.isArray(record.sitePackage)
+    ? record.sitePackage as Record<string, unknown>
+    : null
+  if (
+    typeof record?.revision !== 'number'
+    || !Number.isInteger(record.revision)
+    || Number(record?.revision) < 1
+    || descriptor?.id !== sitePackage.id
+    || descriptor.version !== sitePackage.version
+    || descriptor.schemaVersion !== sitePackage.schemaVersion
+  ) {
+    throw new CmsRepositoryError(
+      `CMS publication snapshot does not match selected package ${sitePackage.id}@${sitePackage.version} schema ${sitePackage.schemaVersion}`,
+      errorCode,
+    )
+  }
+}
+
+async function createPublicationTransaction(
+  tx: Prisma.TransactionClient,
+  input: PublicationWriteInput,
+) {
+  const latest = await tx.cmsPublication.findFirst({
+    orderBy: { revision: 'desc' },
+    select: { revision: true },
+  })
+  if (latest && input.revision <= latest.revision) {
+    throw new CmsPublicationConflictError(input.revision, latest.revision)
+  }
+  if (input.actorRole === 'editor') {
+    const policy = await tx.cmsPolicy.findUnique({ where: { key: DEFAULT_KEY }, select: { editorCanPublish: true } })
+    if (!policy?.editorCanPublish) {
+      throw new CmsRepositoryError('Editor publishing is disabled by the owner', 'FORBIDDEN')
+    }
+  }
+
+  const publication = await tx.cmsPublication.create({
+    data: {
+      revision: input.revision,
+      snapshot: asJson(input.snapshot),
+      sourceApprovalId: input.sourceApprovalId,
+      actorUserId: input.actorUserId,
+    },
+  })
+
+  await tx.cmsPublicationController.upsert({
+    where: { key: DEFAULT_KEY },
+    create: {
+      key: DEFAULT_KEY,
+      desiredRevision: input.revision,
+      status: 'queued',
+    },
+    update: {},
+  })
+  await tx.$executeRaw(
+    Prisma.sql`
+      UPDATE "cms_publication_controller"
+      SET "desired_revision" = GREATEST(COALESCE("desired_revision", 0), ${input.revision}),
+          "status" = 'queued',
+          "last_error" = NULL,
+          "updated_at" = CURRENT_TIMESTAMP
+      WHERE "key" = ${DEFAULT_KEY}
+    `,
+  )
+  await tx.taskOutbox.createMany({
+    data: [{
+      type: 'website:rebuild:wakeup',
+      dedupeKey: `website:rebuild:${input.revision}`,
+      payload: { revision: input.revision },
+    }],
+    skipDuplicates: true,
+  })
+
+  return publication
 }
 
 export function createCmsRepository(
@@ -418,58 +510,8 @@ export function createCmsRepository(
         return await db.$transaction(async (tx) => {
           await acquireCmsSitePackageWriteLock(tx)
           await assertSelectedSitePackageTransactionState(tx, sitePackage)
-          const latest = await tx.cmsPublication.findFirst({
-            orderBy: { revision: 'desc' },
-            select: { revision: true },
-          })
-          if (latest && input.revision <= latest.revision) {
-            throw new CmsPublicationConflictError(input.revision, latest.revision)
-          }
-          if (input.actorRole === 'editor') {
-            const policy = await tx.cmsPolicy.findUnique({ where: { key: DEFAULT_KEY }, select: { editorCanPublish: true } })
-            if (!policy?.editorCanPublish) {
-              throw new CmsRepositoryError('Editor publishing is disabled by the owner', 'FORBIDDEN')
-            }
-          }
-
-          const publication = await tx.cmsPublication.create({
-            data: {
-              revision: input.revision,
-              snapshot: asJson(input.snapshot),
-              sourceApprovalId: input.sourceApprovalId,
-              actorUserId: input.actorUserId,
-            },
-          })
-
-          await tx.cmsPublicationController.upsert({
-            where: { key: DEFAULT_KEY },
-            create: {
-              key: DEFAULT_KEY,
-              desiredRevision: input.revision,
-              status: 'queued',
-            },
-            update: {},
-          })
-          await tx.$executeRaw(
-            Prisma.sql`
-              UPDATE "cms_publication_controller"
-              SET "desired_revision" = GREATEST(COALESCE("desired_revision", 0), ${input.revision}),
-                  "status" = 'queued',
-                  "last_error" = NULL,
-                  "updated_at" = CURRENT_TIMESTAMP
-              WHERE "key" = ${DEFAULT_KEY}
-            `,
-          )
-          await tx.taskOutbox.createMany({
-            data: [{
-              type: 'website:rebuild:wakeup',
-              dedupeKey: `website:rebuild:${input.revision}`,
-              payload: { revision: input.revision },
-            }],
-            skipDuplicates: true,
-          })
-
-          return publication
+          assertSnapshotMatchesSelectedSitePackage(input.snapshot, sitePackage)
+          return createPublicationTransaction(tx, input)
         })
       } catch (error) {
         if (error instanceof CmsPublicationConflictError) throw error
@@ -482,6 +524,7 @@ export function createCmsRepository(
       return db.$transaction(async (tx) => {
         await acquireCmsSitePackageWriteLock(tx)
         await assertSelectedSitePackageTransactionState(tx, sitePackage)
+        assertSnapshotMatchesSelectedSitePackage(input.candidateSnapshot, sitePackage)
         return tx.cmsApprovalRequest.create({
           data: {
             revisionMap: asJson(input.revisionMap),
@@ -490,6 +533,47 @@ export function createCmsRepository(
           },
         })
       })
+    },
+
+    async approveAndCreatePublication(input) {
+      let attemptedRevision = 0
+      try {
+        return await db.$transaction(async (tx) => {
+          await acquireCmsSitePackageWriteLock(tx)
+          await assertSelectedSitePackageTransactionState(tx, sitePackage)
+          const approval = await tx.cmsApprovalRequest.findUnique({ where: { id: input.approvalId } })
+          if (!approval || approval.status !== 'pending') return null
+
+          assertSnapshotMatchesSelectedSitePackage(
+            approval.candidateSnapshot,
+            sitePackage,
+            'CMS_APPROVAL_STALE',
+          )
+          const revision = (approval.candidateSnapshot as { revision: number }).revision
+          attemptedRevision = revision
+          const decided = await tx.cmsApprovalRequest.updateMany({
+            where: { id: input.approvalId, status: 'pending' },
+            data: {
+              status: 'approved',
+              reviewerUserId: input.reviewerUserId,
+              decidedAt: new Date(),
+            },
+          })
+          if (decided.count !== 1) return null
+
+          return createPublicationTransaction(tx, {
+            revision,
+            snapshot: approval.candidateSnapshot,
+            sourceApprovalId: approval.id,
+            actorUserId: input.reviewerUserId,
+            actorRole: input.actorRole,
+          })
+        })
+      } catch (error) {
+        if (error instanceof CmsPublicationConflictError) throw error
+        if (isUniqueViolation(error)) throw new CmsPublicationConflictError(attemptedRevision)
+        throw error
+      }
     },
 
     async getApproval(approvalId) {

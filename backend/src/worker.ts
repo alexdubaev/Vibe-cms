@@ -1,5 +1,6 @@
 import { defaultJobLockTimeoutMs, isJobLockExpiry, runWithJobLock } from './db'
 import { createBackendRuntime, type BackendRuntime } from './runtime'
+import { assertBackendRuntimeSitePackage } from './site-package-startup'
 import { runBackgroundJob, type BackgroundJobName } from './jobs'
 
 export type WorkerLoop = {
@@ -144,6 +145,7 @@ export async function main() {
   const runtime = createBackendRuntime()
 
   try {
+    await assertBackendRuntimeSitePackage(runtime)
     await runWorker(runtime)
   } finally {
     await runtime.close()

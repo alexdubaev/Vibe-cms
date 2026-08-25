@@ -14,6 +14,10 @@ import {
 } from '../../scripts/repo-env.mjs'
 
 const imageName = process.env.BACKEND_DOCKER_SMOKE_IMAGE ?? 'vibecoding-template-backend:smoke'
+const sitePackageId = process.env.CMS_SITE_PACKAGE_ID ?? 'reference-calculator'
+if (!/^[a-z][a-z0-9-]{1,62}$/.test(sitePackageId)) {
+  throw new Error('CMS_SITE_PACKAGE_ID must be a valid Site Package ID')
+}
 const containerName =
   process.env.BACKEND_DOCKER_SMOKE_CONTAINER ??
   `vibecoding-template-backend-smoke-${repositoryHash}-${process.pid}`
@@ -161,14 +165,32 @@ try {
   run('docker', [...composeArgs, 'up', '-d', 'postgres_test'], { env: dockerEnv })
   await waitForComposePostgres()
 
-  run('bun', ['run', '--cwd', 'backend', 'prisma:deploy'], {
-    env: {
-      ...process.env,
-      DATABASE_URL: databaseUrlForHost,
-    },
-  })
-
-  run('docker', ['build', '-f', 'backend/Dockerfile', '-t', imageName, '.'])
+  run('docker', [
+    'build',
+    '--build-arg',
+    `CMS_SITE_PACKAGE_ID=${sitePackageId}`,
+    '-f',
+    'backend/Dockerfile',
+    '-t',
+    imageName,
+    '.',
+  ])
+  run('docker', [
+    'run',
+    '--rm',
+    '--network',
+    networkName,
+    '-e',
+    `DATABASE_URL=${databaseUrlForContainer}`,
+    '-e',
+    'ADMIN_SEED_EMAIL=docker-smoke-admin@example.com',
+    '-e',
+    'ADMIN_SEED_PASSWORD=docker-smoke-admin-password-1234',
+    imageName,
+    'bun',
+    'run',
+    'db:deploy',
+  ])
   spawnSync('docker', ['rm', '-f', containerName], { stdio: 'ignore' })
 
   run('docker', [

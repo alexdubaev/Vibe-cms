@@ -32,7 +32,7 @@ bun install --frozen-lockfile
 Его E2E доказывает: owner sign-in; CMS add/edit/save/reload calculator; package layout в protected preview;
 approval/publication; immutable snapshot; real Astro static build; fake-S3 upload/marker/promotion; public HTML при
 заблокированном `/api/cms`; browser formula `max(minimumPrice, area * unitPrice)`; QA 375/768/1024/1440,
-literal heading order/exact metadata/keyboard navigation/reduced-motion computed style/overflow. В reference fixture нет media; dimensions проверяются в первом
+literal heading order/exact metadata/keyboard navigation/CTA transition duration under normal and reduced motion/overflow. В reference fixture нет media; dimensions проверяются в первом
 customer package с media.
 
 ## Ключевые границы
@@ -40,7 +40,7 @@ customer package с media.
 - CMS core владеет auth/persistence/preview/approval/snapshot/delivery ports.
 - Package владеет layout/contracts/defaults/editors/renderers/browser formulas/migrations/tests.
 - Клиент меняет только declared content/parameters, не design/code/formulas/secrets/destination.
-- Package ID в config, compiled descriptor, DB state и snapshot должен совпадать; mismatch fails closed.
+- Package ID в config, compiled descriptor, DB state и snapshot должен совпадать; mismatch fails closed before API, scheduler, cron/provider or worker startup. Approval decision/publication is one locked transaction, so a frozen pre-migration snapshot cannot publish or strand an approved request.
 - Один customer = отдельные database role, hosts, secrets, private media, destination, backups, limits.
 - Public site — static HTML/assets/media; ordinary visitors не зависят от CMS/API uptime.
 - Multi-tenancy, SFTP-only delivery, booking, payments, generic leads inbox и DRM absent без нового approval.
@@ -62,7 +62,7 @@ PASS: 1 passed (24.7s)
 | `bun run site-package:stage -- reference-calculator` | LIMIT: Windows `EPERM` rename из-за foreign PID 63376; process не завершался. |
 | `bun install --frozen-lockfile` | PASS: 1103 installs checked, no changes. |
 | `bun run test:contracts` | PASS: 31. |
-| `bun run test:backend:unit` | PASS. |
+| `bun run test:backend:unit` | PASS: 357. |
 | `bun run test:webapp` | PASS. |
 | `bun run test:website` | PASS: 18. |
 | `bun run test:website-builder` | PASS: 63; 2 `flock` tests skipped by their existing non-Linux guard. |
@@ -75,6 +75,7 @@ PASS: 1 passed (24.7s)
 | `git diff --check` | PASS. |
 | `bun run test:backend:integration` | LIMIT: advisory-lock PostgreSQL cases passed, then Windows Docker produced transaction-start timeouts and stalled cleanup; owned runner interrupted after repeated no-output waits. Repeat on Linux/stable Docker. |
 | `bun scripts/docker-smoke-site-package.mjs reference-calculator` | PASS: all four images built from `git archive HEAD`; package descriptor, source isolation and compiled static output passed; builder served; backend proved fail-closed before serve when its startup database gate could not connect. |
+| `bun run smoke:backend:docker` | PASS on bounded retry: explicit package image build, package-aware `db:deploy`, `/health/ready`, registration and authenticated `/me`. First attempt hit external Prisma binary download `ECONNRESET`. |
 
 На Windows официальный staging может падать `EPERM` на rename `packages/selected-site-package`, если его
 держит запущенный Astro/Vite process. В текущей workspace это foreign PID 63376: **не завершать его**.

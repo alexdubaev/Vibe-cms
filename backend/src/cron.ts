@@ -1,4 +1,5 @@
 import { createBackendRuntime, type BackendRuntime } from './runtime'
+import { assertBackendRuntimeSitePackage } from './site-package-startup'
 import { backgroundJobNames, isBackgroundJobName } from './jobs'
 import {
   runLockedBackgroundJob,
@@ -40,6 +41,7 @@ export async function handleProviderJobInvocation(
 
   try {
     runtime = createRuntime()
+    await assertBackendRuntimeSitePackage(runtime)
     await runOneShotJob(runtime, jobName, entries)
     await runtime.close()
     return new Response(null, { status: 204 })
@@ -59,11 +61,21 @@ export async function handleProviderJobInvocation(
   }
 }
 
-export function startProviderJobServer(jobName: string) {
+export async function startProviderJobServer(
+  jobName: string,
+  createRuntime: () => BackendRuntime = createBackendRuntime,
+) {
   if (!isBackgroundJobName(jobName)) {
     throw new Error(
       `Unknown job "${jobName}". Available jobs: ${backgroundJobNames().join(', ')}`,
     )
+  }
+
+  const startupRuntime = createRuntime()
+  try {
+    await assertBackendRuntimeSitePackage(startupRuntime)
+  } finally {
+    await startupRuntime.close()
   }
 
   const server = Bun.serve({
@@ -86,6 +98,7 @@ export async function main(argv: string[] = Bun.argv.slice(2)) {
   const runtime = createBackendRuntime()
 
   try {
+    await assertBackendRuntimeSitePackage(runtime)
     await runOneShotJob(runtime, jobName)
   } finally {
     await runtime.close()
@@ -98,7 +111,7 @@ if (import.meta.main) {
   if (mode === '--http') {
     try {
       if (!jobName) throw new Error('HTTP provider mode requires a job name')
-      startProviderJobServer(jobName)
+      await startProviderJobServer(jobName)
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error))
       process.exit(1)

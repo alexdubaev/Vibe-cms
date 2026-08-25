@@ -307,7 +307,21 @@ async function assertPackageDocumentContract(
   } else {
     await expect(page.locator('meta[name="robots"]')).toHaveCount(0)
   }
-  expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe('auto')
+  const calculatorLink = page.getByRole('link', { name: 'Рассчитать' })
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  const normalTransitionMs = await transitionDurationMs(calculatorLink)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  const reducedTransitionMs = await transitionDurationMs(calculatorLink)
+  expect(normalTransitionMs).toBeGreaterThan(0)
+  expect(reducedTransitionMs).toBeLessThanOrEqual(0.01)
+  expect(reducedTransitionMs).toBeLessThan(normalTransitionMs)
+}
+
+function transitionDurationMs(locator: import('@playwright/test').Locator) {
+  return locator.evaluate((element) => Math.max(...getComputedStyle(element).transitionDuration.split(',').map((duration) => {
+    const value = Number.parseFloat(duration)
+    return duration.trim().endsWith('ms') ? value : value * 1_000
+  })))
 }
 
 async function assertKeyboardCalculatorNavigation(page: import('@playwright/test').Page) {

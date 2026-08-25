@@ -27,6 +27,7 @@ const pagePayload = {
 const snapshot = {
   revision: 1,
   generatedAt: '2026-08-24T10:00:00.000Z',
+  sitePackage: selectedSitePackageDescriptor,
   settings: { companyName: 'Vibe CMS' },
   pages: [{ id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10', title: 'О компании', path: '/about', blocks: pagePayload.blocks }],
   collections: [],

@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test'
+import { selectedSitePackageDescriptor } from '@vibe-cms/selected-site-package/contract'
 
 import { handleProviderJobInvocation, runOneShotJob } from './cron'
 import type { BackendRuntime } from './runtime'
@@ -15,7 +16,17 @@ function runtimeWithLock(acquired: boolean) {
         options: { timeout: number },
       ) => {
         calls.transactionTimeouts.push(options.timeout)
-        return run({ $queryRaw: async () => [{ acquired }] })
+        return run({
+          $executeRaw: async () => 1,
+          $queryRaw: async () => [{ acquired }],
+          cmsSitePackageState: {
+            findUnique: async () => ({
+              packageId: selectedSitePackageDescriptor.id,
+              packageVersion: selectedSitePackageDescriptor.version,
+              schemaVersion: selectedSitePackageDescriptor.schemaVersion,
+            }),
+          },
+        })
       },
       $queryRaw: async () => {
         calls.jobs += 1
@@ -91,7 +102,7 @@ test('the provider HTTP path exposes success and closes its request runtime', as
     expect(calls).toEqual({
       closes: 1,
       jobs: 1,
-      transactionTimeouts: [42_000],
+      transactionTimeouts: [60_000, 42_000],
     })
   } finally {
     log.mockRestore()
@@ -119,6 +130,34 @@ test('the provider HTTP path returns non-2xx when a job fails', async () => {
     expect(await response.text()).toBe('Background job failed')
     expect(closes).toBe(1)
     expect(error).toHaveBeenCalled()
+  } finally {
+    error.mockRestore()
+  }
+})
+
+test('the provider HTTP path rejects a package mismatch before running publication-capable work', async () => {
+  let closes = 0
+  let jobs = 0
+  const runtime = {
+    close: async () => { closes += 1 },
+    prisma: {
+      $transaction: async (operation: (transaction: unknown) => Promise<unknown>) => operation({
+        $executeRaw: async () => 1,
+        $queryRaw: async () => [{ acquired: true }],
+        cmsSitePackageState: {
+          findUnique: async () => ({ packageId: 'wrong-package', packageVersion: '1.0.0', schemaVersion: 1 }),
+        },
+      }),
+      $queryRaw: async () => { jobs += 1 },
+    },
+  } as unknown as BackendRuntime
+  const error = spyOn(console, 'error').mockImplementation(() => {})
+
+  try {
+    const response = await handleProviderJobInvocation('website:rebuild:reconcile', () => runtime)
+    expect(response.status).toBe(503)
+    expect(jobs).toBe(0)
+    expect(closes).toBe(1)
   } finally {
     error.mockRestore()
   }
