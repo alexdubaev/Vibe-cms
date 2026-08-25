@@ -1,0 +1,37 @@
+---
+import { selectedSitePackageWebsite } from '@vibe-cms/selected-site-package/website'
+
+import CmsPage from './CmsPage.astro'
+import Block from './components/Block.astro'
+import type { WebsitePublicationSnapshot, WebsitePublicPage } from './snapshot'
+
+interface Props {
+  mediaBasePath?: string
+  page: WebsitePublicPage
+  snapshot: WebsitePublicationSnapshot
+}
+
+const { mediaBasePath, page, snapshot } = Astro.props
+const PackagePageLayout = selectedSitePackageWebsite.PageLayout
+const packageLayoutProps = {
+  collections: snapshot.collections,
+  logo: snapshot.settings.logo,
+  media: snapshot.media,
+  menus: snapshot.menus,
+  page,
+  renderBlock: Block,
+  settings: snapshot.settings,
+  snapshot,
+}
+---
+
+<PackagePageLayout {...packageLayoutProps}>
+  <div data-site-package={selectedSitePackageWebsite.descriptor.id}>
+    <CmsPage
+      collections={snapshot.collections}
+      media={snapshot.media}
+      mediaBasePath={mediaBasePath}
+      page={page}
+    />
+  </div>
+</PackagePageLayout>

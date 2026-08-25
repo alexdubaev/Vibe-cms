@@ -1,136 +1,22 @@
 ---
-import type { PublicationSnapshot } from '@web-app-demo/contracts'
+import type { AstroComponentFactory } from 'astro/runtime/server/index.js'
+
 import type { PublicBlock } from '../block-registry'
-import { resolveCmsMediaSrc } from '../media'
-import StructuredText from './StructuredText.astro'
+import { resolveBlockRenderer } from '../block-registry'
+import CoreBlock from '../CoreBlock.astro'
+import type { WebsitePublicationSnapshot } from '../snapshot'
 
 interface Props {
   block: PublicBlock
-  collections?: PublicationSnapshot['collections']
-  media?: PublicationSnapshot['media']
+  collections?: WebsitePublicationSnapshot['collections']
+  media?: WebsitePublicationSnapshot['media']
   mediaBasePath?: string
+  priority?: boolean
 }
 
-const { block, collections = [], media = [], mediaBasePath } = Astro.props
-const data = block.data as Record<string, unknown>
-const asRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
-const stringValue = (value: unknown) => typeof value === 'string' ? value : undefined
-const stringArray = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
-const readAction = (value: unknown) => {
-  const action = asRecord(value)
-  const label = stringValue(action.label)
-  const href = stringValue(action.href)
-  return label && href ? { label, href } : undefined
-}
-const title = stringValue(data.title)
-const text = stringValue(data.text)
-const primaryAction = readAction(data.primaryAction)
-const secondaryAction = readAction(data.secondaryAction)
-const mediaId = stringValue(data.mediaId)
-const mediaSrc = resolveCmsMediaSrc(media, mediaId, mediaBasePath)
-const galleryMedia = stringArray(data.mediaIds).flatMap((id) => {
-  const src = resolveCmsMediaSrc(media, id, mediaBasePath)
-  const asset = media.find((candidate) => candidate.id === id)
-  return src && asset ? [{ alt: asset.alt ?? asset.filename, src }] : []
-})
-const selectedEntries = stringArray(data.entryIds).flatMap((id) => {
-  const entry = collections.find((candidate) => candidate.id === id)
-  return entry ? [entry] : []
-})
-const benefits = Array.isArray(data.items) ? data.items : []
-const imageSide = data.imageSide === 'left' ? 'left' : 'right'
-const contactMethod = data.contactMethod === 'email'
-  ? 'Электронная почта'
-  : data.contactMethod === 'messenger'
-    ? 'Мессенджер'
-    : 'Телефон'
+const props = Astro.props
+const renderer = resolveBlockRenderer(props.block.type)
+const ResolvedBlock = (renderer.kind === 'package' ? renderer.Component : CoreBlock) as AstroComponentFactory
 ---
 
-<section class={`cms-block cms-block-${block.type}`} data-block-type={block.type}>
-  {block.type === 'hero' ? (
-    <div class="mx-auto grid max-w-6xl gap-8 px-6 py-20 text-center md:py-28">
-      {stringValue(data.eyebrow) && <p class="text-sm font-medium uppercase tracking-[0.2em] text-primary">{stringValue(data.eyebrow)}</p>}
-      <h1 class="mx-auto max-w-4xl text-4xl font-semibold tracking-tight text-foreground md:text-6xl">{stringValue(data.title) ?? 'Без заголовка'}</h1>
-      {text && <p class="mx-auto max-w-2xl text-lg leading-8 text-foreground/70">{text}</p>}
-      {mediaSrc && <img class="mx-auto max-h-[30rem] w-full max-w-4xl rounded-3xl border object-cover shadow-sm" src={mediaSrc} alt={title ?? ''} />}
-      {(primaryAction || secondaryAction) && (
-        <div class="flex flex-wrap justify-center gap-3">
-          {primaryAction && <a class="inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-6 py-3 font-medium text-primary-foreground transition-opacity hover:opacity-90" href={primaryAction.href}>{primaryAction.label}</a>}
-          {secondaryAction && <a class="inline-flex min-h-11 items-center justify-center rounded-full border px-6 py-3 font-medium transition-colors hover:bg-muted" href={secondaryAction.href}>{secondaryAction.label}</a>}
-        </div>
-      )}
-    </div>
-  ) : block.type === 'textImage' ? (
-    <div class={`mx-auto grid max-w-6xl items-center gap-10 px-6 py-16 md:grid-cols-2 ${imageSide === 'left' ? '[&>.cms-copy]:md:order-2' : ''}`}>
-      <div class="cms-copy grid gap-5">
-        {title && <h2 class="text-3xl font-semibold tracking-tight text-foreground">{title}</h2>}
-        <StructuredText value={data.content} />
-      </div>
-      {mediaSrc && <img class="max-h-[30rem] w-full rounded-3xl border object-cover shadow-sm" src={mediaSrc} alt={title ?? ''} />}
-    </div>
-  ) : block.type === 'benefits' ? (
-    <div class="mx-auto max-w-6xl px-6 py-16">
-      {title && <h2 class="text-3xl font-semibold tracking-tight text-foreground">{title}</h2>}
-      <ul class="mt-8 grid gap-4 md:grid-cols-2">
-        {benefits.map((item) => {
-          const benefit = asRecord(item)
-          return <li class="grid gap-2 rounded-2xl border bg-card p-6 shadow-sm">
-            {stringValue(benefit.title) && <h3 class="text-lg font-semibold text-foreground">{stringValue(benefit.title)}</h3>}
-            {stringValue(benefit.text) && <p class="leading-7 text-foreground/70">{stringValue(benefit.text)}</p>}
-          </li>
-        })}
-      </ul>
-    </div>
-  ) : block.type === 'gallery' ? (
-    <div class="mx-auto max-w-6xl px-6 py-16">
-      {title && <h2 class="text-3xl font-semibold tracking-tight text-foreground">{title}</h2>}
-      <div class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {galleryMedia.map((asset) => <img class="aspect-[4/3] w-full rounded-2xl border object-cover shadow-sm" src={asset.src} alt={asset.alt} />)}
-      </div>
-    </div>
-  ) : block.type === 'cta' ? (
-    <div class="mx-auto grid max-w-5xl gap-5 px-6 py-16 text-center">
-      {title && <h2 class="text-3xl font-semibold tracking-tight text-foreground">{title}</h2>}
-      {text && <p class="mx-auto max-w-2xl leading-7 text-foreground/70">{text}</p>}
-      {(primaryAction || secondaryAction) && <div class="flex flex-wrap justify-center gap-3">
-        {primaryAction && <a class="inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-6 py-3 font-medium text-primary-foreground transition-opacity hover:opacity-90" href={primaryAction.href}>{primaryAction.label}</a>}
-        {secondaryAction && <a class="inline-flex min-h-11 items-center justify-center rounded-full border px-6 py-3 font-medium transition-colors hover:bg-muted" href={secondaryAction.href}>{secondaryAction.label}</a>}
-      </div>}
-    </div>
-  ) : block.type === 'contacts' ? (
-    <div class="mx-auto max-w-5xl px-6 py-16">
-      <h2 class="text-3xl font-semibold tracking-tight text-foreground">{title ?? 'Контакты'}</h2>
-      <ul class="mt-8 grid gap-3 sm:grid-cols-2">
-        {data.showAddress === true && <li class="rounded-2xl border p-5"><strong class="text-foreground">Адрес</strong><p class="mt-1 text-foreground/65">Добавьте адрес в настройках сайта.</p></li>}
-        {data.showHours === true && <li class="rounded-2xl border p-5"><strong class="text-foreground">Часы работы</strong><p class="mt-1 text-foreground/65">Добавьте часы работы в настройках сайта.</p></li>}
-        {data.showContacts === true && <li class="rounded-2xl border p-5"><strong class="text-foreground">Связь</strong><p class="mt-1 text-foreground/65">Добавьте телефон или email в настройках сайта.</p></li>}
-        {data.showSocials === true && <li class="rounded-2xl border p-5"><strong class="text-foreground">Социальные сети</strong><p class="mt-1 text-foreground/65">Добавьте ссылки на социальные сети.</p></li>}
-        {data.showMap === true && <li class="rounded-2xl border p-5"><strong class="text-foreground">Карта</strong><p class="mt-1 text-foreground/65">Карта будет доступна после настройки адреса.</p></li>}
-      </ul>
-    </div>
-  ) : block.type === 'formPlaceholder' ? (
-    <div class="mx-auto grid max-w-2xl gap-5 px-6 py-16 text-center">
-      <h2 class="text-3xl font-semibold tracking-tight text-foreground">{title ?? 'Свяжитесь с нами'}</h2>
-      {text && <p class="leading-7 text-foreground/70">{text}</p>}
-      <div class="rounded-2xl border bg-muted/20 p-6 text-foreground/70">Здесь будет форма связи. Предпочтительный способ: {contactMethod}.</div>
-    </div>
-  ) : ['serviceSelection', 'caseSelection', 'testimonialSelection', 'faqSelection'].includes(block.type) ? (
-    <div class="mx-auto max-w-6xl px-6 py-16">
-      <h2 class="text-3xl font-semibold tracking-tight text-foreground">{title ?? 'Избранное'}</h2>
-      <div class="mt-8 grid gap-4 md:grid-cols-2">
-        {selectedEntries.map((entry) => <article class="grid gap-2 rounded-2xl border bg-card p-6 shadow-sm">
-          <h3 class="text-lg font-semibold text-foreground">{entry.name}</h3>
-          {entry.summary && <p class="leading-7 text-foreground/70">{entry.summary}</p>}
-        </article>)}
-      </div>
-    </div>
-  ) : (
-    <div class="mx-auto max-w-5xl px-6 py-12">
-      {title && <h2 class="text-2xl font-semibold text-foreground">{title}</h2>}
-      {text && <p class="mt-4 max-w-3xl whitespace-pre-wrap leading-7 text-foreground/70">{text}</p>}
-      {mediaSrc && <img class="mt-6 max-h-80 rounded-3xl border object-cover shadow-sm" src={mediaSrc} alt={title ?? ''} />}
-      {primaryAction && <a class="mt-6 inline-flex underline underline-offset-4" href={primaryAction.href}>{primaryAction.label}</a>}
-    </div>
-  )}
-</section>
+<ResolvedBlock {...props} />

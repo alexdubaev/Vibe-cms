@@ -1,24 +1,29 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro'
-import CmsPage from '@/cms/CmsPage.astro'
-import { loadPublicationSnapshot } from '@/cms/snapshot'
+import SitePage from '@/cms/SitePage.astro'
+import { loadPublicationSnapshot, resolvePageMetadata } from '@/cms/snapshot'
 
 export async function getStaticPaths() {
   const snapshot = await loadPublicationSnapshot()
-  return (snapshot?.pages ?? [])
+  if (!snapshot) return []
+  return snapshot.pages
     .filter((page) => page.path !== '/')
     .map((page) => ({
       params: { slug: page.path.slice(1) },
-      props: { collections: snapshot?.collections ?? [], page, media: snapshot?.media ?? [] },
+      props: { page, snapshot },
     }))
 }
 
-const { collections, media, page } = Astro.props
-const canonicalUrl = import.meta.env.PUBLIC_WEBSITE_URL
-  ? new URL(Astro.url.pathname, import.meta.env.PUBLIC_WEBSITE_URL).toString()
-  : undefined
+const { page, snapshot } = Astro.props
+const metadata = resolvePageMetadata(snapshot, page, import.meta.env.PUBLIC_WEBSITE_URL)
 ---
 
-<BaseLayout canonicalUrl={canonicalUrl} description={page.seo?.description ?? page.title} title={page.seo?.title ?? page.title}>
-  <CmsPage collections={collections} page={page} media={media} />
+<BaseLayout
+  canonicalUrl={metadata.canonicalUrl}
+  description={metadata.description}
+  noIndex={metadata.noIndex}
+  socialImage={metadata.socialImage}
+  title={metadata.title}
+>
+  <SitePage page={page} snapshot={snapshot} />
 </BaseLayout>

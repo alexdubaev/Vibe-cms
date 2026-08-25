@@ -6,10 +6,16 @@ interface Props {
   canonicalUrl?: string
   description: string
   noIndex?: boolean
+  socialImage?: {
+    alt: string
+    height: number | null
+    url: string
+    width: number | null
+  }
   title: string
 }
 
-const { canonicalUrl, description, noIndex = false, title } = Astro.props
+const { canonicalUrl, description, noIndex = false, socialImage, title } = Astro.props
 ---
 
 <!doctype html>
@@ -30,7 +36,11 @@ const { canonicalUrl, description, noIndex = false, title } = Astro.props
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
-    <meta name="twitter:card" content="summary" />
+    {socialImage && <meta property="og:image" content={socialImage.url} />}
+    {socialImage && <meta property="og:image:alt" content={socialImage.alt} />}
+    {socialImage?.width && <meta property="og:image:width" content={String(socialImage.width)} />}
+    {socialImage?.height && <meta property="og:image:height" content={String(socialImage.height)} />}
+    <meta name="twitter:card" content={socialImage ? 'summary_large_image' : 'summary'} />
   </head>
   <body>
     <a

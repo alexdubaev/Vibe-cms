@@ -12,24 +12,33 @@ import SiteFooter from '@/components/landing/SiteFooter.astro'
 import SiteHeader from '@/components/landing/SiteHeader.astro'
 import BaseLayout from '@/layouts/BaseLayout.astro'
 import { getSecondaryAction, TEMPLATE_ACTION } from '@/lib/landing-actions'
-import CmsPage from '@/cms/CmsPage.astro'
-import { loadPublicationSnapshot } from '@/cms/snapshot'
+import SitePage from '@/cms/SitePage.astro'
+import { loadPublicationSnapshot, resolvePageMetadata } from '@/cms/snapshot'
 
 const title = 'ЙЙ — шаблон для создания сайтов и приложений с ИИ'
 const description =
   'Соберите лендинг, веб- или мобильное приложение с ИИ. Технологии, структура проекта, компоненты и проверки уже настроены.'
 const publicWebsiteUrl = import.meta.env.PUBLIC_WEBSITE_URL
 const publicWebappUrl = import.meta.env.PUBLIC_WEBAPP_URL
-const canonicalUrl = publicWebsiteUrl
+const templateCanonicalUrl = publicWebsiteUrl
   ? new URL(Astro.url.pathname, publicWebsiteUrl).toString()
   : undefined
 const secondaryAction = getSecondaryAction(publicWebappUrl)
 const publicationSnapshot = await loadPublicationSnapshot()
 const homePage = publicationSnapshot?.pages.find((page) => page.path === '/')
+const cmsMetadata = publicationSnapshot && homePage
+  ? resolvePageMetadata(publicationSnapshot, homePage, publicWebsiteUrl)
+  : undefined
 ---
 
-<BaseLayout canonicalUrl={canonicalUrl} description={description} title={title}>
-  {homePage ? <CmsPage collections={publicationSnapshot?.collections ?? []} page={homePage} media={publicationSnapshot?.media ?? []} /> : (
+<BaseLayout
+  canonicalUrl={cmsMetadata?.canonicalUrl ?? templateCanonicalUrl}
+  description={cmsMetadata?.description ?? description}
+  noIndex={cmsMetadata?.noIndex}
+  socialImage={cmsMetadata?.socialImage}
+  title={cmsMetadata?.title ?? title}
+>
+  {homePage && publicationSnapshot ? <SitePage page={homePage} snapshot={publicationSnapshot} /> : (
     <>
       <SiteHeader primaryHref={TEMPLATE_ACTION.href} primaryLabel={TEMPLATE_ACTION.label} />
       <main id="main-content">
