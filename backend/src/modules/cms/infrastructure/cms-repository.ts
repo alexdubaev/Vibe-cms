@@ -12,9 +12,51 @@ const DEFAULT_SITE_SETTINGS_PAYLOAD = { companyName: 'Vibe CMS' }
 
 const asJson = (value: unknown) => value as Prisma.InputJsonValue
 
+type RuntimeSitePackage = { id: string; version: string; schemaVersion: number }
+
+export async function withSelectedSitePackageLock<Result>(
+  db: DbClient,
+  sitePackage: RuntimeSitePackage,
+  operation: (transaction: Prisma.TransactionClient) => Promise<Result>,
+) {
+  return db.$transaction(async (transaction) => {
+    await acquireCmsSitePackageWriteLock(transaction)
+    await assertSelectedSitePackageTransactionState(transaction, sitePackage)
+    return operation(transaction)
+  }, { timeout: 60_000 })
+}
+
+export async function assertSelectedSitePackageState(db: DbClient, sitePackage: RuntimeSitePackage) {
+  await withSelectedSitePackageLock(db, sitePackage, async () => undefined)
+}
+
+async function assertSelectedSitePackageTransactionState(
+  transaction: Prisma.TransactionClient,
+  sitePackage: RuntimeSitePackage,
+) {
+  const state = await transaction.cmsSitePackageState.findUnique({
+    where: { key: DEFAULT_KEY },
+    select: { packageId: true, packageVersion: true, schemaVersion: true },
+  })
+  if (
+    state === null
+    || state.packageId !== sitePackage.id
+    || state.packageVersion !== sitePackage.version
+    || state.schemaVersion !== sitePackage.schemaVersion
+  ) {
+    const persisted = state
+      ? `${state.packageId}@${state.packageVersion} schema ${state.schemaVersion}`
+      : 'uninitialised'
+    throw new CmsRepositoryError(
+      `CMS site package state ${persisted} does not match runtime ${sitePackage.id}@${sitePackage.version} schema ${sitePackage.schemaVersion}`,
+      'CMS_VALIDATION',
+    )
+  }
+}
+
 export function createCmsRepository(
   db: DbClient,
-  sitePackage: { id: string; schemaVersion: number },
+  sitePackage: RuntimeSitePackage,
 ): CmsRepository {
   return {
     async getPolicy() {
@@ -374,6 +416,8 @@ export function createCmsRepository(
     async createPublication(input) {
       try {
         return await db.$transaction(async (tx) => {
+          await acquireCmsSitePackageWriteLock(tx)
+          await assertSelectedSitePackageTransactionState(tx, sitePackage)
           const latest = await tx.cmsPublication.findFirst({
             orderBy: { revision: 'desc' },
             select: { revision: true },
@@ -435,12 +479,16 @@ export function createCmsRepository(
     },
 
     async createApproval(input) {
-      return db.cmsApprovalRequest.create({
-        data: {
-          revisionMap: asJson(input.revisionMap),
-          candidateSnapshot: asJson(input.candidateSnapshot),
-          requesterUserId: input.requesterUserId,
-        },
+      return db.$transaction(async (tx) => {
+        await acquireCmsSitePackageWriteLock(tx)
+        await assertSelectedSitePackageTransactionState(tx, sitePackage)
+        return tx.cmsApprovalRequest.create({
+          data: {
+            revisionMap: asJson(input.revisionMap),
+            candidateSnapshot: asJson(input.candidateSnapshot),
+            requesterUserId: input.requesterUserId,
+          },
+        })
       })
     },
 

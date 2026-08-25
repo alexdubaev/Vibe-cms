@@ -1770,6 +1770,7 @@ function planExistingReleaseRoots(context, options) {
     if (staticOutputs.release_revision && staticOutputs.source_branch) {
       const root = writeManagedRootInputs(context, 'static', {
         release_revision: staticOutputs.release_revision,
+        site_package_id: staticOutputs.site_package_id ?? releaseSitePackageId(),
         source_branch: staticOutputs.source_branch,
       })
       terraformPlan({
@@ -1953,6 +1954,10 @@ export function importReleaseInputs(provider, rootName, options) {
     }
   }
   if (provider === 'digitalocean' && rootName === 'static') {
+    const sitePackageId = options.sitePackageId?.trim()
+    if (!sitePackageId || !/^[a-z][a-z0-9-]{1,62}$/.test(sitePackageId)) {
+      throw new Error('static import requires --site-package-id=<package-id>')
+    }
     if (!/^[0-9a-f]{40}$/.test(options.releaseRevision ?? '')) {
       throw new Error('static import requires --release-revision=<40-char-sha>')
     }
@@ -1968,6 +1973,7 @@ export function importReleaseInputs(provider, rootName, options) {
     }
     return {
       release_revision: options.releaseRevision,
+      site_package_id: sitePackageId,
       source_branch: options.sourceBranch,
     }
   }
@@ -2228,6 +2234,7 @@ async function buildAndPushImage(
   repository,
   commit,
   assertLeaseHeld,
+  sitePackageId,
   dockerfile = 'backend/Dockerfile',
 ) {
   if (!repository) throw new Error(`Terraform did not return an image repository for ${dockerfile}`)
@@ -2250,6 +2257,8 @@ async function buildAndPushImage(
       dockerfile,
       '--tag',
       tag,
+      '--build-arg',
+      `CMS_SITE_PACKAGE_ID=${sitePackageId}`,
       '-',
     ],
     {
@@ -2270,7 +2279,7 @@ async function buildAndPushImage(
   return digestFromRepoDigests(JSON.parse(inspected), repository)
 }
 
-function buildYandexStaticArtifacts(commit, outputs) {
+function buildYandexStaticArtifacts(commit, outputs, sitePackageId) {
   const scratchParent = resolve(repoRoot, '.scratch')
   mkdirSync(scratchParent, { recursive: true })
   const artifactRoot = mkdtempSync(resolve(scratchParent, 'infra-static-'))
@@ -2286,6 +2295,8 @@ function buildYandexStaticArtifacts(commit, outputs) {
         'export',
         '--output',
         `type=local,dest=${artifactRoot}`,
+        '--build-arg',
+        `CMS_SITE_PACKAGE_ID=${sitePackageId}`,
         '--build-arg',
         `VITE_API_URL=${outputs.api_url}`,
         '--build-arg',
@@ -2315,6 +2326,14 @@ export function seedVariables(source = process.env) {
   return email && password
     ? { admin_seed_email: email, admin_seed_password: password }
     : null
+}
+
+export function releaseSitePackageId(source = process.env) {
+  const packageId = source.CMS_SITE_PACKAGE_ID?.trim()
+  if (!packageId || !/^[a-z][a-z0-9-]{1,62}$/.test(packageId)) {
+    throw new Error('CMS_SITE_PACKAGE_ID must name the Site Package built into this release')
+  }
+  return packageId
 }
 
 async function invokeYandexMigration(url) {
@@ -2564,6 +2583,7 @@ async function release(provider, options) {
     return
   }
 
+  const sitePackageId = releaseSitePackageId()
   assertCleanReleaseSource(context.outputs.release_source, provider, source.commit)
   const commit = source.commit
   const repository = repositoryForImage(provider, context.outputs)
@@ -2573,6 +2593,7 @@ async function release(provider, options) {
     repository,
     commit,
     assertLeaseHeld,
+    sitePackageId,
   )
   const cmsImageDigests =
     provider === 'yandex' && context.outputs.cms_publication_enabled
@@ -2582,6 +2603,7 @@ async function release(provider, options) {
             context.outputs.builder_image_repository,
             commit,
             assertLeaseHeld,
+            sitePackageId,
             'website-builder/Dockerfile',
           ),
           preview: await buildAndPushImage(
@@ -2589,6 +2611,7 @@ async function release(provider, options) {
             context.outputs.preview_image_repository,
             commit,
             assertLeaseHeld,
+            sitePackageId,
             'website/Dockerfile.preview',
           ),
         }
@@ -2650,6 +2673,7 @@ async function release(provider, options) {
         assertCleanReleaseSource(context.outputs.release_source, provider, commit)
         const staticRoot = writeManagedRootInputs(context, 'static', {
           release_revision: commit,
+          site_package_id: sitePackageId,
           source_branch: sourceBranch,
         })
         terraformPlan({
@@ -2739,7 +2763,7 @@ async function release(provider, options) {
     async publishStatic(runtimeOutputs) {
       const promotedOutputs = { ...context.outputs, ...runtimeOutputs }
       assertCleanReleaseSource(context.outputs.release_source, provider, commit)
-      const artifactRoot = buildYandexStaticArtifacts(commit, promotedOutputs)
+      const artifactRoot = buildYandexStaticArtifacts(commit, promotedOutputs, sitePackageId)
       try {
         await assertLeaseHeld()
         assertCleanReleaseSource(context.outputs.release_source, provider, commit)
@@ -2784,6 +2808,7 @@ export function parseArguments(argv) {
   const importFlagPrefixes = [
     '--runtime-image-digest=',
     '--release-revision=',
+    '--site-package-id=',
     '--source-branch=',
   ]
   const bootstrapFlagPrefixes = [
@@ -2865,6 +2890,7 @@ export function parseArguments(argv) {
     resourceId: operands[2],
     runtimeImageDigest: flagValue('--runtime-image-digest='),
     releaseRevision: flagValue('--release-revision='),
+    sitePackageId: flagValue('--site-package-id='),
     sourceBranch: flagValue('--source-branch='),
     newBootstrap: args.includes('--new'),
     recoverStateBucket,

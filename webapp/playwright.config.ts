@@ -31,6 +31,7 @@ const backendEnv = normalizeEnv({
     process.env.JWT_SECRET ?? 'web-e2e-secret-at-least-thirty-two-characters',
   CORS_ORIGINS: [frontendUrl, 'http://localhost:5173'].join(','),
   COOKIE_SECURE: 'false',
+  PREVIEW_ORIGIN: portPlan.previewUrl,
   // Pinned for the same reason as the storage settings below: otherwise a developer's
   // backend/.env decides whether an E2E password-reset request mints a token at all. The
   // credentials are blanked with it, exactly as storageEnv() does: the env schema treats an
@@ -110,7 +111,7 @@ export default defineConfig({
   webServer: [
     {
       name: 'backend',
-      command: 'bun run start',
+      command: 'bun ../webapp/e2e/start-backend.ts',
       cwd: backendRoot,
       env: backendEnv,
       url: `${backendUrl}/health`,

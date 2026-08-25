@@ -52,6 +52,34 @@ describe('stageSitePackage', () => {
     expect(await Bun.file(join(repositoryRoot, 'packages', 'selected-site-package', 'src', 'marker.txt')).exists()).toBeTrue()
   })
 
+  test('can bootstrap the generated workspace before dependencies are installed', async () => {
+    const { repositoryRoot, outputDirectory } = await createFixtureRepository()
+    await writeFile(join(repositoryRoot, 'site-packages', 'vibe-core', 'src', 'contract.ts'), 'throw new Error("dependencies unavailable")')
+
+    await expect(stageSitePackage({
+      repositoryRoot,
+      packageId: 'vibe-core',
+      outputDirectory,
+      validateContract: false,
+    })).resolves.toEqual({ id: 'vibe-core', outputDirectory })
+    expect(JSON.parse(await readFile(join(outputDirectory, 'package.json'), 'utf8')).name)
+      .toBe('@vibe-cms/selected-site-package')
+  })
+
+  test('validates an already bootstrapped workspace without replacing its directory', async () => {
+    const { repositoryRoot, outputDirectory } = await createFixtureRepository()
+    await stageSitePackage({ repositoryRoot, packageId: 'vibe-core', outputDirectory, validateContract: false })
+    await writeFile(join(outputDirectory, 'installed-marker.txt'), 'keep installed workspace')
+
+    await expect(stageSitePackage({
+      repositoryRoot,
+      packageId: 'vibe-core',
+      outputDirectory,
+      validateOnly: true,
+    })).resolves.toEqual({ id: 'vibe-core', outputDirectory })
+    expect(await readFile(join(outputDirectory, 'installed-marker.txt'), 'utf8')).toBe('keep installed workspace')
+  })
+
   test('rejects traversal package IDs before selecting a source package', async () => {
     const { repositoryRoot, outputDirectory } = await createFixtureRepository()
 

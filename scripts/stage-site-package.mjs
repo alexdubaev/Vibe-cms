@@ -2,8 +2,6 @@ import { cp, lstat, mkdir, mkdtemp, readdir, realpath, rename, rm, writeFile } f
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { sitePackageDescriptorSchema } from '../packages/contracts/src/cms/site-package.ts'
-
 const sitePackageIdPattern = /^[a-z][a-z0-9-]{1,62}$/
 
 const stagedPackageManifest = {
@@ -33,6 +31,7 @@ const createSiblingTemporaryDirectory = async (outputDirectory) => {
 }
 
 const readStagedDescriptor = async (stagedDirectory) => {
+  const { sitePackageDescriptorSchema } = await import('../packages/contracts/src/cms/site-package.ts')
   const contractUrl = pathToFileURL(join(stagedDirectory, 'src', 'contract.ts'))
   const validationProcess = Bun.spawn({
     cmd: [
@@ -72,13 +71,19 @@ const replaceSelectedPackage = async (temporaryDirectory, outputDirectory) => {
   if (previousDirectory) await rm(previousDirectory, { recursive: true, force: true })
 }
 
-export async function stageSitePackage({ repositoryRoot, packageId, outputDirectory = join(repositoryRoot, 'packages', 'selected-site-package') }) {
+export async function stageSitePackage({ repositoryRoot, packageId, outputDirectory = join(repositoryRoot, 'packages', 'selected-site-package'), validateContract = true, validateOnly = false }) {
   if (!sitePackageIdPattern.test(packageId)) throw new Error('Invalid Site Package ID')
 
   const resolvedRepositoryRoot = resolve(repositoryRoot)
   const sourceRoot = resolve(resolvedRepositoryRoot, 'site-packages')
   const sourceDirectory = resolve(sourceRoot, packageId)
   const destinationDirectory = resolve(outputDirectory)
+
+  if (validateOnly) {
+    const descriptor = await readStagedDescriptor(destinationDirectory)
+    if (descriptor.id !== packageId) throw new Error('Site Package descriptor ID does not match requested package')
+    return { id: descriptor.id, outputDirectory: destinationDirectory }
+  }
 
   if (!isWithin(sourceRoot, sourceDirectory)) throw new Error('Invalid Site Package ID')
 
@@ -103,7 +108,7 @@ export async function stageSitePackage({ repositoryRoot, packageId, outputDirect
     )
     await writeFile(join(temporaryDirectory, 'package.json'), `${JSON.stringify(stagedPackageManifest, null, 2)}\n`)
 
-    const descriptor = await readStagedDescriptor(temporaryDirectory)
+    const descriptor = validateContract ? await readStagedDescriptor(temporaryDirectory) : { id: packageId }
     if (descriptor.id !== packageId) throw new Error('Site Package descriptor ID does not match requested package')
 
     await replaceSelectedPackage(temporaryDirectory, destinationDirectory)
@@ -117,6 +122,11 @@ export async function stageSitePackage({ repositoryRoot, packageId, outputDirect
 if (import.meta.main) {
   const packageId = process.argv[2] ?? (process.env.NODE_ENV === 'production' ? undefined : 'vibe-core')
   if (!packageId) throw new Error('Site Package ID is required')
-  const stagedPackage = await stageSitePackage({ repositoryRoot: process.cwd(), packageId })
+  const stagedPackage = await stageSitePackage({
+    repositoryRoot: process.cwd(),
+    packageId,
+    validateContract: !process.argv.includes('--prepare'),
+    validateOnly: process.argv.includes('--validate-only'),
+  })
   console.log(`Staged Site Package: ${stagedPackage.id}`)
 }

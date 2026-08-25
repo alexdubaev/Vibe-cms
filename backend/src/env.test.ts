@@ -169,6 +169,19 @@ describe('loadEnv', () => {
     ).toThrow('WEBAPP_ORIGIN')
   })
 
+  test('validates the dedicated preview runtime origin independently from the admin origin', () => {
+    const baseEnv = {
+      DATABASE_URL: 'postgresql://superuser:superpassword@localhost:54329/web_app_demo',
+      JWT_SECRET: '12345678901234567890123456789012',
+    }
+    expect(loadEnv({ ...baseEnv, PREVIEW_ORIGIN: 'http://127.0.0.1:4321' }).PREVIEW_ORIGIN)
+      .toBe('http://127.0.0.1:4321')
+    expect(() => loadEnv({ ...baseEnv, PREVIEW_ORIGIN: 'https://preview.example.com/path' }))
+      .toThrow('PREVIEW_ORIGIN')
+    expect(() => loadEnv({ ...baseEnv, NODE_ENV: 'production', PREVIEW_ORIGIN: 'http://preview.example.com' }))
+      .toThrow('PREVIEW_ORIGIN')
+  })
+
   test('keeps absolute session lifetime at least as long as refresh lifetime', () => {
     expect(() =>
       loadEnv({

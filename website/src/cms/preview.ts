@@ -25,7 +25,7 @@ export class PreviewExchangeError extends Error {
 
 /**
  * Parses the exact one-time URL emitted by the backend. Unknown query parameters, fragments,
- * credentials, non-HTTPS origins, and non-UUID page ids are rejected before any network request.
+ * credentials, non-HTTPS non-loopback origins, and non-UUID page ids are rejected before any network request.
  */
 export function parsePreviewGrantUrl(input: string | URL): PreviewGrant {
   let url: URL
@@ -35,7 +35,8 @@ export function parsePreviewGrantUrl(input: string | URL): PreviewGrant {
     throw new PreviewExchangeError()
   }
 
-  if (url.protocol !== 'https:' || url.username || url.password || url.hash) {
+  const localHttp = url.protocol === 'http:' && ['127.0.0.1', '::1', 'localhost'].includes(url.hostname)
+  if ((url.protocol !== 'https:' && !localHttp) || url.username || url.password || url.hash) {
     throw new PreviewExchangeError()
   }
 

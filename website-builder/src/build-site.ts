@@ -8,7 +8,7 @@ import {
 } from '@vibe-cms/selected-site-package/contract'
 import type { FetchLike } from './backend-client'
 import { spawn } from 'node:child_process'
-import { mkdtemp, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { z } from 'zod'
@@ -28,6 +28,7 @@ export type SnapshotArtifact = {
 export type SnapshotDownloader = (artifact: SnapshotArtifact) => Promise<BuilderPublicationSnapshot>
 
 export type SiteBuildResult = {
+  workDirectory: string
   outputDirectory: string
   marker: string
   publicationRevision: number
@@ -117,31 +118,37 @@ export function createAstroSiteRunner(options: {
   return async ({ buildId, publicationRevision, slot, snapshot }) => {
     assertSelectedSitePackage(snapshot, options.descriptor)
     const workDirectory = await mkdtemp(join(options.tempDirectory ?? tmpdir(), 'vibe-site-build-'))
-    const snapshotFile = join(workDirectory, 'snapshot.json')
-    const buildOutputDirectory = join(workDirectory, 'dist')
-    await symlink(
-      join(options.websiteDirectory, '..', 'node_modules'),
-      join(workDirectory, 'node_modules'),
-      process.platform === 'win32' ? 'junction' : 'dir',
-    )
-    await writeFile(snapshotFile, JSON.stringify(snapshot))
-    await run({
-      command: 'bun',
-      args: ['x', 'astro', 'build', '--outDir', buildOutputDirectory],
-      cwd: options.websiteDirectory,
-      env: {
-        CMS_SNAPSHOT_FILE: snapshotFile,
-        CMS_PUBLICATION_REVISION: String(publicationRevision),
-        CMS_PUBLICATION_SLOT: slot,
-        CMS_BUILD_ID: buildId,
-        PUBLIC_WEBSITE_URL: options.publicWebsiteUrl,
-      },
-    })
-    return {
-      outputDirectory: join(buildOutputDirectory, 'client'),
-      marker: publicationMarker(publicationRevision),
-      publicationRevision,
-      redirects: snapshot.redirects,
+    try {
+      const snapshotFile = join(workDirectory, 'snapshot.json')
+      const buildOutputDirectory = join(workDirectory, 'dist')
+      await symlink(
+        join(options.websiteDirectory, '..', 'node_modules'),
+        join(workDirectory, 'node_modules'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      )
+      await writeFile(snapshotFile, JSON.stringify(snapshot))
+      await run({
+        command: 'bun',
+        args: ['x', 'astro', 'build', '--outDir', buildOutputDirectory],
+        cwd: options.websiteDirectory,
+        env: {
+          CMS_SNAPSHOT_FILE: snapshotFile,
+          CMS_PUBLICATION_REVISION: String(publicationRevision),
+          CMS_PUBLICATION_SLOT: slot,
+          CMS_BUILD_ID: buildId,
+          PUBLIC_WEBSITE_URL: options.publicWebsiteUrl,
+        },
+      })
+      return {
+        workDirectory,
+        outputDirectory: join(buildOutputDirectory, 'client'),
+        marker: publicationMarker(publicationRevision),
+        publicationRevision,
+        redirects: snapshot.redirects,
+      }
+    } catch (error) {
+      await rm(workDirectory, { recursive: true, force: true })
+      throw error
     }
   }
 }

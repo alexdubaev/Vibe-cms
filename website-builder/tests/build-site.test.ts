@@ -130,6 +130,27 @@ describe('createSnapshotDownloader', () => {
 })
 
 describe('locked Astro build failure safety', () => {
+  test('removes its temporary workspace when Astro fails before returning a result', async () => {
+    const tempDirectory = await mkdtemp(join(tmpdir(), 'vibe-builder-cleanup-failure-'))
+    temporaryRoots.push(tempDirectory)
+    const buildSite = createAstroSiteRunner({
+      descriptor: customerA,
+      publicWebsiteUrl: 'https://site.example',
+      websiteDirectory: '/app/website',
+      tempDirectory,
+      run: async () => { throw new Error('Astro failed') },
+    })
+
+    await expect(buildSite({
+      buildId: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10',
+      publicationRevision: 4,
+      slot: 'green',
+      snapshot,
+    })).rejects.toThrow('Astro failed')
+
+    expect(await readdir(tempDirectory)).toEqual([])
+  })
+
   test('reports a lock timeout without publishing over the prior live release', async () => {
     const tempDirectory = await mkdtemp(join(tmpdir(), 'vibe-builder-lock-timeout-'))
     temporaryRoots.push(tempDirectory)

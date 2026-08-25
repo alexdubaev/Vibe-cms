@@ -36,6 +36,7 @@ import {
   safeYandexSecretVersionDestroyAddresses,
   s3CredentialEnvironment,
   seedVariables,
+  releaseSitePackageId,
   stateKeyForRoot,
   stateRecoveryOutputs,
   staticUploadSteps,
@@ -50,6 +51,12 @@ import {
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 describe('Terraform configuration helpers', () => {
+  test('requires an explicit valid Site Package for immutable image builds', () => {
+    expect(releaseSitePackageId({ CMS_SITE_PACKAGE_ID: 'reference-calculator' })).toBe('reference-calculator')
+    expect(() => releaseSitePackageId({})).toThrow('CMS_SITE_PACKAGE_ID')
+    expect(() => releaseSitePackageId({ CMS_SITE_PACKAGE_ID: '../customer' })).toThrow('CMS_SITE_PACKAGE_ID')
+  })
+
   test('reads only simple top-level tfvars without evaluating interpolation', () => {
     expect(
       parseSimpleAssignments(`
@@ -1173,15 +1180,18 @@ describe('release safety', () => {
     expect(
       importReleaseInputs('digitalocean', 'static', {
         releaseRevision: commit,
+        sitePackageId: 'reference-calculator',
         sourceBranch: `infra-release/${commit}`,
       }),
     ).toEqual({
       release_revision: commit,
+      site_package_id: 'reference-calculator',
       source_branch: `infra-release/${commit}`,
     })
     expect(() =>
       importReleaseInputs('digitalocean', 'static', {
         releaseRevision: commit,
+        sitePackageId: 'reference-calculator',
         sourceBranch: `infra-release/${'f'.repeat(40)}`,
       }),
     ).toThrow('must identify the same commit')

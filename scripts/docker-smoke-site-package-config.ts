@@ -19,3 +19,23 @@ export const builderSmokeEnvironment = {
   CMS_WEBSITE_PURGE_URL: 'https://purge.invalid',
   CMS_WEBSITE_PROMOTION_TOKEN: 'builder-smoke-token',
 } as const satisfies Record<string, string>
+
+type DockerContainerState = {
+  Running: boolean
+  ExitCode: number
+}
+
+export const assertBackendStartupFailedClosed = (
+  state: DockerContainerState,
+  diagnostics: string,
+) => {
+  if (state.Running) {
+    throw new Error('Backend is still running without passing its startup database gate')
+  }
+  if (state.ExitCode === 0) {
+    throw new Error('Backend must not exit successfully when its startup database gate cannot run')
+  }
+  if (!/(?:P1001|Can't reach database server|DatabaseNotReachable)/.test(diagnostics)) {
+    throw new Error('Backend did not fail at the expected database startup gate')
+  }
+}

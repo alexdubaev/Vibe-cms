@@ -25,7 +25,7 @@ resource "digitalocean_app" "webapp" {
       name              = "webapp"
       source_dir        = "/"
       environment_slug  = "node-js"
-      build_command     = "bun install --frozen-lockfile && bun run build:webapp"
+      build_command     = "bun scripts/stage-site-package.mjs $CMS_SITE_PACKAGE_ID --prepare && bun install --frozen-lockfile && bun scripts/stage-site-package.mjs $CMS_SITE_PACKAGE_ID --validate-only && bun run build:webapp"
       output_dir        = "webapp/dist"
       index_document    = "index.html"
       catchall_document = "index.html"
@@ -34,6 +34,13 @@ resource "digitalocean_app" "webapp" {
         repo           = var.github_repo
         branch         = var.source_branch
         deploy_on_push = false
+      }
+
+      env {
+        key   = "CMS_SITE_PACKAGE_ID"
+        value = var.site_package_id
+        scope = "BUILD_TIME"
+        type  = "GENERAL"
       }
 
       env {
@@ -67,7 +74,7 @@ resource "digitalocean_app" "website" {
       name             = "website"
       source_dir       = "/"
       environment_slug = "node-js"
-      build_command    = "bun install --frozen-lockfile && bun run build:website"
+      build_command    = "bun scripts/stage-site-package.mjs $CMS_SITE_PACKAGE_ID --prepare && bun install --frozen-lockfile && bun scripts/stage-site-package.mjs $CMS_SITE_PACKAGE_ID --validate-only && bun run build:website"
       output_dir       = "website/dist"
       index_document   = "index.html"
 
@@ -75,6 +82,13 @@ resource "digitalocean_app" "website" {
         repo           = var.github_repo
         branch         = var.source_branch
         deploy_on_push = false
+      }
+
+      env {
+        key   = "CMS_SITE_PACKAGE_ID"
+        value = var.site_package_id
+        scope = "BUILD_TIME"
+        type  = "GENERAL"
       }
 
       env {

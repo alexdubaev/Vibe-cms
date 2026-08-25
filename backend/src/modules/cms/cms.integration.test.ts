@@ -58,6 +58,22 @@ maybeDescribe('CMS application against PostgreSQL', () => {
     await db.cmsPolicy.deleteMany()
     await db.cmsSiteSettings.deleteMany()
     await db.cmsPublicationController.deleteMany()
+    await db.cmsSitePackageState.upsert({
+      where: { key: 'default' },
+      create: {
+        key: 'default',
+        packageId: selectedSitePackageDescriptor.id,
+        packageVersion: selectedSitePackageDescriptor.version,
+        schemaVersion: selectedSitePackageDescriptor.schemaVersion,
+        migratedAt: new Date(),
+      },
+      update: {
+        packageId: selectedSitePackageDescriptor.id,
+        packageVersion: selectedSitePackageDescriptor.version,
+        schemaVersion: selectedSitePackageDescriptor.schemaVersion,
+        migratedAt: new Date(),
+      },
+    })
     await db.cmsPolicy.create({ data: { key: 'default', editorCanPublish: false } })
     pageId = (await db.cmsPage.create({ data: { path: '/about', title: 'О компании', draftPayload: pagePayload } })).id
   })

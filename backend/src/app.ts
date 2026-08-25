@@ -27,6 +27,7 @@ import {
   createCmsRepository,
   createCmsRoutes,
   toPublicMediaDescriptor,
+  withSelectedSitePackageLock,
 } from './modules/cms'
 import { createMediaModule } from './modules/media'
 import {
@@ -95,14 +96,17 @@ export function createApp({
         }),
       })
     : null
-  const cmsSnapshot = new CmsSnapshotService(async () => {
+  const cmsSnapshot = new CmsSnapshotService(() => withSelectedSitePackageLock(
+    prisma,
+    selectedSitePackageDescriptor,
+    async (snapshotDb) => {
     const [settings, pages, entries, menus, redirects, mediaAssets] = await Promise.all([
-      prisma.cmsSiteSettings.findUnique({ where: { key: 'default' } }),
-      prisma.cmsPage.findMany({ where: { archivedAt: null }, orderBy: { path: 'asc' } }),
-      prisma.cmsContentEntry.findMany({ where: { archivedAt: null }, orderBy: { createdAt: 'asc' } }),
-      prisma.cmsMenu.findMany({ orderBy: { location: 'asc' } }),
-      prisma.cmsRedirect.findMany({ where: { active: true }, orderBy: { sourcePath: 'asc' } }),
-      prisma.cmsMediaAsset.findMany({
+      snapshotDb.cmsSiteSettings.findUnique({ where: { key: 'default' } }),
+      snapshotDb.cmsPage.findMany({ where: { archivedAt: null }, orderBy: { path: 'asc' } }),
+      snapshotDb.cmsContentEntry.findMany({ where: { archivedAt: null }, orderBy: { createdAt: 'asc' } }),
+      snapshotDb.cmsMenu.findMany({ orderBy: { location: 'asc' } }),
+      snapshotDb.cmsRedirect.findMany({ where: { active: true }, orderBy: { sourcePath: 'asc' } }),
+      snapshotDb.cmsMediaAsset.findMany({
         where: { state: 'ready' },
         orderBy: { createdAt: 'asc' },
         select: {
@@ -142,7 +146,7 @@ export function createApp({
       redirects: redirects.map((redirect) => ({ source: redirect.sourcePath, destination: redirect.destinationPath })),
       media: mediaAssets.map(toPublicMediaDescriptor),
     }
-  }, { now: () => new Date() }, {
+  }), { now: () => new Date() }, {
     sitePackage: selectedSitePackageDescriptor,
     snapshotSchema: selectedSnapshotSchema,
   })
@@ -157,7 +161,7 @@ export function createApp({
   })
   const cmsPreview = new CmsPreviewService({
     store: createCmsPreviewStore(prisma),
-    origin: (env.WEBAPP_ORIGIN ?? env.CORS_ORIGINS[0] ?? 'https://localhost').replace(/^http:/, 'https:'),
+    origin: env.PREVIEW_ORIGIN ?? env.WEBAPP_ORIGIN ?? env.CORS_ORIGINS[0] ?? 'http://localhost',
     randomToken: () => randomBytes(32).toString('base64url'),
     hashToken: (token) => createHash('sha256').update(token).digest('hex'),
   })

@@ -1,4 +1,11 @@
 variable "project_slug" { type = string }
+variable "site_package_id" {
+  type = string
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{1,62}$", var.site_package_id))
+    error_message = "site_package_id must be a lowercase Site Package slug."
+  }
+}
 variable "project_id" { type = string }
 variable "app_region" { type = string }
 variable "api_domain" { type = string }

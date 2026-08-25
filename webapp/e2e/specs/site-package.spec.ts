@@ -13,8 +13,10 @@ import { expect, test } from '../helpers/test'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const backendOrigin = process.env.E2E_BACKEND_URL
+const configuredPreviewOrigin = process.env.E2E_PREVIEW_URL
 if (!databaseUrl) throw new Error('TEST_DATABASE_URL is required for the Site Package E2E')
 if (!backendOrigin) throw new Error('E2E_BACKEND_URL is required for the Site Package E2E')
+if (!configuredPreviewOrigin) throw new Error('E2E_PREVIEW_URL is required for the Site Package E2E')
 
 const repositoryRoot = resolve(import.meta.dirname, '../../..')
 const websiteDirectory = join(repositoryRoot, 'website')
@@ -56,8 +58,8 @@ test.beforeAll(async () => {
     recursive: true,
     filter: (source) => !['dist', 'node_modules'].includes(source.split(/[\\/]/).at(-1) ?? ''),
   })
-  const previewPort = await reservePort()
-  previewOrigin = `http://127.0.0.1:${previewPort}`
+  const previewPort = Number(new URL(configuredPreviewOrigin).port)
+  previewOrigin = configuredPreviewOrigin
   await runCommand('bun', ['x', 'astro', 'build'], isolatedWebsiteDirectory, {
     CMS_BACKEND_ORIGIN: backendOrigin,
   })
@@ -143,51 +145,33 @@ test('owner edits, previews, publishes, and uses the selected calculator package
   await expect(page.getByLabel('Максимальная площадь')).toHaveValue('500')
   await assertResponsiveSurface(page)
 
+  const previewGrantRequest = page.waitForRequest((request) =>
+    request.method() === 'POST' && request.url() === `${backendOrigin}/api/cms/preview/grants`,
+  )
   await page.getByRole('button', { name: 'Предпросмотр' }).click()
+  const previewAuthorization = await (await previewGrantRequest).headerValue('authorization')
+  expect(previewAuthorization).toBeTruthy()
   const grantUrl = await page.getByTitle('Защищённый предпросмотр страницы').getAttribute('src')
   expect(grantUrl).toBeTruthy()
   const grant = new URL(grantUrl!)
-  const token = grant.searchParams.get('token')
-  expect(token).toBeTruthy()
-  const exchange = await page.request.post(`${backendOrigin}/api/cms/preview/exchange`, {
-    data: { token },
-  })
-  expect(exchange.ok()).toBe(true)
-  const session = await exchange.json() as { sessionToken: string }
-  const previewPageId = grant.pathname.split('/').at(-1)
-  expect(previewPageId).toBe(cmsPageId)
-  const previewPayload = await page.request.get(`${backendOrigin}/api/cms/preview/pages/${previewPageId}`, {
-    headers: { 'X-CMS-Preview-Session': session.sessionToken },
-  })
-  expect(previewPayload.ok()).toBe(true)
+  expect(grant.origin).toBe(previewOrigin)
+  expect(grant.pathname.split('/').at(-1)).toBe(cmsPageId)
+  await expect(page.frameLocator('iframe[title="Защищённый предпросмотр страницы"]').getByText('Точно по вашим параметрам')).toBeVisible()
 
-  await context.addCookies([{
-    name: 'cms_preview_session',
-    value: session.sessionToken,
-    url: previewOrigin,
-    httpOnly: true,
-    sameSite: 'Lax',
-  }])
-  const previewResponse = await page.request.get(`${previewOrigin}/__preview/${previewPageId}`, {
-    headers: { Cookie: `cms_preview_session=${session.sessionToken}` },
+  const directGrantResponse = await page.request.post(`${backendOrigin}/api/cms/preview/grants`, {
+    data: { pageId: cmsPageId },
+    headers: { Authorization: previewAuthorization! },
   })
-  const previewBody = await previewResponse.body()
-  expect(previewResponse.status(), previewBody.toString()).toBe(200)
+  expect(directGrantResponse.ok()).toBe(true)
+  const directGrant = await directGrantResponse.json() as { previewUrl: string }
+  expect(new URL(directGrant.previewUrl).origin).toBe(previewOrigin)
   const previewPage = await context.newPage()
-  await previewPage.route(`${previewOrigin}/__preview/${previewPageId}`, async (route) => {
-    await route.fulfill({
-      body: previewBody,
-      headers: previewResponse.headers(),
-      status: previewResponse.status(),
-    })
-  })
-  await previewPage.goto(`${previewOrigin}/__preview/${previewPageId}`)
-  await expect(previewPage).toHaveTitle('Расчёт стоимости ремонта')
-  await expect(previewPage.getByRole('heading', { level: 1, name: 'Ремонт с понятной сметой' })).toBeVisible()
+  await previewPage.goto(directGrant.previewUrl)
   await expect(previewPage.getByText('Точно по вашим параметрам')).toBeVisible()
   await expect(previewPage.getByRole('heading', { level: 2, name: 'Точный расчёт ремонта' })).toBeVisible()
   await expect(previewPage.getByText('2 475 ₽ / м²')).toBeVisible()
-  await assertResponsiveSurface(previewPage, { reload: true })
+  await previewPage.emulateMedia({ reducedMotion: 'reduce' })
+  await assertResponsiveSurface(previewPage, { documentContract: { noIndex: true }, reload: true })
   await previewPage.close()
 
   await page.getByRole('button', { name: 'Отправить на согласование' }).click()
@@ -241,16 +225,13 @@ test('owner edits, previews, publishes, and uses the selected calculator package
       await route.abort('connectionrefused')
     })
     await publicPage.goto(`${fakeS3.origin}/calculator/`)
-    await expect(publicPage).toHaveTitle('Расчёт стоимости ремонта')
-    await expect(publicPage.getByRole('heading', { level: 1, name: 'Ремонт с понятной сметой' })).toBeVisible()
     await expect(publicPage.getByRole('heading', { level: 2, name: 'Точный расчёт ремонта' })).toBeVisible()
     const calculatorInput = publicPage.getByLabel('Площадь помещения, м²')
     await calculatorInput.fill('125')
     await expect.poll(async () => (await publicPage.getByRole('status').textContent())?.replace(/\s/g, '')).toBe('309375₽')
-    await calculatorInput.focus()
-    await expect(calculatorInput).toBeFocused()
     await publicPage.emulateMedia({ reducedMotion: 'reduce' })
-    await assertResponsiveSurface(publicPage, { reload: true })
+    await assertResponsiveSurface(publicPage, { documentContract: { noIndex: false }, reload: true })
+    await assertKeyboardCalculatorNavigation(publicPage)
     expect(cmsApiRequests).toBe(0)
     await publicPage.close()
   } finally {
@@ -258,7 +239,10 @@ test('owner edits, previews, publishes, and uses the selected calculator package
   }
 })
 
-async function assertResponsiveSurface(page: import('@playwright/test').Page, options: { reload?: boolean } = {}) {
+async function assertResponsiveSurface(
+  page: import('@playwright/test').Page,
+  options: { documentContract?: { noIndex: boolean }; reload?: boolean } = {},
+) {
   for (const width of [375, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 })
     if (options.reload) await page.reload()
@@ -298,19 +282,50 @@ async function assertResponsiveSurface(page: import('@playwright/test').Page, op
       diagnostics.overflow,
       `horizontal overflow at ${width}px: ${JSON.stringify({ elements: diagnostics.elements, layout: diagnostics.layout })}`,
     ).toBeLessThanOrEqual(1)
+    if (options.documentContract) await assertPackageDocumentContract(page, options.documentContract)
   }
 }
 
-async function reservePort() {
-  const server = createServer()
-  await new Promise<void>((resolveListen, reject) => {
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', resolveListen)
-  })
-  const address = server.address()
-  if (!address || typeof address === 'string') throw new Error('Could not reserve an E2E port')
-  await closeServer(server)
-  return address.port
+async function assertPackageDocumentContract(
+  page: import('@playwright/test').Page,
+  options: { noIndex: boolean },
+) {
+  await expect(page).toHaveTitle('Расчёт стоимости ремонта')
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+    'content',
+    'Рассчитайте предварительную стоимость ремонта по площади помещения.',
+  )
+  const headings = await page.locator('h1, h2, h3, h4, h5, h6').evaluateAll((elements) => elements.map((element) => (
+    `${element.tagName}:${element.textContent?.trim()}`
+  )))
+  expect(headings).toEqual([
+    'H1:Ремонт с понятной сметой',
+    'H2:Точный расчёт ремонта',
+  ])
+  if (options.noIndex) {
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow')
+  } else {
+    await expect(page.locator('meta[name="robots"]')).toHaveCount(0)
+  }
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe('auto')
+}
+
+async function assertKeyboardCalculatorNavigation(page: import('@playwright/test').Page) {
+  const calculator = page.locator('#estimate')
+  const skipLink = page.getByRole('link', { name: 'Перейти к содержанию' })
+  const brandLink = page.getByRole('link', { name: /: на главную$/ })
+  const calculatorLink = page.getByRole('link', { name: 'Рассчитать' })
+  await expect(calculator).toHaveCount(1)
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await page.keyboard.press('Tab')
+  await expect(skipLink).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(brandLink).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(calculatorLink).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/#estimate$/)
+  await expect(calculator).toBeInViewport()
 }
 
 async function waitForHttp(origin: string, process: ChildProcess) {

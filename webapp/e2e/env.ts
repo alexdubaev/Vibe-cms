@@ -11,6 +11,8 @@ export const preferredBackendPort =
   50000 + (Number.parseInt(repositoryHash.slice(6, 12), 16) % 5000)
 export const preferredWebPort =
   55000 + (Number.parseInt(repositoryHash.slice(0, 6), 16) % 5000)
+export const preferredPreviewPort =
+  60000 + (Number.parseInt(repositoryHash.slice(6, 12), 16) % 4000)
 export const composeProjectName =
   process.env.COMPOSE_PROJECT_NAME ?? `vibecoding-template-${repositoryHash}`
 export const defaultPostgresTestPort =

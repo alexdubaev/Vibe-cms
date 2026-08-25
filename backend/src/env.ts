@@ -55,6 +55,7 @@ const envSchema = z.object({
         .filter(Boolean),
     ),
   WEBAPP_ORIGIN: optionalUrlSchema,
+  PREVIEW_ORIGIN: optionalUrlSchema,
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(15 * 60),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
   REFRESH_REUSE_GRACE_SECONDS: z.coerce.number().int().nonnegative().max(60).default(10),
@@ -122,6 +123,7 @@ const envSchema = z.object({
   validateProductionRuntime(env, ctx)
   validateCorsOrigins(env, ctx)
   validateWebappOrigin(env, ctx)
+  validatePublicOrigin(env, ctx, 'PREVIEW_ORIGIN')
   validateSessionTtls(env, ctx)
   validateTrustedProxy(env, ctx)
   validatePrivateStorageEnv(env, ctx)
@@ -187,6 +189,25 @@ function validateTrustedProxy(env: z.infer<typeof envSchema>, ctx: z.RefinementC
       path: ['TRUSTED_PROXY_CLIENT_IP_POSITION'],
       message: 'TRUSTED_PROXY_CLIENT_IP_POSITION requires TRUSTED_PROXY_CLIENT_IP_HEADER',
     })
+  }
+}
+
+function validatePublicOrigin(
+  env: z.infer<typeof envSchema>,
+  ctx: z.RefinementCtx,
+  key: 'PREVIEW_ORIGIN',
+) {
+  const value = env[key]
+  if (!value) return
+  const url = new URL(value)
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    ctx.addIssue({ code: 'custom', path: [key], message: `${key} must use http or https` })
+  }
+  if (url.origin !== value) {
+    ctx.addIssue({ code: 'custom', path: [key], message: `${key} must contain an origin only, not a path` })
+  }
+  if ((env.COOKIE_SECURE || env.NODE_ENV === 'production') && url.protocol !== 'https:') {
+    ctx.addIssue({ code: 'custom', path: [key], message: `${key} must use HTTPS in production` })
   }
 }
 

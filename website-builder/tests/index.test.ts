@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test'
+import { access, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { createBuilderWorker } from '../src'
 import type { BuilderPublicationSnapshot } from '../src/build-site'
@@ -17,6 +20,32 @@ const snapshot = {
 } as unknown as BuilderPublicationSnapshot
 
 describe('builder worker', () => {
+  for (const scenario of ['success', 'upload failure', 'promotion failure'] as const) {
+    test(`removes the owned build workspace after ${scenario}`, async () => {
+      const parent = await mkdtemp(join(tmpdir(), 'vibe-builder-worker-cleanup-'))
+      const workDirectory = join(parent, 'work')
+      await mkdir(workDirectory)
+      const worker = createBuilderWorker({
+        backend: {
+          getBuildInput: async () => ({ buildId, publicationRevision: 4, slot: 'green', snapshotArtifact: { url: 'https://storage.test/snapshot', expiresAt: '2026-08-24T10:05:00.000Z', etag: 'etag-4' }, media: [] }),
+          heartbeat: async () => undefined,
+          result: async () => undefined,
+        },
+        downloadSnapshot: async () => snapshot,
+        buildSite: async () => ({ workDirectory, outputDirectory: join(workDirectory, 'dist'), marker: 'vibe-publication:4', publicationRevision: 4 }),
+        publishRelease: async () => {
+          if (scenario !== 'success') throw new Error(scenario)
+          return { markerVerified: true }
+        },
+      })
+
+      if (scenario === 'success') await worker.processBuild(buildId)
+      else await expect(worker.processBuild(buildId)).rejects.toThrow(scenario)
+      await expect(access(workDirectory)).rejects.toThrow()
+      await rm(parent, { recursive: true, force: true })
+    })
+  }
+
   test('processes a build sequentially and sends a verified terminal result', async () => {
     const calls: string[] = []
     const worker = createBuilderWorker({
@@ -26,7 +55,7 @@ describe('builder worker', () => {
         result: async (_id, result) => { calls.push(result.status) },
       },
       downloadSnapshot: async () => snapshot,
-      buildSite: async () => { calls.push('build'); return { outputDirectory: '/tmp/site', marker: 'vibe-publication:4', publicationRevision: 4 } },
+      buildSite: async () => { calls.push('build'); return { workDirectory: '/tmp/vibe-missing-work', outputDirectory: '/tmp/site', marker: 'vibe-publication:4', publicationRevision: 4 } },
     })
 
     await worker.processTrigger({ messages: [{ body: JSON.stringify({ buildId }) }] })
@@ -58,7 +87,7 @@ describe('builder worker', () => {
         result: async (_id, result) => { results.push(result) },
       },
       downloadSnapshot: async () => snapshot,
-      buildSite: async () => ({ outputDirectory: '/tmp/site', marker: 'vibe-publication:4', publicationRevision: 4 }),
+      buildSite: async () => ({ workDirectory: '/tmp/vibe-missing-work', outputDirectory: '/tmp/site', marker: 'vibe-publication:4', publicationRevision: 4 }),
       publishRelease: async () => ({ markerVerified: false }),
     })
 

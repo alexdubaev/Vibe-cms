@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { createPrisma, type DbClient } from '../../../db'
 import { selectedSitePackageDescriptor } from '@vibe-cms/selected-site-package/contract'
 import { CmsConflictError, CmsImmutableRevisionError, CmsPublicationConflictError } from '../domain/errors'
-import { createCmsRepository } from './cms-repository'
+import { assertSelectedSitePackageState, createCmsRepository, withSelectedSitePackageLock } from './cms-repository'
 import { createCmsSitePackageMigrationRepository } from './site-package-repository'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -86,6 +86,23 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
       draftRevision: 1,
     })
     expect(await db.cmsSiteSettings.count()).toBe(1)
+  })
+
+  test('fails closed when startup or publication sees a different persisted package', async () => {
+    await db.cmsSitePackageState.create({
+      data: {
+        key: 'default',
+        packageId: 'another-package',
+        packageVersion: '1.0.0',
+        schemaVersion: 1,
+        migratedAt: new Date(),
+      },
+    })
+
+    await expect(assertSelectedSitePackageState(db, selectedSitePackageDescriptor))
+      .rejects.toThrow('does not match runtime')
+    await expect(withSelectedSitePackageLock(db, selectedSitePackageDescriptor, async () => 'snapshot'))
+      .rejects.toThrow('does not match runtime')
   })
 
   test('normalises paths before applying the unique page-path constraint', async () => {
@@ -189,6 +206,15 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
   })
 
   test('keeps publication revisions monotonic', async () => {
+    await db.cmsSitePackageState.create({
+      data: {
+        key: 'default',
+        packageId: selectedSitePackageDescriptor.id,
+        packageVersion: selectedSitePackageDescriptor.version,
+        schemaVersion: selectedSitePackageDescriptor.schemaVersion,
+        migratedAt: new Date(),
+      },
+    })
     const first = await repository.createPublication({ revision: 1, snapshot: { pages: [] } })
 
     await expectRejected(repository.createPublication({ revision: 1, snapshot: { pages: [] } }),
@@ -265,6 +291,7 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
     }))
     const staleRepository = createCmsRepository(staleDb, {
       id: 'vibe-core',
+      version: '1.0.0',
       schemaVersion: 1,
     })
     const migrationHasLock = Promise.withResolvers<void>()

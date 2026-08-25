@@ -3,7 +3,7 @@ import { selectedSitePackageDescriptor } from '@vibe-cms/selected-site-package/c
 
 import { createCmsRepository } from './infrastructure/cms-repository'
 
-export { createCmsRepository }
+export { createCmsRepository, assertSelectedSitePackageState, withSelectedSitePackageLock } from './infrastructure/cms-repository'
 export { createCmsSitePackageMigrationRepository } from './infrastructure/site-package-repository'
 export { createCmsPreviewStore } from './infrastructure/cms-repository'
 export {

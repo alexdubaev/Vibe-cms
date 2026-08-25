@@ -15,10 +15,10 @@
 
 - Последний полностью завершённый до этого handoff пунк плана: Task 12, commit
   `696c6ab fix(cms): complete exact export URL filtering`.
-- Task 13 — финальная приёмка/документация. Её commit имеет точное сообщение
-  `docs(cms): hand off site package delivery workflow`; точный hash смотрите через `git log -1 --oneline`.
-- Следующего unchecked implementation task в этом плане нет. Дальше — только customer onboarding,
-  production acceptance или новый явно согласованный scope.
+- Task 13 — финальная приёмка/документация. Базовый handoff — commit `1a0096a`; последующий review-fix
+  закрывает замечания Task 13 и whole-branch review отдельным commit, видимым через `git log -1 --oneline`.
+- В утверждённом плане не осталось unchecked implementation task только после применения review-fix commit.
+  Linux/stable-Docker acceptance ниже остаётся обязательным release evidence, но не скрытым implementation scope.
 
 ## Выбранный acceptance package
 
@@ -32,7 +32,7 @@ bun install --frozen-lockfile
 Его E2E доказывает: owner sign-in; CMS add/edit/save/reload calculator; package layout в protected preview;
 approval/publication; immutable snapshot; real Astro static build; fake-S3 upload/marker/promotion; public HTML при
 заблокированном `/api/cms`; browser formula `max(minimumPrice, area * unitPrice)`; QA 375/768/1024/1440,
-headings/metadata/focus/reduced motion/overflow. В reference fixture нет media; dimensions проверяются в первом
+literal heading order/exact metadata/keyboard navigation/reduced-motion computed style/overflow. В reference fixture нет media; dimensions проверяются в первом
 customer package с media.
 
 ## Ключевые границы
@@ -51,7 +51,7 @@ customer package с media.
 
 ```text
 bun run --cwd webapp e2e -- site-package.spec.ts
-PASS: 1 passed (21.3s)
+PASS: 1 passed (24.7s)
 ```
 
 Полный Task 13 gate перечислен в `docs/CMS_SITE_WORKFLOW.md`; финальные результаты — в
@@ -62,24 +62,24 @@ PASS: 1 passed (21.3s)
 | `bun run site-package:stage -- reference-calculator` | LIMIT: Windows `EPERM` rename из-за foreign PID 63376; process не завершался. |
 | `bun install --frozen-lockfile` | PASS: 1103 installs checked, no changes. |
 | `bun run test:contracts` | PASS: 31. |
-| `bun run test:backend:unit` | PASS: 352. |
-| `bun run test:webapp` | PASS: 75. |
-| `bun run test:website` | PASS: 17. |
-| `bun run test:website-builder` | PASS: 59; 2 `flock` tests skipped by their existing non-Linux guard. |
+| `bun run test:backend:unit` | PASS. |
+| `bun run test:webapp` | PASS. |
+| `bun run test:website` | PASS: 18. |
+| `bun run test:website-builder` | PASS: 63; 2 `flock` tests skipped by their existing non-Linux guard. |
 | `bun run typecheck` | PASS: 0 errors; existing `verticalAlign` deprecation hint only. |
 | `bun run lint` | PASS. |
 | `bun run build:webapp` | PASS. |
 | `bun run build:website` | PASS; existing large-chunk warning only. |
-| `bun run architecture:check` | PASS: 455 source files. |
-| `bun run --cwd webapp e2e` | PASS: 20 tests in 1.1m, включая package acceptance. |
+| `bun run architecture:check` | PASS: 456 source files. |
+| `bun run --cwd webapp e2e` | REVIEW RUN: 19 passed including package acceptance; one unrelated CMS test received a blank Vite page before login and timed out. Exact failed test rerun PASS: 1 in 14.2s. |
 | `git diff --check` | PASS. |
 | `bun run test:backend:integration` | LIMIT: advisory-lock PostgreSQL cases passed, then Windows Docker produced transaction-start timeouts and stalled cleanup; owned runner interrupted after repeated no-output waits. Repeat on Linux/stable Docker. |
-| `bun scripts/docker-smoke-site-package.mjs reference-calculator` | NOT RUN: final image/isolation smoke is Linux/stable-Docker acceptance, not claimed on this Windows host. |
+| `bun scripts/docker-smoke-site-package.mjs reference-calculator` | PASS: all four images built from `git archive HEAD`; package descriptor, source isolation and compiled static output passed; builder served; backend proved fail-closed before serve when its startup database gate could not connect. |
 
 На Windows официальный staging может падать `EPERM` на rename `packages/selected-site-package`, если его
 держит запущенный Astro/Vite process. В текущей workspace это foreign PID 63376: **не завершать его**.
-Для чистой приёмки staging повторяется после того, как владелец процесса его остановит. PostgreSQL
-integration и Docker isolation smoke окончательно повторяются на Linux/стабильном Docker.
+Для чистой приёмки staging повторяется после того, как владелец процесса его остановит. Полный PostgreSQL
+integration suite и два guarded `flock` теста окончательно повторяются на Linux/стабильном Docker.
 
 ## Workspace hygiene
 

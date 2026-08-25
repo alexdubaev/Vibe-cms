@@ -343,6 +343,16 @@ describe('CMS contracts', () => {
         previewUrl: 'https://preview.example.com/__preview/abc',
       }).previewUrl,
     ).toContain('/__preview/')
+    expect(() => previewGrantResponseSchema.parse({
+      token: 'a'.repeat(43),
+      expiresAt: '2026-08-24T00:10:00.000Z',
+      previewUrl: 'http://127.0.0.1:4321/__preview/abc',
+    })).not.toThrow()
+    expect(() => previewGrantResponseSchema.parse({
+      token: 'a'.repeat(43),
+      expiresAt: '2026-08-24T00:10:00.000Z',
+      previewUrl: 'http://preview.example.com/__preview/abc',
+    })).toThrow('Preview URL')
   })
 
   test('separates collection creation input from optimistic draft updates', () => {

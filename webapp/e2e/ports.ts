@@ -2,6 +2,7 @@ import { createServer } from 'node:net'
 import {
   preferredBackendPort,
   preferredPostgresTestPort,
+  preferredPreviewPort,
   preferredWebPort,
 } from './env'
 import { portFromUrl } from './url'
@@ -11,6 +12,8 @@ export type PortPlan = {
   backendUrl: string
   databaseUrl: string
   postgresTestPort: number
+  previewPort: number
+  previewUrl: string
   webPort: number
   webUrl: string
 }
@@ -28,6 +31,10 @@ export async function resolveE2ePorts(): Promise<PortPlan> {
   const explicitWebUrlPort = parsePortValue(
     portFromUrl(process.env.E2E_WEB_URL),
     process.env.E2E_WEB_URL ?? 'E2E_WEB_URL',
+  )
+  const explicitPreviewUrlPort = parsePortValue(
+    portFromUrl(process.env.E2E_PREVIEW_URL),
+    process.env.E2E_PREVIEW_URL ?? 'E2E_PREVIEW_URL',
   )
   const postgresTestPort = explicitPostgresPort
     ? reservePort(explicitPostgresPort, reservedPorts)
@@ -50,8 +57,16 @@ export async function resolveE2ePorts(): Promise<PortPlan> {
         preferredPort: preferredWebPort,
         reservedPorts,
       })
+  const previewPort = explicitPreviewUrlPort
+    ? reservePort(explicitPreviewUrlPort, reservedPorts)
+    : await resolvePort({
+        envName: 'E2E_PREVIEW_PORT',
+        preferredPort: preferredPreviewPort,
+        reservedPorts,
+      })
   const backendUrl = process.env.E2E_BACKEND_URL ?? `http://127.0.0.1:${backendPort}`
   const webUrl = process.env.E2E_WEB_URL ?? `http://127.0.0.1:${webPort}`
+  const previewUrl = process.env.E2E_PREVIEW_URL ?? `http://127.0.0.1:${previewPort}`
   const databaseUrl =
     explicitDatabaseUrl
     ?? `postgresql://superuser:superpassword@localhost:${postgresTestPort}/web_app_demo_test?schema=public`
@@ -61,6 +76,8 @@ export async function resolveE2ePorts(): Promise<PortPlan> {
     backendUrl,
     databaseUrl,
     postgresTestPort,
+    previewPort,
+    previewUrl,
     webPort,
     webUrl,
   }
@@ -72,6 +89,8 @@ export function applyE2ePortEnv(plan: PortPlan) {
   process.env.E2E_WEB_PORT ??= String(plan.webPort)
   process.env.E2E_BACKEND_URL ??= plan.backendUrl
   process.env.E2E_WEB_URL ??= plan.webUrl
+  process.env.E2E_PREVIEW_PORT ??= String(plan.previewPort)
+  process.env.E2E_PREVIEW_URL ??= plan.previewUrl
   process.env.TEST_DATABASE_URL = plan.databaseUrl
   process.env.DATABASE_URL = plan.databaseUrl
 }

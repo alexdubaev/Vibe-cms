@@ -19,9 +19,10 @@ const session = {
 }
 
 describe('protected preview helpers', () => {
-  test('parses only the exact HTTPS one-time grant URL', () => {
+  test('parses exact HTTPS grants and permits HTTP only for local E2E runtimes', () => {
     assert.deepEqual(parsePreviewGrantUrl(grantUrl), { pageId, token })
     assert.throws(() => parsePreviewGrantUrl(grantUrl.replace('https:', 'http:')), PreviewExchangeError)
+    assert.deepEqual(parsePreviewGrantUrl(`http://127.0.0.1:4321/__preview/${pageId}?token=${token}`), { pageId, token })
     assert.throws(() => parsePreviewGrantUrl(`${grantUrl}&extra=ignored`), PreviewExchangeError)
     assert.throws(
       () => parsePreviewGrantUrl(`https://preview.example.test/__preview/${pageId}/other?token=${token}`),

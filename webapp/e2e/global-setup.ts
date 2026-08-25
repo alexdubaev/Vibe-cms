@@ -67,7 +67,11 @@ export default async function globalSetup() {
     await waitForComposePostgres('postgres_test', 'web_app_demo_test', env)
   }
 
-  run('bun', ['run', '--cwd', 'backend', 'prisma:deploy'], env)
+  run('bun', ['run', '--cwd', 'backend', 'db:deploy'], {
+    ...env,
+    ADMIN_SEED_EMAIL: e2eAdminEmail,
+    ADMIN_SEED_PASSWORD: e2eAdminPassword,
+  })
   run('bun', ['run', '--cwd', 'backend', 'prisma:seed'], {
     ...env,
     DEV_SEED_ADMIN_EMAIL: e2eAdminEmail,

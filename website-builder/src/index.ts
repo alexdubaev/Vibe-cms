@@ -1,4 +1,5 @@
 import { parseBuildCommands } from './trigger-message'
+import { rm } from 'node:fs/promises'
 import type { BuilderBackendClient, BuildInput } from './backend-client'
 import { createSnapshotDownloader, type SiteBuildRunner } from './build-site'
 
@@ -57,6 +58,7 @@ export function createBuilderWorker(options: {
 
     async processBuild(buildId) {
       let build: BuildInput | undefined
+      let workDirectory: string | undefined
       try {
         build = await options.backend.getBuildInput(buildId)
         await options.backend.heartbeat(buildId)
@@ -67,6 +69,7 @@ export function createBuilderWorker(options: {
           slot: build.slot,
           snapshot,
         })
+        workDirectory = output.workDirectory
         if (output.publicationRevision !== build.publicationRevision || output.marker !== `vibe-publication:${build.publicationRevision}`) {
           throw new Error('Builder output marker does not match the requested publication revision')
         }
@@ -79,6 +82,8 @@ export function createBuilderWorker(options: {
         const diagnostics = error instanceof Error ? error.message.slice(0, 500) : 'Website build failed'
         if (build) await options.backend.result(buildId, { status: 'failed', markerVerified: false, diagnostics })
         throw error
+      } finally {
+        if (workDirectory) await rm(workDirectory, { recursive: true, force: true })
       }
     },
   }

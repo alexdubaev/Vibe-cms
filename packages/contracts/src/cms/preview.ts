@@ -8,7 +8,11 @@ export const previewGrantResponseSchema = z
     expiresAt: z.string().datetime(),
     previewUrl: z
       .url()
-      .refine((value) => new URL(value).protocol === 'https:', 'Preview URL must use HTTPS')
+      .refine((value) => {
+        const url = new URL(value)
+        return url.protocol === 'https:'
+          || (url.protocol === 'http:' && ['127.0.0.1', '::1', 'localhost'].includes(url.hostname))
+      }, 'Preview URL must use HTTPS except on loopback')
       .refine((value) => new URL(value).pathname.startsWith('/__preview/'), 'Invalid preview path'),
   })
   .strict()
