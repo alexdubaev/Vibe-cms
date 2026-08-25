@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { z } from 'zod'
 
 import {
   CMS_CAPABILITIES,
@@ -17,9 +18,52 @@ import {
   publicationSnapshotSchema,
   publicationBuildInputSchema,
   structuredTextDocumentSchema,
+  coreBlockContractDefinitions,
+  createContentBlockSchema,
+  sitePackageDescriptorSchema,
+  type CmsBlockContractDefinition,
 } from './cms'
 
 describe('CMS contracts', () => {
+  test('validates strict site package descriptors', () => {
+    expect(sitePackageDescriptorSchema.parse({ id: 'vibe-core', version: '1.0.0', schemaVersion: 1 })).toEqual({
+      id: 'vibe-core',
+      version: '1.0.0',
+      schemaVersion: 1,
+    })
+    expect(sitePackageDescriptorSchema.safeParse({
+      id: 'vibe-core',
+      version: '1.0.0',
+      schemaVersion: 1,
+      unexpected: true,
+    }).success).toBe(false)
+  })
+
+  test('creates package-aware content schemas and rejects invalid definitions', () => {
+    const calculator = {
+      type: 'estimateCalculator',
+      label: 'Калькулятор стоимости',
+      description: 'Расчёт по площади и цене',
+      dataSchema: z.object({ title: z.string().min(1), unitPrice: z.number().positive() }).strict(),
+      defaultData: { title: 'Рассчитайте стоимость', unitPrice: 1500 },
+      editor: {
+        kind: 'descriptor',
+        fields: [
+          { key: 'title', kind: 'text', label: 'Заголовок', required: true },
+          { key: 'unitPrice', kind: 'number', label: 'Цена за м²', required: true, min: 1, max: 1_000_000 },
+        ],
+      },
+    } satisfies CmsBlockContractDefinition
+
+    const schema = createContentBlockSchema([...coreBlockContractDefinitions, calculator])
+    expect(schema.parse({ id: 'calculator-1', type: 'estimateCalculator', data: calculator.defaultData }).type)
+      .toBe('estimateCalculator')
+    expect(() => createContentBlockSchema([calculator, calculator])).toThrow('Duplicate CMS block type')
+    expect(() => createContentBlockSchema([{ ...calculator, defaultData: { unitPrice: -1 } }])).toThrow(
+      'Default data is invalid',
+    )
+  })
+
   test('keeps preview responses safe for a private server-to-server boundary', () => {
     const page = previewPageResponseSchema.parse({
       id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10',

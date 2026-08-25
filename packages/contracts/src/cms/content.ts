@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { createContentBlockSchema, type CmsBlockContractDefinition } from './site-package'
+
 const controlCharacterPattern = /[\u0000-\u001f\u007f]/
 
 const safeText = (max: number) =>
@@ -243,19 +245,28 @@ const blockDataByType = {
   formPlaceholder: formPlaceholderDataSchema,
 } as const
 
-export const contentBlockSchema = z.discriminatedUnion('type', [
-  z.object({ id: z.string().trim().min(1).max(64), type: z.literal('hero'), data: heroDataSchema }).strict(),
-  z.object({ id: z.string().trim().min(1).max(64), type: z.literal('textImage'), data: textImageDataSchema }).strict(),
-  z.object({ id: z.string().trim().min(1).max(64), type: z.literal('benefits'), data: benefitsDataSchema }).strict(),
-  z.object({ id: z.string().trim().min(1).max(64), type: z.literal('serviceSelection'), data: selectionData(12) }).strict(),
-  z.object({ id: z.string().trim().min(1).max(64), type: z.literal('caseSelection'), data: selectionData(12) }).strict(),
-  z.object({ id: z.string().trim().min(1).max(64), type: z.literal('testimonialSelection'), data: selectionData(12) }).strict(),
-  z.object({ id: z.string().trim().min(1).max(64), type: z.literal('faqSelection'), data: selectionData(20) }).strict(),
-  z.object({ id: z.string().trim().min(1).max(64), type: z.literal('gallery'), data: galleryDataSchema }).strict(),
-  z.object({ id: z.string().trim().min(1).max(64), type: z.literal('cta'), data: ctaDataSchema }).strict(),
-  z.object({ id: z.string().trim().min(1).max(64), type: z.literal('contacts'), data: contactsDataSchema }).strict(),
-  z.object({ id: z.string().trim().min(1).max(64), type: z.literal('formPlaceholder'), data: formPlaceholderDataSchema }).strict(),
-])
+const defaultAction = { label: 'Подробнее', href: '/about' }
+const defaultDocument = {
+  type: 'document',
+  blocks: [{ type: 'paragraph', children: [{ type: 'text', text: 'Описание', marks: [] }] }],
+} as const
+const defaultEntryId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10'
+
+export const coreBlockContractDefinitions = [
+  { type: 'hero', label: 'Первый экран', description: 'Главный блок страницы', dataSchema: heroDataSchema, defaultData: { title: 'Заголовок', text: 'Описание', primaryAction: defaultAction }, editor: { kind: 'descriptor', fields: [] } },
+  { type: 'textImage', label: 'Текст и изображение', description: 'Текстовый блок с изображением', dataSchema: textImageDataSchema, defaultData: { content: defaultDocument }, editor: { kind: 'descriptor', fields: [] } },
+  { type: 'benefits', label: 'Преимущества', description: 'Список преимуществ', dataSchema: benefitsDataSchema, defaultData: { items: [{ title: 'Преимущество', text: 'Описание', icon: 'check' }, { title: 'Преимущество', text: 'Описание', icon: 'check' }] }, editor: { kind: 'descriptor', fields: [] } },
+  { type: 'serviceSelection', label: 'Услуги', description: 'Подборка услуг', dataSchema: blockDataByType.serviceSelection, defaultData: { title: 'Услуги', entryIds: [defaultEntryId] }, editor: { kind: 'descriptor', fields: [] } },
+  { type: 'caseSelection', label: 'Кейсы', description: 'Подборка кейсов', dataSchema: blockDataByType.caseSelection, defaultData: { title: 'Кейсы', entryIds: [defaultEntryId] }, editor: { kind: 'descriptor', fields: [] } },
+  { type: 'testimonialSelection', label: 'Отзывы', description: 'Подборка отзывов', dataSchema: blockDataByType.testimonialSelection, defaultData: { title: 'Отзывы', entryIds: [defaultEntryId] }, editor: { kind: 'descriptor', fields: [] } },
+  { type: 'faqSelection', label: 'Вопросы и ответы', description: 'Подборка вопросов', dataSchema: blockDataByType.faqSelection, defaultData: { title: 'Вопросы и ответы', entryIds: [defaultEntryId] }, editor: { kind: 'descriptor', fields: [] } },
+  { type: 'gallery', label: 'Галерея', description: 'Галерея изображений', dataSchema: galleryDataSchema, defaultData: { mediaIds: [defaultEntryId] }, editor: { kind: 'descriptor', fields: [] } },
+  { type: 'cta', label: 'Призыв к действию', description: 'Блок с действием', dataSchema: ctaDataSchema, defaultData: { title: 'Свяжитесь с нами', primaryAction: defaultAction }, editor: { kind: 'descriptor', fields: [] } },
+  { type: 'contacts', label: 'Контакты', description: 'Контактная информация', dataSchema: contactsDataSchema, defaultData: { title: 'Контакты', showAddress: true, showHours: true, showContacts: true, showSocials: true, showMap: true }, editor: { kind: 'descriptor', fields: [] } },
+  { type: 'formPlaceholder', label: 'Форма', description: 'Форма обратной связи', dataSchema: formPlaceholderDataSchema, defaultData: { title: 'Оставьте заявку', text: 'Мы свяжемся с вами', contactMethod: 'phone' }, editor: { kind: 'descriptor', fields: [] } },
+] satisfies readonly CmsBlockContractDefinition[]
+
+export const contentBlockSchema = createContentBlockSchema(coreBlockContractDefinitions)
 
 export const seoSchema = z
   .object({
@@ -276,16 +287,18 @@ export const seoSchema = z
     }
   })
 
-export const pageDraftSchema = z
+export const createPageDraftSchema = (blockSchema: z.ZodType) => z
   .object({
     title: safeText(120),
     path: contentPathSchema,
     navigationLabel: optionalText(60),
     seo: seoSchema.optional(),
-    blocks: z.array(contentBlockSchema).min(1).max(60),
+    blocks: z.array(blockSchema).min(1).max(60),
     expectedRevision: z.number().int().nonnegative(),
   })
   .strict()
+
+export const pageDraftSchema = createPageDraftSchema(contentBlockSchema)
 
 export const collectionTypeSchema = z.enum(['service', 'review', 'teamMember', 'faq', 'case'])
 

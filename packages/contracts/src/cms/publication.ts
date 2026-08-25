@@ -11,14 +11,14 @@ const publicSettingsSchema = z
   })
   .strict()
 
-const publicPageSchema = z
+const createPublicPageSchema = (blockSchema: z.ZodType) => z
   .object({
     id: z.uuid(),
     title: z.string().trim().min(1).max(120),
     path: contentPathSchema,
     navigationLabel: z.string().trim().min(1).max(60).optional(),
     seo: seoSchema.optional(),
-    blocks: z.array(contentBlockSchema).min(1).max(60),
+    blocks: z.array(blockSchema).min(1).max(60),
   })
   .strict()
 
@@ -48,18 +48,20 @@ const publicRedirectSchema = z
   .object({ source: contentPathSchema, destination: contentPathSchema })
   .strict()
 
-export const publicationSnapshotSchema = z
+export const createPublicationSnapshotSchema = (blockSchema: z.ZodType) => z
   .object({
     revision: z.number().int().positive(),
     generatedAt: z.string().datetime(),
     settings: publicSettingsSchema,
-    pages: z.array(publicPageSchema),
+    pages: z.array(createPublicPageSchema(blockSchema)),
     collections: z.array(publicCollectionSchema),
     menus: z.array(publicMenuSchema),
     redirects: z.array(publicRedirectSchema),
     media: z.array(publicMediaDescriptorSchema),
   })
   .strict()
+
+export const publicationSnapshotSchema = createPublicationSnapshotSchema(contentBlockSchema)
 
 const signedMediaUrlSchema = z
   .url()
