@@ -6,6 +6,21 @@ const packageIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const dockerResourceNamePattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/
 const digestPattern = /^sha256:[a-f0-9]{64}$/
 const placeholderPattern = /(change[-_ ]?me|default|example|placeholder|replace[-_ ]?with|your[-_ ]|password|secret123)/i
+const publicExampleCredentials = new Set([
+  '9kR4mP7xT2vN8qL6sD3f',
+  '6zH2cB9wQ5nM8rT4yK7p',
+  '98d7c261adf503b84e96721cf0a536d898d7c261adf503b84e96721cf0a536d8',
+  'e472911f0a58bc63d4e472911f0a58bc63d4e472911f0a58bc63d4e472911f0',
+  'a950e6732c84df71b6a950e6732c84df71b6a950e6732c84df71b6a950e673',
+  'd5319f8a2ce7406bd5319f8a2ce7406bd5319f8a',
+  'queue-client-auto-key',
+  'queue-client-auto-consumer-key',
+  '0c84e2a751b93d6f0c84e2a751b93d6f0c84e2a7',
+  'media-client-auto-key',
+  'f03ab84d97e2615cf03ab84d97e2615cf03ab84d',
+  'publish-client-auto-key',
+  '15c8e470a29df63115c8e470a29df63115c8e470',
+])
 
 const imageKinds = ['BACKEND', 'WEBAPP', 'PREVIEW', 'BUILDER']
 const publicOriginNames = [
@@ -35,28 +50,27 @@ export function validateStudioInstallationConfig(source) {
     ['DATABASE_URL', databaseUrl],
     ['DATABASE_ADMIN_URL', databaseAdminUrl],
   ]) {
-    const databaseName = decodeURIComponent(url.pathname.slice(1))
+    const databaseName = decodeUrlPart(url.pathname.slice(1), `${name} database name`)
     if (databaseName !== expectedDatabaseName) {
       throw new Error(`${name} database name must be ${expectedDatabaseName}`)
     }
-    assertUsableSecret(decodeURIComponent(url.password), `${name} password`, 20)
+    assertUsableSecret(decodeUrlPart(url.password, `${name} password`), `${name} password`, 20)
   }
   if (databaseUrl.host !== databaseAdminUrl.host || databaseUrl.pathname !== databaseAdminUrl.pathname) {
     throw new Error('DATABASE_URL and DATABASE_ADMIN_URL must target the same PostgreSQL database')
   }
-  const databaseRole = decodeURIComponent(databaseUrl.username)
-  const databaseAdminRole = decodeURIComponent(databaseAdminUrl.username)
+  const databaseRole = decodeUrlPart(databaseUrl.username, 'DATABASE_URL role')
+  const databaseAdminRole = decodeUrlPart(databaseAdminUrl.username, 'DATABASE_ADMIN_URL role')
   if (databaseRole === databaseAdminRole) {
     throw new Error('DATABASE_URL and DATABASE_ADMIN_URL must use different PostgreSQL roles')
   }
-  const roleScope = installationSlug.replaceAll('-', '_')
-  for (const [name, role] of [
-    ['DATABASE_URL', databaseRole],
-    ['DATABASE_ADMIN_URL', databaseAdminRole],
-  ]) {
-    if (!role.includes(roleScope)) {
-      throw new Error(`${name} must authenticate as a ${roleScope}-specific PostgreSQL role`)
-    }
+  const expectedRuntimeRole = `${expectedDatabaseName}_app`
+  const expectedOwnerRole = `${expectedDatabaseName}_owner`
+  if (databaseRole !== expectedRuntimeRole) {
+    throw new Error(`DATABASE_URL role must be exactly ${expectedRuntimeRole}`)
+  }
+  if (databaseAdminRole !== expectedOwnerRole) {
+    throw new Error(`DATABASE_ADMIN_URL role must be exactly ${expectedOwnerRole}`)
   }
 
   const sitePackageId = required(source, 'CMS_SITE_PACKAGE_ID')
@@ -68,6 +82,11 @@ export function validateStudioInstallationConfig(source) {
   assertUsableSecret(required(source, 'CMS_BUILDER_HMAC_SECRET'), 'CMS_BUILDER_HMAC_SECRET', 32)
   assertUsableSecret(required(source, 'CMS_WEBSITE_PROMOTION_TOKEN'), 'CMS_WEBSITE_PROMOTION_TOKEN', 32)
   assertUsableSecret(required(source, 'CMS_BUILDER_YMQ_SECRET_ACCESS_KEY'), 'CMS_BUILDER_YMQ_SECRET_ACCESS_KEY', 32)
+  assertUsableSecret(
+    required(source, 'CMS_BUILDER_YMQ_CONSUMER_SECRET_ACCESS_KEY'),
+    'CMS_BUILDER_YMQ_CONSUMER_SECRET_ACCESS_KEY',
+    32,
+  )
 
   const privateBucket = validateS3Scope(source, {
     prefix: 'PRIVATE_STORAGE',
@@ -89,7 +108,13 @@ export function validateStudioInstallationConfig(source) {
   httpsUrl(required(source, 'CMS_BUILDER_QUEUE_URL'), 'CMS_BUILDER_QUEUE_URL')
   httpsOrigin(required(source, 'CMS_BUILDER_YMQ_ENDPOINT'), 'CMS_BUILDER_YMQ_ENDPOINT')
   required(source, 'CMS_BUILDER_YMQ_REGION')
-  required(source, 'CMS_BUILDER_YMQ_ACCESS_KEY_ID')
+  const queueProducerAccessKey = required(source, 'CMS_BUILDER_YMQ_ACCESS_KEY_ID')
+  const queueConsumerAccessKey = required(source, 'CMS_BUILDER_YMQ_CONSUMER_ACCESS_KEY_ID')
+  assertNotPublicExampleCredential(queueProducerAccessKey, 'CMS_BUILDER_YMQ_ACCESS_KEY_ID')
+  assertNotPublicExampleCredential(queueConsumerAccessKey, 'CMS_BUILDER_YMQ_CONSUMER_ACCESS_KEY_ID')
+  if (queueProducerAccessKey === queueConsumerAccessKey) {
+    throw new Error('Queue producer and consumer must use different access keys')
+  }
 
   for (const name of ['STUDIO_POSTGRES_NETWORK', 'STUDIO_BUILD_LOCK_VOLUME']) {
     const value = required(source, name)
@@ -164,7 +189,10 @@ function validateS3Scope(source, { prefix, installationSlug }) {
   if (!bucket.includes(installationSlug)) {
     throw new Error(`${prefix}_BUCKET must include INSTALLATION_SLUG`)
   }
-  required(source, `${prefix}_ACCESS_KEY_ID`)
+  assertNotPublicExampleCredential(
+    required(source, `${prefix}_ACCESS_KEY_ID`),
+    `${prefix}_ACCESS_KEY_ID`,
+  )
   assertUsableSecret(required(source, `${prefix}_SECRET_ACCESS_KEY`), `${prefix}_SECRET_ACCESS_KEY`, 32)
   const scopeName = `${prefix}_S3_SCOPE`
   if (required(source, scopeName) !== `bucket:${bucket}/*`) {
@@ -212,15 +240,31 @@ function postgresUrl(value, name) {
   if (!url.hostname || !url.username || !url.password || url.pathname.length < 2) {
     throw new Error(`${name} must include host, role, password, and database name`)
   }
+  if (url.hash) throw new Error(`${name} must not contain a fragment`)
   return url
 }
 
 function assertUsableSecret(value, name, minimumLength, hexOnly = false) {
+  assertNotPublicExampleCredential(value, name)
   if (value.length < minimumLength || placeholderPattern.test(value) || new Set(value).size < 8) {
     throw new Error(`${name} must not use a default or example secret`)
   }
   if (hexOnly && !/^[a-f0-9]+$/i.test(value)) {
     throw new Error(`${name} must not use a default or example secret`)
+  }
+}
+
+function assertNotPublicExampleCredential(value, name) {
+  if (publicExampleCredentials.has(value)) {
+    throw new Error(`${name} must not use a public example credential`)
+  }
+}
+
+function decodeUrlPart(value, name) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    throw new Error(`${name} must use valid URL encoding`)
   }
 }
 

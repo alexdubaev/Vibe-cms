@@ -16,6 +16,9 @@ export function createYmqHttpMessageSender(options: {
   now?: () => Date
 }): YmqMessageSender {
   const endpoint = new URL(options.endpoint ?? 'https://message-queue.api.cloud.yandex.net')
+  if (endpoint.protocol !== 'https:' || endpoint.pathname !== '/' || endpoint.search || endpoint.hash) {
+    throw new Error('YMQ endpoint must be an HTTPS origin only')
+  }
   const fetchImpl = options.fetchImpl ?? fetch
   const now = options.now ?? (() => new Date())
 
@@ -23,9 +26,9 @@ export function createYmqHttpMessageSender(options: {
     async sendMessage(input) {
       const queue = new URL(input.queueUrl)
       if (queue.protocol !== 'https:') throw new Error('YMQ queue URL must use HTTPS')
-      const target = new URL(queue.pathname + queue.search, endpoint)
       const body = new URLSearchParams({
         Action: 'SendMessage',
+        Version: '2012-11-05',
         MessageBody: input.messageBody,
         QueueUrl: input.queueUrl,
       }).toString()
@@ -33,12 +36,12 @@ export function createYmqHttpMessageSender(options: {
       const date = timestamp.slice(0, 8)
       const headers = {
         'content-type': 'application/x-www-form-urlencoded',
-        host: target.host,
+        host: endpoint.host,
         'x-amz-date': timestamp,
       }
       const signature = signV4({
         method: 'POST',
-        path: target.pathname || '/',
+        path: endpoint.pathname || '/',
         body,
         headers,
         accessKeyId: options.accessKeyId,
@@ -47,7 +50,7 @@ export function createYmqHttpMessageSender(options: {
         date,
         timestamp,
       })
-      const response = await fetchImpl(target, {
+      const response = await fetchImpl(endpoint, {
         method: 'POST',
         headers: { ...headers, authorization: signature },
         body,
@@ -85,7 +88,7 @@ function signV4(input: {
     hmac(hmac(hmac(`AWS4${input.secretAccessKey}`, input.date), input.region), service),
     'aws4_request',
   )
-  const signature = hmac(signingKey, stringToSign)
+  const signature = hmac(signingKey, stringToSign).toString('hex')
   return `AWS4-HMAC-SHA256 Credential=${input.accessKeyId}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`
 }
 

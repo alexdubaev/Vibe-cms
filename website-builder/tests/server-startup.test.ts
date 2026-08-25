@@ -5,6 +5,13 @@ import { resolve } from 'node:path'
 import { builderSmokeEnvironment } from '../../scripts/docker-smoke-site-package-config'
 
 const builderRoot = resolve(import.meta.dir, '..')
+const builderQueueSmokeEnvironment = {
+  CMS_BUILDER_QUEUE_URL: 'https://message-queue.invalid/customer/client-auto',
+  CMS_BUILDER_YMQ_ENDPOINT: 'https://127.0.0.1:9',
+  CMS_BUILDER_YMQ_REGION: 'ru-central1',
+  CMS_BUILDER_YMQ_CONSUMER_ACCESS_KEY_ID: 'consumer-smoke-key',
+  CMS_BUILDER_YMQ_CONSUMER_SECRET_ACCESS_KEY: 'consumer-smoke-secret',
+}
 
 test('boots the builder composition root with the Docker smoke environment', async () => {
   const port = await findOpenPort()
@@ -119,6 +126,7 @@ test('boots in studio-production mode with an absolute shared lock file', async 
     env: {
       ...process.env,
       ...builderSmokeEnvironment,
+      ...builderQueueSmokeEnvironment,
       CMS_BUILDER_RUNTIME_MODE: 'studio-production',
       CMS_ASTRO_BUILD_LOCK_FILE: '/var/lock/vibe-cms/astro-build.lock',
       PORT: String(port),
@@ -135,6 +143,40 @@ test('boots in studio-production mode with an absolute shared lock file', async 
     await server.exited
   }
 }, 15_000)
+
+test('rejects studio-production startup without the private queue consumer credentials', async () => {
+  const server = Bun.spawn([process.execPath, 'run', 'src/server.ts'], {
+    cwd: builderRoot,
+    env: {
+      ...process.env,
+      ...builderSmokeEnvironment,
+      CMS_BUILDER_RUNTIME_MODE: 'studio-production',
+      CMS_ASTRO_BUILD_LOCK_FILE: '/var/lock/vibe-cms/astro-build.lock',
+      CMS_BUILDER_QUEUE_URL: '',
+      CMS_BUILDER_YMQ_ENDPOINT: '',
+      CMS_BUILDER_YMQ_REGION: '',
+      CMS_BUILDER_YMQ_CONSUMER_ACCESS_KEY_ID: '',
+      CMS_BUILDER_YMQ_CONSUMER_SECRET_ACCESS_KEY: '',
+    },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+
+  try {
+    const exitCode = await Promise.race([
+      server.exited,
+      Bun.sleep(1_000).then(() => null),
+    ])
+    expect(exitCode).not.toBeNull()
+    const diagnostics = await new Response(server.stderr).text()
+    expect(exitCode).not.toBe(0)
+    expect(diagnostics).toContain('CMS_BUILDER_QUEUE_URL')
+    expect(diagnostics).toContain('CMS_BUILDER_YMQ_CONSUMER_SECRET_ACCESS_KEY')
+  } finally {
+    server.kill()
+    await server.exited
+  }
+})
 
 function findOpenPort(): Promise<number> {
   return new Promise((resolvePort, reject) => {

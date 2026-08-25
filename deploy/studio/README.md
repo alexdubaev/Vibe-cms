@@ -30,15 +30,27 @@ policy in the exact form `bucket:<bucket>/*`. Validation can prove the declarati
 configured bucket, but the operator must verify the provider policy itself before rollout. Neither
 credential may grant account-wide bucket access, bucket deletion, or access to another customer.
 
+Use distinct queue identities against the same customer queue. Backend/scheduler receive the
+producer key, which may only send messages. The private builder receives the consume-only key,
+which may only receive and delete messages. In studio-production mode the builder long-polls one
+message at a time, processes the existing build envelope in-process, and deletes the receipt only
+after the build worker returns successfully. A failed build is left for visibility-timeout retry
+and the provider queue/DLQ policy remains authoritative. The builder publishes no host port and
+does not need a Caddy route.
+
 Every image reference is assembled as `<repository>@<sha256 digest>`. Build the backend, webapp,
 preview, and builder images for the selected Site Package and production origins before recording
 their digests. The static webapp's API origin is compiled at image build time; it must match
 `API_ORIGIN`. A mutable tag by itself is not accepted.
 
 The fake values in `customer.env.example` are public test data, not deployable credentials. The
-validator rejects known placeholders, low-variety secrets, reused database roles, cross-customer
-database/bucket names, duplicate or non-HTTPS origins, unpinned images, and relative build-lock
-paths. Keep real env files out of Git and out of captured Compose output.
+validator explicitly rejects every committed sample password, token, access-key ID, and secret
+key, in addition to known placeholders, low-variety secrets, wrong database names or exact role
+names, reused queue identities, cross-customer bucket scopes, duplicate or non-HTTPS origins,
+unpinned images, and relative build-lock paths. The example intentionally fails production
+validation until every credential is replaced; it remains usable only for the non-mutating
+`docker compose config --quiet` shape check. Keep real env files out of Git and out of captured
+Compose output.
 
 ## Dry-run validation
 
@@ -62,13 +74,15 @@ Before an approved rollout, the operator separately provides:
 - a customer-only database and runtime/owner roles with the ownership rules in
   [../../docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md);
 - one external named volume, shared by every customer builder, mounted at `/var/lock/vibe-cms`;
-- bucket-scoped media, publication, promotion, and queue credentials;
+- bucket-scoped media/publication credentials plus separate send-only and consume-only queue
+  credentials for the same customer queue;
 - Caddy 2.10 or newer, DNS for admin, API, and preview, plus an imported customer fragment based on
   `Caddyfile.example`.
 
 Caddy is host-level so multiple customer projects do not compete for ports 80/443. Compose binds
-admin, API, and preview only to `127.0.0.1`; the builder has no published port. Caddy automatically
-handles TLS and caps request bodies. Do not add the public website host to this Caddy fragment.
+admin, API, and preview only to `127.0.0.1`; the builder consumes its queue privately and has no
+published port. Caddy automatically handles TLS and caps request bodies. Do not add the builder or
+public website host to this Caddy fragment.
 
 The only service volume mount is the builder's shared lock directory. No service receives the
 repository, Docker socket, database owner URL, another customer's network, or another customer's

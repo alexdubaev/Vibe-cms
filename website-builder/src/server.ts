@@ -4,6 +4,7 @@ import { createBuilderBackendClient } from './backend-client'
 import { createBuildProcessRunnerFromEnvironment } from './build-lock'
 import { createAstroSiteRunner, createSnapshotDownloader, runBuildProcess } from './build-site'
 import { createBuilderHttpHandler, createBuilderWorker } from './index'
+import { createYmqQueueConsumer, ymqQueueConsumerOptionsFromEnvironment } from './queue-consumer'
 import { publishBuiltRelease } from './release-pipeline'
 import {
   createS3PublicationStorageAdapter,
@@ -57,6 +58,17 @@ const worker = createBuilderWorker({
   },
 })
 
+const queueConsumerOptions = ymqQueueConsumerOptionsFromEnvironment(
+  process.env,
+  process.env.CMS_BUILDER_RUNTIME_MODE?.trim() === 'studio-production',
+)
+const queueConsumer = queueConsumerOptions
+  ? createYmqQueueConsumer({
+      ...queueConsumerOptions,
+      processTrigger: (input) => worker.processTrigger(input),
+    })
+  : undefined
+
 const port = Number.parseInt(process.env.PORT ?? '3000', 10)
 Bun.serve({
   port,
@@ -64,6 +76,10 @@ Bun.serve({
 })
 
 console.log(`Website builder listening on ${port}`)
+if (queueConsumer) {
+  console.log('Website builder private queue consumer started')
+  void queueConsumer.run()
+}
 
 function readRequiredEnvironment(names: readonly string[]): Record<string, string> {
   const missing = names.filter((name) => !process.env[name]?.trim())

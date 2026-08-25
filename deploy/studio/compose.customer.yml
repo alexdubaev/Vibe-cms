@@ -134,6 +134,11 @@ services:
       CMS_BUILDER_HMAC_SECRET: ${CMS_BUILDER_HMAC_SECRET:?Set the customer builder HMAC secret}
       CMS_BUILDER_RUNTIME_MODE: studio-production
       CMS_ASTRO_BUILD_LOCK_FILE: ${CMS_ASTRO_BUILD_LOCK_FILE:?Set the absolute shared build-lock file}
+      CMS_BUILDER_QUEUE_URL: ${CMS_BUILDER_QUEUE_URL:?Set the customer publication queue URL}
+      CMS_BUILDER_YMQ_ENDPOINT: ${CMS_BUILDER_YMQ_ENDPOINT:?Set the publication queue endpoint}
+      CMS_BUILDER_YMQ_REGION: ${CMS_BUILDER_YMQ_REGION:?Set the publication queue region}
+      CMS_BUILDER_YMQ_CONSUMER_ACCESS_KEY_ID: ${CMS_BUILDER_YMQ_CONSUMER_ACCESS_KEY_ID:?Set the consume-only queue access key}
+      CMS_BUILDER_YMQ_CONSUMER_SECRET_ACCESS_KEY: ${CMS_BUILDER_YMQ_CONSUMER_SECRET_ACCESS_KEY:?Set the consume-only queue secret key}
       CMS_WEBSITE_PUBLIC_ORIGIN: ${CMS_WEBSITE_PUBLIC_ORIGIN:?Set the public website origin}
       CMS_WEBSITE_SELECTOR_URL: ${CMS_WEBSITE_SELECTOR_URL:?Set the promotion selector URL}
       CMS_WEBSITE_PURGE_URL: ${CMS_WEBSITE_PURGE_URL:?Set the promotion purge URL}

@@ -316,6 +316,12 @@ on an external PostgreSQL 18+ network, private working-media storage, a customer
 destination, and digest-pinned backend/scheduler/admin/preview/builder images with explicit
 resource limits.
 
+The backend uses a send-only queue identity. The private builder uses a different consume-only
+identity to long-poll the same customer queue one message at a time, invoke the existing worker
+in-process, and delete only successful receipts. Builder queue delivery therefore needs no public
+port or Caddy route; failed messages remain subject to visibility-timeout retry and the provider
+DLQ policy.
+
 Only the selected Site Package builder mounts the VDS-wide Astro lock volume. No runtime mounts the
 repository or Docker socket, and the database owner URL is excluded from every service. A
 host-level Caddy instance exposes loopback-bound admin, API, and preview services with automatic
