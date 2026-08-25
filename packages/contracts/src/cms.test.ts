@@ -27,8 +27,18 @@ import {
   type PublicationSnapshot,
   type RegisteredContentBlock,
 } from './cms'
+import { apiErrorSchema } from './errors'
 
 describe('CMS contracts', () => {
+  test('declares package validation as a CMS API error', () => {
+    expect(apiErrorSchema.parse({
+      error: {
+        code: 'CMS_VALIDATION',
+        message: 'CMS page draft does not match the selected site package',
+      },
+    })).toMatchObject({ error: { code: 'CMS_VALIDATION' } })
+  })
+
   test('validates strict site package descriptors', () => {
     expect(sitePackageDescriptorSchema.parse({ id: 'vibe-core', version: '1.0.0', schemaVersion: 1 })).toEqual({
       id: 'vibe-core',

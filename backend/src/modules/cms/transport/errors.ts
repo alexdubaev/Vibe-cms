@@ -14,7 +14,7 @@ export async function executeCms<T>(operation: () => Promise<T>) {
     return await operation()
   } catch (error) {
     if (error instanceof CmsRepositoryError) {
-      throw new AppError(statusByCode[error.code] ?? 400, error.code as never, error.message, {
+      throw new AppError(statusByCode[error.code] ?? 400, error.code, error.message, {
         ...(error instanceof Error && 'currentRevision' in error
           ? { currentRevision: (error as { currentRevision?: number }).currentRevision }
           : {}),

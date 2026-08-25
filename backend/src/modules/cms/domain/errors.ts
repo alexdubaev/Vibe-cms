@@ -1,7 +1,9 @@
+import type { ApiErrorCode } from '@web-app-demo/contracts'
+
 export class CmsRepositoryError extends Error {
   constructor(
     message: string,
-    readonly code: string,
+    readonly code: ApiErrorCode,
     options?: ErrorOptions,
   ) {
     super(message, options)
