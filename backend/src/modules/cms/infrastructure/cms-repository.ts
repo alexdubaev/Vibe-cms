@@ -7,6 +7,7 @@ import { CmsConflictError, CmsImmutableRevisionError, CmsPublicationConflictErro
 import { normalizeCmsPath } from '../domain/path-policy'
 
 const DEFAULT_KEY = 'default'
+const DEFAULT_SITE_SETTINGS_PAYLOAD = { companyName: 'Vibe CMS' }
 
 const asJson = (value: unknown) => value as Prisma.InputJsonValue
 
@@ -309,7 +310,16 @@ export function createCmsRepository(db: DbClient): CmsRepository {
     },
 
     async getSiteSettings() {
-      return db.cmsSiteSettings.findUnique({ where: { key: DEFAULT_KEY } })
+      // The CMS shell and editor both require this singleton. Initialise it lazily so migrated
+      // installations and test/dev databases do not depend on an out-of-band seed step.
+      return db.cmsSiteSettings.upsert({
+        where: { key: DEFAULT_KEY },
+        create: {
+          key: DEFAULT_KEY,
+          draftPayload: asJson(DEFAULT_SITE_SETTINGS_PAYLOAD),
+        },
+        update: {},
+      })
     },
 
     async updateSiteSettingsDraft(expectedRevision, payload) {

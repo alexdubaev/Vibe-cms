@@ -74,6 +74,17 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
     expect(await db.cmsPublicationController.count()).toBe(1)
   })
 
+  test('initialises default site settings when the singleton row is absent', async () => {
+    const settings = await repository.getSiteSettings()
+
+    expect(settings).toMatchObject({
+      key: 'default',
+      draftPayload: { companyName: 'Vibe CMS' },
+      draftRevision: 1,
+    })
+    expect(await db.cmsSiteSettings.count()).toBe(1)
+  })
+
   test('normalises paths before applying the unique page-path constraint', async () => {
     await repository.createPage({ path: 'About//', title: 'О компании', payload: { blocks: [] } })
 
