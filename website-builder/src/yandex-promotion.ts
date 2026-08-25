@@ -24,17 +24,31 @@ export async function promotePublication(
   if (!Number.isSafeInteger(pollIntervalMs) || pollIntervalMs < 0) throw new Error('Publication marker poll interval must be non-negative')
 
   if (!(await port.verifyInactiveMarker(input))) throw new Error('Inactive slot marker verification failed')
-  await port.switchActiveSlot(input.slot)
-  await port.purgePublicPaths({ paths: ['/*'], revision: input.revision })
+  let switchCompleted = false
+  try {
+    await port.switchActiveSlot(input.slot)
+    switchCompleted = true
+    await port.purgePublicPaths({ paths: ['/*'], revision: input.revision })
 
-  const sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)))
+    const sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)))
 
-  for (let attempt = 0; attempt < maxPollAttempts; attempt += 1) {
-    if (await port.verifyPublicMarker(input.revision)) return
-    if (attempt + 1 < maxPollAttempts) await sleep(pollIntervalMs)
+    for (let attempt = 0; attempt < maxPollAttempts; attempt += 1) {
+      if (await port.verifyPublicMarker(input.revision)) return
+      if (attempt + 1 < maxPollAttempts) await sleep(pollIntervalMs)
+    }
+
+    throw new Error('Public publication marker verification failed')
+  } catch (error) {
+    if (switchCompleted) {
+      const previousSlot = input.slot === 'green' ? 'blue' : 'green'
+      try {
+        await port.switchActiveSlot(previousSlot)
+      } catch (rollbackError) {
+        throw new Error('Publication promotion failed and rollback failed', { cause: rollbackError })
+      }
+    }
+    throw error
   }
-
-  throw new Error('Public publication marker verification failed')
 }
 
 export type PublicationObjectStoragePort = {

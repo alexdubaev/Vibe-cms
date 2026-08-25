@@ -48,6 +48,18 @@ describe('website publication promotion', () => {
     expect(new Headers(calls[2]?.init?.headers).get('cache-control')).toBe('no-store')
   })
 
+  test('rolls back to the previous slot when public marker verification fails', async () => {
+    const calls: string[] = []
+    await expect(promotePublication({
+      verifyInactiveMarker: async () => true,
+      switchActiveSlot: async (slot) => { calls.push(`select:${slot}`) },
+      purgePublicPaths: async () => { calls.push('purge') },
+      verifyPublicMarker: async () => false,
+    }, { slot: 'green', revision: 8 }, { maxPollAttempts: 1 })).rejects.toThrow('Public publication marker verification failed')
+
+    expect(calls).toEqual(['select:green', 'purge', 'select:blue'])
+  })
+
   test('refuses to switch when the inactive release is incomplete or has the wrong marker', async () => {
     const fetchCalls: string[] = []
     const promotion = createHttpPublicationPromotion({
@@ -84,6 +96,6 @@ describe('website publication promotion', () => {
     })
 
     await expect(promotePublication(promotion, { slot, revision }, { maxPollAttempts: 3, sleep: async () => undefined })).rejects.toThrow('Public publication marker')
-    expect(calls).toHaveLength(5)
+    expect(calls).toHaveLength(6)
   })
 })
