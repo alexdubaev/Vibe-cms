@@ -50,6 +50,9 @@ backend/.prisma-generate.lock
 # Uploads held by the local filesystem storage driver
 backend/.storage/
 
+# Generated from one private site package before install/build.
+packages/selected-site-package/
+
 # Editors and OS
 .DS_Store
 .idea/

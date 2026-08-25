@@ -42,6 +42,7 @@
     "build:website": "bun run --cwd website build",
     "build:backend": "bun run --cwd backend build",
     "architecture:check": "bun scripts/architecture-check.mjs",
+    "site-package:stage": "bun scripts/stage-site-package.mjs",
     "static:precompress": "bun scripts/precompress-static.mjs",
     "lint": "bun run --cwd webapp lint",
     "mobile:template:check": "bun scripts/check-mobile-template.mjs",
