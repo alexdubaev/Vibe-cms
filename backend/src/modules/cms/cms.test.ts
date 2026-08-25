@@ -566,7 +566,7 @@ describe('public snapshot materialisation', () => {
     )
 
     await expect(snapshot.createCandidate(3)).resolves.toMatchObject({
-      snapshot: { sitePackage: { id: 'vibe-core', version: '1.0.0', schemaVersion: 1 } },
+      snapshot: { sitePackage: selectedSitePackageDescriptor },
     })
   })
 })

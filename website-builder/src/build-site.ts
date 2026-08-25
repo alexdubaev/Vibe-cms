@@ -7,7 +7,8 @@ import {
   selectedSitePackageDescriptor,
 } from '@vibe-cms/selected-site-package/contract'
 import type { FetchLike } from './backend-client'
-import { mkdtemp } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
+import { mkdtemp, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { z } from 'zod'
@@ -117,11 +118,16 @@ export function createAstroSiteRunner(options: {
     assertSelectedSitePackage(snapshot, options.descriptor)
     const workDirectory = await mkdtemp(join(options.tempDirectory ?? tmpdir(), 'vibe-site-build-'))
     const snapshotFile = join(workDirectory, 'snapshot.json')
-    const outputDirectory = join(workDirectory, 'dist')
-    await Bun.write(snapshotFile, JSON.stringify(snapshot))
+    const buildOutputDirectory = join(workDirectory, 'dist')
+    await symlink(
+      join(options.websiteDirectory, '..', 'node_modules'),
+      join(workDirectory, 'node_modules'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    )
+    await writeFile(snapshotFile, JSON.stringify(snapshot))
     await run({
       command: 'bun',
-      args: ['x', 'astro', 'build', '--outDir', outputDirectory],
+      args: ['x', 'astro', 'build', '--outDir', buildOutputDirectory],
       cwd: options.websiteDirectory,
       env: {
         CMS_SNAPSHOT_FILE: snapshotFile,
@@ -131,20 +137,29 @@ export function createAstroSiteRunner(options: {
         PUBLIC_WEBSITE_URL: options.publicWebsiteUrl,
       },
     })
-    return { outputDirectory, marker: publicationMarker(publicationRevision), publicationRevision, redirects: snapshot.redirects }
+    return {
+      outputDirectory: join(buildOutputDirectory, 'client'),
+      marker: publicationMarker(publicationRevision),
+      publicationRevision,
+      redirects: snapshot.redirects,
+    }
   }
 }
 
 export const runBuildProcess: BuildProcessRunner = async (input) => {
-  const child = Bun.spawn([input.command, ...input.args], {
+  const child = spawn(input.command, input.args, {
     cwd: input.cwd,
     env: { ...process.env, ...input.env } as Record<string, string>,
-    stdout: 'pipe',
-    stderr: 'pipe',
+    stdio: ['ignore', 'ignore', 'pipe'],
+    windowsHide: true,
   })
-  const exitCode = await child.exited
+  const diagnostics: Buffer[] = []
+  child.stderr?.on('data', (chunk: Buffer) => diagnostics.push(chunk))
+  const exitCode = await new Promise<number>((resolveExit, reject) => {
+    child.once('error', reject)
+    child.once('exit', (code) => resolveExit(code ?? -1))
+  })
   if (exitCode !== 0) {
-    const stderr = child.stderr ? await new Response(child.stderr).text() : ''
-    throw new BuildProcessExitError(input.command, exitCode, stderr)
+    throw new BuildProcessExitError(input.command, exitCode, Buffer.concat(diagnostics).toString('utf8'))
   }
 }

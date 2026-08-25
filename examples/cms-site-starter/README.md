@@ -1,7 +1,8 @@
-# Нейтральный CMS site starter
+# Нейтральный CMS core fixture
 
-Это технический пример page payload для проверки Vibe CMS, а не готовый сайт конкретного бизнеса.
-Он показывает существующие блоки и полный жизненный цикл контента без отраслевых предположений.
+Это технический page payload для lifecycle-проверки Vibe CMS, а не starter дизайна и не готовый
+сайт бизнеса. Новый bespoke customer site создаётся через `vibe-landing` и один Site Package по
+`docs/SITE_PACKAGES.md`; acceptance reference находится в `examples/site-package-reference/`.
 
 Путь примера — `/cms-demo`, поэтому он не заменяет `/`.
 
@@ -11,7 +12,7 @@
 
 Payload находится в `page-draft.json`. Он:
 
-- проходит текущий `pageDraftSchema` после добавления `expectedRevision: 0`;
+- проходит текущий `selectedPageDraftSchema` после добавления `expectedRevision: 0`;
 - использует только существующие `hero`, `benefits`, `textImage` и `cta`;
 - не требует media assets и внешних сервисов;
 - имеет `noIndex: true`;

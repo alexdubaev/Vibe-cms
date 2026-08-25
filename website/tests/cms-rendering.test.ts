@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import {
+  selectedBlockDefinitions,
+  selectedSitePackageDescriptor,
+} from '@vibe-cms/selected-site-package/contract'
 import { selectedSitePackageWebsite } from '@vibe-cms/selected-site-package/website'
 
 import { blockTypes } from '../src/cms/block-registry'
@@ -9,7 +13,7 @@ import { pageForPath, parsePublicationSnapshot, resolvePageMetadata } from '../s
 const snapshot = {
   revision: 7,
   generatedAt: '2026-08-24T10:00:00.000Z',
-  sitePackage: { id: 'vibe-core', version: '1.0.0', schemaVersion: 1 },
+  sitePackage: selectedSitePackageDescriptor,
   settings: {
     companyName: 'Vibe',
     defaultSeo: {
@@ -73,10 +77,7 @@ test('CMS renderer resolves normalised paths from one immutable snapshot', () =>
 })
 
 test('CMS block registry is closed and public-safe', () => {
-  assert.deepEqual(blockTypes, [
-    'hero', 'textImage', 'benefits', 'serviceSelection', 'caseSelection', 'testimonialSelection',
-    'faqSelection', 'gallery', 'cta', 'contacts', 'formPlaceholder',
-  ])
+  assert.deepEqual(blockTypes, selectedBlockDefinitions.map(({ type }) => type))
 })
 
 test('publication snapshot is validated against the build-selected package', () => {

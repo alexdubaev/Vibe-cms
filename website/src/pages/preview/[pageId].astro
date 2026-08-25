@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro'
 import CmsPage from '@/cms/CmsPage.astro'
+import { selectedSitePackageWebsite } from '@vibe-cms/selected-site-package/website'
 import * as preview from '@/cms/preview'
 import {
   fetchPreviewPage,
@@ -40,8 +41,13 @@ if (setCookie) Astro.response.headers.set('Set-Cookie', setCookie)
 
 const title = page.seo?.title ?? page.title
 const description = page.seo?.description ?? page.title
+const PackagePageLayout = selectedSitePackageWebsite.PageLayout
 ---
 
 <BaseLayout canonicalUrl={undefined} description={description} noIndex title={title}>
-  <CmsPage page={page} mediaBasePath="/__preview/media" />
+  <PackagePageLayout>
+    <div data-site-package={selectedSitePackageWebsite.descriptor.id}>
+      <CmsPage page={page} mediaBasePath="/__preview/media" />
+    </div>
+  </PackagePageLayout>
 </BaseLayout>

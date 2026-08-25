@@ -1,7 +1,38 @@
 # Как создавать публичные сайты через Vibe CMS
 
 Этот документ — стартовая точка для агента, который впервые открыл репозиторий и должен создать
-лендинг или небольшой публичный сайт, управляемый через CMS.
+лендинг или небольшой публичный сайт, управляемый через CMS. Для bespoke customer site
+обязательно прочитайте `docs/SITE_PACKAGES.md`: один code-owned Site Package выбирается
+до install/build и определяет дизайн, разрешённые поля, bespoke blocks и browser modules.
+
+## Обязательный workflow для bespoke сайта
+
+1. Заполните `docs/CMS_SITE_BRIEF.md`, включая package ID, ownership, editable fields,
+   browser/runtime/external capabilities, destination, data/export/hosting и границы первой версии.
+2. Примените `vibe-landing` и сохраните без переименования блок:
+
+   ```text
+   Uses from Vibe:
+   Not using:
+   Adds:
+   Why:
+   ```
+
+3. Создайте `site-packages/<package-id>`: package владеет дизайном, layout, формулами,
+   schemas/defaults/editor descriptors/renderers/migrations/tests; CMS core владеет auth, persistence,
+   preview, approval, snapshot и delivery ports. Клиенту доступны только declared content/parameters.
+4. До install/build выполните `bun run site-package:stage -- <package-id>`. Не редактируйте и не
+   коммитьте ignored `packages/selected-site-package/`.
+5. Выполните idempotent package bootstrap, затем journey
+   `CMS edit → reload → protected preview → approval → immutable snapshot → Astro build → destination marker/promotion`.
+6. Откройте опубликованный HTML с заблокированным `/api/cms`; browser-only interaction должна
+   работать. Проверьте 375/768/1024/1440, focus/navigation, overflow, headings, metadata,
+   reduced motion и media dimensions для пакетов с media.
+
+Один customer installation имеет отдельные database/role, hosts, secrets, private media,
+publication destination, backups и resource limits. Multi-tenancy в одной database, runtime package selection,
+customer code/formulas, SFTP-only delivery, booking, payments и DRM отсутствуют, пока их отдельно не
+согласовали. Cloud apply/deploy требует отдельного явного разрешения.
 
 ## Карта системы
 
@@ -21,7 +52,8 @@
 4. этот документ;
 5. `docs/CMS_SITE_BRIEF.md`;
 6. `docs/WEB_SURFACES.md`;
-7. `packages/contracts/src/cms/content.ts` и текущий renderer `website/src/cms/components/Block.astro`.
+7. `docs/SITE_PACKAGES.md`;
+8. `packages/contracts/src/cms/content.ts` и выбранный package contract/renderer.
 
 Не предполагайте, что сайт уже опубликован или имеет публичный URL. Проверьте конфигурацию и сообщите
 пользователю локальные адреса отдельно от production-адресов.
@@ -58,12 +90,12 @@ bun run dev:website
 ## Создание новой CMS-страницы
 
 Сейчас админка умеет редактировать существующие страницы, но не создаёт новую page row. Поэтому новую
-страницу инициализирует локальный idempotent seed/helper, после чего весь дальнейший контент меняется
-через CMS.
+страницу инициализирует локальный idempotent seed/helper или package bootstrap, после чего весь
+дальнейший контент меняется через CMS.
 
 Правильный bootstrap:
 
-1. Подготовьте page payload по `pageDraftSchema` без `expectedRevision`.
+1. Подготовьте page payload по `selectedPageDraftSchema` без `expectedRevision`.
 2. Проверьте payload схемой, временно добавив `expectedRevision: 0`, затем удалите служебное поле перед записью.
 3. Используйте `createCmsRepository(db)` и сначала `findPageByPath(path)`.
 4. Если страницы нет — создайте её через `createPage({ path, title, payload })`.
@@ -103,8 +135,9 @@ Preview зависит от настроенного preview runtime. `website` 
 | `contacts` | Карточки контактных данных из настроек сайта. |
 | `formPlaceholder` | Честная заглушка будущей формы; она не отправляет данные. |
 
-Не придумывайте новый block type, пока существующие блоки решают задачу. Если контракт меняется,
-одновременно проверьте schema, backend producer, webapp editor, Astro renderer и тесты.
+Не придумывайте новый block type, пока разрешённые core blocks решают задачу. Bespoke block
+принадлежит package registry, а не switch в CMS core; его schema, defaults, editor, renderer, migration
+и tests меняются вместе.
 
 ## Контент, медиа и ссылки
 
@@ -120,7 +153,7 @@ Preview зависит от настроенного preview runtime. `website` 
 Страница готова, когда:
 
 - она существует отдельно от `/` и видна в `/admin/pages`;
-- draft проходит `pageDraftSchema`, сохраняется и переживает reload;
+- draft проходит `selectedPageDraftSchema`, сохраняется и переживает reload;
 - preview показывает последнюю сохранённую версию либо точно документирован runtime blocker;
 - опубликованный snapshot проходит contracts и Astro production build;
 - mobile и desktop не имеют горизонтального overflow, навигация и ссылки доступны с клавиатуры;
@@ -134,10 +167,13 @@ bun run test:contracts
 bun run test:backend:unit
 bun run test:webapp
 bun run test:website
+bun run test:website-builder
 bun run typecheck
 bun run lint
+bun run build:webapp
 bun run build:website
 bun run architecture:check
+bun run --cwd webapp e2e
 git diff --check
 ```
 

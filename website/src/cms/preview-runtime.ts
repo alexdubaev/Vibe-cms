@@ -1,10 +1,10 @@
 import {
-  pageDraftSchema,
   previewMediaResponseSchema,
   previewPageResponseSchema,
   type PreviewMediaResponse,
   type PreviewPageResponse,
 } from '@web-app-demo/contracts'
+import { selectedPageDraftSchema } from '@vibe-cms/selected-site-package/contract'
 
 import { PreviewExchangeError, type PreviewFetcher } from './preview'
 import type { PublicPage } from './block-registry'
@@ -66,7 +66,7 @@ export function previewPageToPublicPage(page: PreviewPageResponse): PublicPage {
   }
 
   try {
-    const draft = pageDraftSchema.parse({ ...draftPayload, expectedRevision: page.draftRevision })
+    const draft = selectedPageDraftSchema.parse({ ...draftPayload, expectedRevision: page.draftRevision })
     return {
       id: page.id,
       title: draft.title,

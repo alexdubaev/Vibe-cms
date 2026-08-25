@@ -79,15 +79,26 @@
 ### CMS-Managed Public Sites
 
 - Before creating a public site through the CMS, read `docs/CMS_SITE_WORKFLOW.md`,
-  `docs/CMS_SITE_BRIEF.md`, `docs/WEB_SURFACES.md`, and the relevant example under `examples/`.
+  `docs/CMS_SITE_BRIEF.md`, `docs/SITE_PACKAGES.md`, `docs/WEB_SURFACES.md`, and the relevant example.
+- For a new landing/public marketing site, apply `vibe-landing` first and preserve its exact
+  `Uses from Vibe` / `Not using` / `Adds` / `Why` project-scope block.
 - Public HTML belongs to `website`, authenticated editing belongs to `webapp`, and CMS persistence,
   validation, preview grants, approvals, and publication belong to `backend`.
-- The current admin edits existing pages but does not create a new page row. Bootstrap a new page
-  idempotently through the local-only development seed and existing CMS repository; never use raw SQL
-  or create a production publication from seed data.
+- Every bespoke customer build stages exactly one allowlisted `site-packages/<id>` before install/build.
+  Application code imports only `@vibe-cms/selected-site-package/*`; never edit or commit the ignored
+  generated workspace and never select a package from browser/snapshot input.
+- CMS core owns auth, persistence, preview/approval/snapshot and delivery ports. The Site Package owns
+  layout, block contracts/defaults/editors/renderers, browser formulas, migrations and acceptance tests.
+  Customers edit only declared content/parameters, never design, code, formulas, secrets or destinations.
+- Bootstrap initial package content idempotently through the existing CMS repository; never use raw SQL
+  or create a production publication from seed data. Repeat bootstrap must preserve customer edits.
+- Each customer installation is isolated by database role, hosts, secrets, media, public destination,
+  backups and resource limits. Do not add shared-table multi-tenancy or cross-customer credentials.
 - Do not assume a public deployment exists. Report local URLs and production URLs separately.
-- Use existing CMS block types before extending shared contracts. A new type requires producer,
-  editor, renderer, contract, and test changes together.
+- Use permitted core blocks first. A bespoke type belongs to the package registry and requires schema,
+  defaults, editor, renderer, migration policy and tests together; do not add CMS-core switch statements.
+- Public output must be static and continue working with `/api/cms` unavailable. Do not perform any cloud
+  apply/deploy, DNS change or production upload without separate explicit authorization.
 
 ## Bootstrap-Only Instructions
 

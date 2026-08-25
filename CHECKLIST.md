@@ -32,6 +32,22 @@ If no GitHub destination is chosen, the repository is left without `origin` and 
 | What product do you want to build first?                  | Русскоязычная CMS для редактирования страниц, меню, коллекций и медиа небольшого сайта |
 | What is the first user journey that must work end to end? | Владелец или редактор входит в admin, меняет черновик страницы, сохраняет его, просматривает preview и безопасно публикует сайт целиком |
 
+### CMS Site Package delivery record
+
+| Decision | Current answer |
+| --- | --- |
+| Selected package ID / purpose | `reference-calculator` — acceptance fixture for the build-selected bespoke package workflow |
+| Ownership | CMS core owns auth/persistence/preview/approval/snapshot/delivery ports; package owns layout/contracts/editors/renderers/formula/migrations/tests; customer owns approved content and declared parameter values; studio owns code and operations |
+| Customer-editable fields | Calculator title/description, unit price, minimum price and area bounds plus ordinary permitted CMS content; no design/code/formula/secret/destination fields |
+| Browser-only capabilities | Estimate formula runs in static browser HTML and must work with `/api/cms` blocked |
+| Customer runtime modules | absent — no booking, leads inbox or other public runtime API approved |
+| External integrations | absent — no CRM/email/calendar/payment provider approved |
+| Publication destination | Test-only in-memory fake S3 in acceptance; real customer S3-compatible endpoint/bucket/region/credentials remain deployment-gated |
+| Data and isolation | One database/role, host set, secret set, private-media scope, destination and backups per customer; shared-table multi-tenancy absent |
+| Export | Sanitized installation export is included; credentials, signed URLs and private object keys are excluded |
+| Hosting | Local validation only; VDS/customer hosting inputs and explicit deploy authorization are still required |
+| Explicitly absent until separately approved | Multi-tenancy, SFTP-only delivery, booking, payments, generic leads inbox and DRM |
+
 ## 3. Active surfaces
 
 Mark what is active now, and set the install status to `in progress` as soon as this section is answered. From then on, everything unmarked is deferred and must be left alone: no features, no setup, no test flows. While the status is still `not started` nothing has been decided yet, so unmarked boxes mean "not asked", not "forbidden".
@@ -189,6 +205,12 @@ A capability with no row is `absent` by default. Add the row instead of assuming
 | Durable task outbox             | included | `task_outbox` in PostgreSQL with handlers in `backend/src/outbox/handlers.ts`, drained by `outbox:drain`. Ships with the password-reset emails as its only producers, and stays empty until something enqueues. Adding a task type is a code change, never a migration.                                                                                                                                              |
 | CMS draft editing and approvals | included | Page/entry/menu/settings saves, optimistic conflicts, frozen approvals, owner policy checks, private preview grants, public snapshot materialisation, publication retry and CMS UI are implemented under `backend/src/modules/cms` and `webapp/src/features/cms`. |
 | CMS media library               | included | Private upload/finalise/list/alt/deletion flows, signature checks, usage protection, dimensions, safe signed preview URLs and provider-side copy into the inactive public slot are implemented under `backend/src/modules/media` and `website-builder`. |
+| Build-selected Site Packages    | included | One allowlisted package is staged before install/build and supplies typed blocks, admin fields, Astro layout/renderers, migrations and tests. Snapshot/database/package mismatches fail closed. See `docs/SITE_PACKAGES.md`. |
+| Isolated customer installations | included | Studio operations model separates database role, hosts, secrets, private media, public destination, backups and resource limits for each customer. |
+| Shared-table multi-tenancy      | absent   | No `tenantId` row filtering or runtime customer/package selection; add only after a separate approved design. |
+| SFTP-only public delivery       | absent   | Publication uses the tested S3-compatible destination port and verified blue/green marker. |
+| Booking / generic leads runtime | absent   | No public booking, availability, submission persistence or generic leads API is approved. |
+| DRM                             | absent   | Static public output has no DRM capability. |
 
 ## 11. Environment checks
 

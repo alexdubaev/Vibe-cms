@@ -1,3 +1,5 @@
+import type { Page } from '@playwright/test'
+
 import { createPrisma, type DbClient } from '../../../backend/src/db'
 import { e2eAdminEmail, e2eAdminPassword } from '../env'
 import { expect, test } from '../helpers/test'
@@ -64,13 +66,16 @@ test.afterAll(async () => {
   await db.$disconnect()
 })
 
-test('owner opens a CMS page and saves structured text without raw JSON', async ({ page }) => {
+async function signInAsOwner(page: Page) {
   await page.goto('/login')
   await page.getByLabel('Электронная почта').fill(e2eAdminEmail)
   await page.getByLabel('Пароль', { exact: true }).fill(e2eAdminPassword)
   await page.getByRole('button', { name: 'Войти' }).click()
-
   await expect(page).toHaveURL(/\/admin$/)
+}
+
+test('owner opens a CMS page and saves structured text without raw JSON', async ({ page }) => {
+  await signInAsOwner(page)
   await page.getByRole('link', { name: 'Страницы' }).click()
   await expect(page).toHaveURL(/\/admin\/pages$/)
   await page.getByRole('link', { name: 'О компании' }).click()
@@ -103,12 +108,7 @@ test('owner opens a CMS page and saves structured text without raw JSON', async 
 })
 
 test('owner opens the default content collection without a router error', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByLabel('Электронная почта').fill(e2eAdminEmail)
-  await page.getByLabel('Пароль', { exact: true }).fill(e2eAdminPassword)
-  await page.getByRole('button', { name: 'Войти' }).click()
-
-  await expect(page).toHaveURL(/\/admin$/)
+  await signInAsOwner(page)
   await page.getByRole('link', { name: 'Контент' }).click()
 
   await expect(page).toHaveURL(/\/admin\/content\/service$/)
@@ -119,12 +119,7 @@ test('owner opens the default content collection without a router error', async 
 
 test('media library fits a narrow mobile viewport', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 })
-  await page.goto('/login')
-  await page.getByLabel('Электронная почта').fill(e2eAdminEmail)
-  await page.getByLabel('Пароль', { exact: true }).fill(e2eAdminPassword)
-  await page.getByRole('button', { name: 'Войти' }).click()
-
-  await expect(page).toHaveURL(/\/admin$/)
+  await signInAsOwner(page)
   await page.goto('/admin/media')
   await expect(page).toHaveURL(/\/admin\/media$/)
 

@@ -49,7 +49,7 @@ test('renderer construction rejects descriptor disagreement and missing bespoke 
   }), /Site Package website descriptor does not match/)
 
   assert.throws(() => createBlockRendererResolver({
-    blockTypes: [...selectedBlockDefinitions.map(({ type }) => type), 'estimateCalculator'],
+    blockTypes: [...selectedBlockDefinitions.map(({ type }) => type), 'missingPackageRenderer'],
     coreBlockTypes: selectedBlockDefinitions.map(({ type }) => type),
     contractDescriptor: selectedSitePackageDescriptor,
     website: selectedSitePackageWebsite,
@@ -146,7 +146,7 @@ test('CMS homepage build uses selected package shell, snapshot SEO, and stable m
   assert.match(html, /<meta name="robots" content="noindex,nofollow"/)
   assert.match(html, /<link rel="canonical" href="https:\/\/canonical\.example\/package-home"/)
   assert.match(html, new RegExp(`<meta property="og:image" content="https://site\\.example${imagePath.replaceAll('/', '\\/')}"`))
-  assert.match(html, /data-site-package="vibe-core"/)
+  assert.match(html, new RegExp(`data-site-package="${selectedSitePackageDescriptor.id}"`))
   assert.match(html, /Server-rendered package content/)
   assert.doesNotMatch(html, /ЙЙ — шаблон для создания сайтов/)
   assert.match(html, /<img[^>]+width="1600"[^>]+height="900"[^>]+loading="eager"[^>]+fetchpriority="high"[^>]+sizes="\(min-width: 1024px\) 896px, 100vw"/)
