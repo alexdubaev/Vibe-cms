@@ -147,7 +147,7 @@ bun run --cwd backend prisma:deploy
 bun run dev:seed
 ```
 
-Switching from `mobile` to `master` needs the same reset, for a different reason and with a different symptom: `mobile` adds tables `master`'s schema does not know about, so `prisma migrate deploy` reports nothing to apply while `prisma migrate dev` reports drift. Going `master` -> `mobile` needs nothing, because `mobile`'s history is `master`'s plus one migration.
+Switching from `mobile` to `main` needs the same reset, for a different reason and with a different symptom: `mobile` adds tables `main`'s schema does not know about, so `prisma migrate deploy` reports nothing to apply while `prisma migrate dev` reports drift. Going `main` -> `mobile` needs nothing, because `mobile`'s history is `main`'s plus one migration.
 
 ## Current Upstream Documentation
 

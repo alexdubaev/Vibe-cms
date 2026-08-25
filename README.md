@@ -6,6 +6,14 @@
 
 A full-stack starter for web and backend products: one repository with a Bun/Hono backend, a React CSR browser client (`webapp`), an Astro SSG/SSR site (`website`), and shared API contracts. The runnable Expo mobile template lives on the `mobile` branch so the default branch stays focused on webapp, backend, website, infrastructure, and shared contracts.
 
+## Current Vibe CMS Project
+
+This checkout is the active Vibe CMS project, not an untouched template installation. Its intended
+remote is `https://github.com/alexdubaev/Vibe-cms.git`, its active branch is `main`, and CMS-backed
+public-site work starts with [docs/CMS_SITE_WORKFLOW.md](docs/CMS_SITE_WORKFLOW.md). Do not detach or
+replace this remote as part of ordinary site work. Do not assume a public deployment exists; report
+local and production URLs separately.
+
 ## Agent Intake Checklist Before Installing
 
 [CHECKLIST.md](CHECKLIST.md) is the intake questionnaire and the durable record of what the project needs. Ask its questions in the user's language and in product terms, then write the answers into that file. Do not start feature work until everything through its _First-version capabilities_ section and every conditional section activated by those answers is filled in, and keep its _Capability ledger_ current whenever a capability is added or removed.
@@ -13,7 +21,7 @@ A full-stack starter for web and backend products: one repository with a Bun/Hon
 One question comes before cloning, because it selects the branch: whether a mobile app is needed now. The rest of the intake runs in the fresh checkout, where the checklist can be filled in.
 
 - Do not hand the user the choices listed under _Decided by the agent_ in `CHECKLIST.md`. Those are the agent's to make and explain, including the `webapp` vs `website` split described under "Choosing `webapp` vs `website`".
-- If `mobile` is active, clone the full repository, switch to `mobile`, fetch both refs, install the locked dependencies, and run `bun run mobile:template:check -- --published` before first-run setup. Stop if the command is missing or fails: the template maintainer must synchronize `master` into the mobile-ready line while preserving its runtime and template capability ledger.
+- If `mobile` is active and that branch is available, clone the full repository, switch to `mobile`, fetch both refs, install the locked dependencies, and run `bun run mobile:template:check -- --published` before first-run setup. Stop if the command is missing or fails: the template maintainer must synchronize `main` into the mobile-ready line while preserving its runtime and template capability ledger.
 - If backend/API, full-stack, uploads, or database-backed validation is active, verify Docker Compose and the Docker daemon before local setup.
 - Production infrastructure is Terraform under [`infra/`](infra/README.md); create state once with `bun run infra:bootstrap -- <provider> --new`, apply deliberate foundation changes with `bun run infra:apply -- <provider>`, inspect with `bun run infra:plan -- <provider>`, and deploy release-owned surfaces with `bun run release -- <provider>`.
 - Hosting is decided once from the audience recorded in [CHECKLIST.md](CHECKLIST.md): Russia or data residency means Yandex Cloud ([docs/YANDEX_CLOUD.md](docs/YANDEX_CLOUD.md)), anything else means DigitalOcean ([docs/DIGITALOCEAN.md](docs/DIGITALOCEAN.md)), and an explicit wish for full control means an own server. In an installed project, delete the unused provider directory and runbook rather than keeping two possible production states.
@@ -90,6 +98,9 @@ and report exact remaining account/domain authorizations without printing secret
 - `docs/EMAIL.md` - transactional email: the four drivers, Postbox and Resend, and how delivery reaches the outbox.
 - `docs/STORAGE.md` - private file storage: the filesystem and S3 drivers, the local S3 container, and the upload contract.
 - `docs/WEB_SURFACES.md` - the mandatory ownership contract for SSG product data, rebuilds, browser cart/checkout, and separate mobile payment paths.
+- `docs/CMS_SITE_WORKFLOW.md` - context-free agent runbook for creating a CMS-managed public site.
+- `docs/CMS_SITE_BRIEF.md` - reusable product brief and ready-to-copy prompt for a CMS-managed site.
+- `examples/cms-site-starter/` - neutral schema-compatible CMS page fixture that does not replace `/`.
 - `docs/YANDEX_CLOUD.md` - the Yandex Cloud hosting path, chosen when users or data must stay in Russia.
 - `docs/DIGITALOCEAN.md` - the DigitalOcean hosting path for audiences without Russian data residency.
 

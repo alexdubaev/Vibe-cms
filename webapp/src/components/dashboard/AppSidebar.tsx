@@ -10,6 +10,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from '@/components/ui/sidebar'
+import { CmsBrandMark } from '@/components/CmsBrand'
 import { Typography } from '@/components/typography'
 import type { WorkspaceRoutePath } from '@/features/navigation'
 import { DashboardLink } from './DashboardLink'
@@ -40,9 +41,7 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton asChild size="lg" tooltip="Vibe CMS">
               <DashboardLink to={homePath}>
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <Typography variant="control">W</Typography>
-                </span>
+                <CmsBrandMark className="size-8" />
                 <span className="grid min-w-0 gap-0.5 group-data-[collapsible=icon]:hidden">
                   <Typography variant="control" truncate>
                     Vibe CMS

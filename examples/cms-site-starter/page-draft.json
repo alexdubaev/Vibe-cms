@@ -1,0 +1,92 @@
+{
+  "title": "Демонстрация Vibe CMS",
+  "path": "/cms-demo",
+  "navigationLabel": "CMS demo",
+  "seo": {
+    "title": "Демонстрация управления сайтом через Vibe CMS",
+    "description": "Тестовая страница для проверки блоков, черновиков, предпросмотра, версий и публикации Vibe CMS.",
+    "canonicalMode": "self",
+    "noIndex": true
+  },
+  "blocks": [
+    {
+      "id": "cms-demo-hero",
+      "type": "hero",
+      "data": {
+        "eyebrow": "Техническая демонстрация",
+        "title": "Управляйте публичным сайтом через Vibe CMS",
+        "text": "Редактируйте блоки, проверяйте черновик и публикуйте подтверждённую версию без изменения Astro-шаблонов.",
+        "primaryAction": {
+          "label": "Проверить страницу",
+          "href": "/cms-demo"
+        }
+      }
+    },
+    {
+      "id": "cms-demo-capabilities",
+      "type": "benefits",
+      "data": {
+        "title": "Что проверяет этот пример",
+        "items": [
+          {
+            "title": "Черновики и версии",
+            "text": "Изменения сохраняются с optimistic revision и доступны в истории страницы.",
+            "icon": "check"
+          },
+          {
+            "title": "Защищённый preview",
+            "text": "Черновик проверяется отдельно и не заменяет опубликованный сайт.",
+            "icon": "shield"
+          },
+          {
+            "title": "Управляемая публикация",
+            "text": "На публичный сайт попадает immutable snapshot после согласования.",
+            "icon": "star"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cms-demo-flow",
+      "type": "textImage",
+      "data": {
+        "title": "Жизненный цикл контента",
+        "content": {
+          "type": "document",
+          "blocks": [
+            {
+              "type": "numberedList",
+              "items": [
+                {
+                  "type": "listItem",
+                  "children": [{ "type": "text", "text": "Создать или открыть CMS-страницу.", "marks": [] }]
+                },
+                {
+                  "type": "listItem",
+                  "children": [{ "type": "text", "text": "Сохранить и проверить draft через preview.", "marks": [] }]
+                },
+                {
+                  "type": "listItem",
+                  "children": [{ "type": "text", "text": "Согласовать revision и опубликовать snapshot.", "marks": [] }]
+                }
+              ]
+            }
+          ]
+        },
+        "imageSide": "right"
+      }
+    },
+    {
+      "id": "cms-demo-cta",
+      "type": "cta",
+      "data": {
+        "title": "CMS готова к проверке",
+        "text": "Замените этот технический контент реальным брифом сайта, сохранив тот же управляемый workflow.",
+        "primaryAction": {
+          "label": "Открыть CMS demo",
+          "href": "/cms-demo"
+        }
+      }
+    }
+  ]
+}

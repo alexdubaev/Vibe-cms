@@ -76,6 +76,19 @@
 - Do not add empty layers, generic/base repositories, CQRS, event sourcing, or state-machine libraries without a concrete product need.
 - Do not move business rules into routes, screens, providers, or UI primitives to avoid defining the owning application/domain boundary.
 
+### CMS-Managed Public Sites
+
+- Before creating a public site through the CMS, read `docs/CMS_SITE_WORKFLOW.md`,
+  `docs/CMS_SITE_BRIEF.md`, `docs/WEB_SURFACES.md`, and the relevant example under `examples/`.
+- Public HTML belongs to `website`, authenticated editing belongs to `webapp`, and CMS persistence,
+  validation, preview grants, approvals, and publication belong to `backend`.
+- The current admin edits existing pages but does not create a new page row. Bootstrap a new page
+  idempotently through the local-only development seed and existing CMS repository; never use raw SQL
+  or create a production publication from seed data.
+- Do not assume a public deployment exists. Report local URLs and production URLs separately.
+- Use existing CMS block types before extending shared contracts. A new type requires producer,
+  editor, renderer, contract, and test changes together.
+
 ## Bootstrap-Only Instructions
 
 <!-- BOOTSTRAP_ONLY_START -->
@@ -91,7 +104,8 @@ This block exists only for fresh installs from the template. If this repository 
 ## Git And Remote Policy
 
 - Inspect `git remote -v` before any branch, commit, push, or PR workflow.
-- Work on `master` unless explicitly told otherwise. Do not create, switch to, or suggest new branches without request.
+- This repository uses `main`. Work on the current intended branch unless explicitly told otherwise.
+  Do not create, switch to, or suggest new branches without request.
 - Treat this repository as a template for a new project by default, not as a pull request source for the template.
 - If `origin` points to the template repository and the user has not explicitly said they are contributing to the template, remove it with `git remote remove origin`.
 - Add the user's own GitHub repository as `origin` only when the user provides a URL or asks to create/publish the project.
@@ -230,7 +244,7 @@ This block exists only for fresh installs from the template. If this repository 
 - Do not add real secrets to fixtures, tests, docs, screenshots, logs, or committed files.
 - Keep ad-hoc investigation artifacts out of the repository root. Put temporary screenshots, logs, and one-off exports under `./.scratch/` or the tool-owned artifact directory; do not create new root-level `.tmp-*` or `.codex-tmp-*` files.
 - Delete what you put in `./.scratch/` or the tool-owned scratch directory once the task that needed it is done, and say so in the report. Both are invisible to git, so nothing else will ever notice them: copies of `node_modules`, prebuild output, and browser captures reached 6.3 GB in one and 21 GB in the other before anyone looked. Keep an artifact only when a named follow-up depends on it.
-- Do not copy the repository. There is one working checkout, `master`, and `mobile` branching from it - that is the whole source of truth, and a second copy on disk is a second answer to every question. Comparing branches or past states needs no copy: `git show <ref>:<path>` reads any file from any ref, `git diff <ref>` compares them, and `git log -p <ref> -- <path>` shows how one arrived. Copies of this repository once reached 149 directories and 21 GB, and nearly all of them existed to read a file that `git show` prints.
+- Do not copy the repository. There is one working checkout, `main`, with optional feature branches - that is the whole source of truth, and a second copy on disk is a second answer to every question. Comparing branches or past states needs no copy: `git show <ref>:<path>` reads any file from any ref, `git diff <ref>` compares them, and `git log -p <ref> -- <path>` shows how one arrived. Copies of this repository once reached 149 directories and 21 GB, and nearly all of them existed to read a file that `git show` prints.
 - Do not create or use `git worktree` checkouts unless the user explicitly asks for one. Same reason: the main checkout is the only place work should live, and a worktree is where it gets stranded.
 - The one exception is an isolation check that does **not** copy this repository - an empty directory with a single dependency, to observe what a package manager or a tool actually does. Use it only when the working tree cannot answer the question, and delete it inside the same task. This is what proved `@prisma/client@7.9.1` installs as 12 KB instead of 78 MB; without it the conclusion would have been "a Prisma release broke our types", and the fix would have been a version rollback for a reason that was not true.
 - Do not weaken auth, permissions, validation, encryption, rate limits, or auditability to make a task easier.

@@ -114,7 +114,7 @@ but leaves `registry` unset: DigitalOcean's DOCR contract rejects a registry nam
 App Platform source configuration has a branch but no commit-SHA field. The wrapper therefore
 creates a never-overwritten `infra-release/<40-character-sha>` branch for each release, points both
 static apps at it with `deploy_on_push = false`, and checks each active deployment's
-`source_commit_hash`. A newer push to `master` cannot change the in-flight release.
+`source_commit_hash`. A newer push to `main` cannot change the in-flight release.
 
 If `ADMIN_SEED_*` is supplied, the first deployment runs the migration with it. After success the
 script removes the bootstrap variables and applies once more; the second migration is deliberately
