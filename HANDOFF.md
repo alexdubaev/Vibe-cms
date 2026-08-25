@@ -1,15 +1,60 @@
 # Vibe CMS — handoff для следующего агента
 
-Дата состояния: 2026-08-25
+## Актуальное состояние на 2026-08-25
+
 Рабочий каталог: `D:\codex\VIBE-cms\app`
-Ветка: `master`; последний коммит до текущей незакоммиченной работы: `c77f991 fix(builder): rollback failed publication promotion`.
+Ветка: `main`
+Remote: `origin = https://github.com/alexdubaev/Vibe-cms.git`
+Последний опубликованный commit: `2aa71ab fix(cms): initialize default site settings`.
+
+Этот блок имеет приоритет над историческими заметками ниже. Исторические секции сохраняются как журнал
+предыдущих этапов и могут содержать старые номера тестов, ветку или описание «незакоммиченной работы».
+
+### Что закрыто в последнем UI-блоке
+
+- Завершена Russian-first полировка fallback-сообщений auth/avatar/command palette и добавлены тесты.
+- Выполнен visual QA целевых маршрутов: `/admin/users`, `/admin/media`, `/admin/publications`,
+  `/admin/content/service`, `/admin/settings`, `/app/profile`, `/app/settings` на desktop/mobile.
+- Исправлен router error на `/admin/content/service`: explicit service route теперь корректно получает тип коллекции.
+- Исправлен горизонтальный overflow media library на viewport 375 px.
+- Добавлены Playwright-регрессии для default content route и mobile media width.
+- Текущий webapp E2E прогон: **19 pass, 0 fail**; базовые 17 сценариев плюс 2 регрессии.
+
+### Что закрыто после UI-блока
+
+- Исправлена загрузка singleton site settings: `getSiteSettings()` теперь лениво создаёт default row
+  после миграций, без зависимости от отдельного seed шага.
+- Добавлен PostgreSQL integration regression test; изолированный прогон: **11 pass, 0 fail**.
+- `/admin/settings` повторно проверен на desktop/mobile: форма загружается, сохраняется и не создаёт overflow.
+- Полный webapp E2E после исправления: **19 pass, 0 fail**.
+
+### Проверки после UI-блока
+
+- `bun run test:webapp` — **70 pass, 0 fail**;
+- `bun run lint` — успешно;
+- `bun run typecheck:webapp` — успешно;
+- `bun run build:webapp` — успешно;
+- `bun run architecture:check` — успешно, 442 source files;
+- `git diff --check` — успешно;
+- `bun run test` не считать зелёным на Windows: воспроизводятся 3 transaction-timeout в
+  `deploy-database.integration.test.ts` (`Transaction API error: Unable to start a transaction in the given time`),
+  известное ограничение Bun/Prisma integration runner.
+
+### Что осталось следующим агентом
+
+1. Дождаться Linux/CI прогона backend integration и Terraform validation; локальный CI-harness добавлен в
+   `.github/workflows/infrastructure-and-backend.yml` и не использует cloud credentials.
+2. Для release отдельно согласовать домены, сертификаты и HTTPS selector/purge endpoints, затем выполнить только
+   credential-free Yandex plan; cloud apply выполнять после явного согласования параметров.
+3. Повторить Docker builds и deployment smoke на стабильном runner; не считать зависание внешнего `bun install`
+   локальным build success.
+4. Добавить operational publication retry Playwright для существующего `POST /api/cms/publication/retry`.
+   Rollback E2E отложен: публичного CMS rollback endpoint пока нет; restore revision меняет draft, не live publication.
 
 Важно для передачи:
 
-- Все перечисленные ниже изменения пока находятся в рабочем дереве и не закоммичены.
-- Не добавлять в коммит пользовательские/инструментальные untracked-каталоги `.ux-audit/` и `webapp/.21st/`.
-- Перед коммитом проверить `git diff --check`, затем отдельно убедиться, что staged-набор содержит только код,
-  тесты и документацию этой задачи.
+- Untracked-инструментальные каталоги `.ux-audit/`, `webapp/.21st/` и `output/` не добавлять в commit.
+- При следующем commit проверить `git diff --check` и staged-набор; не использовать force-push без явного запроса.
 
 ## Что уже сделано
 
