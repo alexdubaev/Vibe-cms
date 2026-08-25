@@ -4,6 +4,7 @@ import {
   selectedPageDraftSchema,
   selectedPublicationSnapshotSchema,
   selectedSitePackageDescriptor,
+  selectedSitePackageMigrations,
 } from '@vibe-cms/selected-site-package/contract'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
@@ -145,7 +146,15 @@ export function createApp({
     sitePackage: selectedSitePackageDescriptor,
     snapshotSchema: selectedSnapshotSchema,
   })
-  const cmsService = new CmsService({ repository: cmsRepository, snapshot: cmsSnapshot, validation: cmsValidation })
+  const cmsService = new CmsService({
+    repository: cmsRepository,
+    snapshot: cmsSnapshot,
+    validation: cmsValidation,
+    sitePackage: {
+      schemaVersion: selectedSitePackageDescriptor.schemaVersion,
+      migrations: selectedSitePackageMigrations,
+    },
+  })
   const cmsPreview = new CmsPreviewService({
     store: createCmsPreviewStore(prisma),
     origin: (env.WEBAPP_ORIGIN ?? env.CORS_ORIGINS[0] ?? 'https://localhost').replace(/^http:/, 'https:'),

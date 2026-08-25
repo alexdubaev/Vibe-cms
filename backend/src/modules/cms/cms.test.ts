@@ -35,7 +35,7 @@ const heroDraft = (expectedRevision: number) => ({
 function createService(overrides: Partial<CmsRepository> = {}, validation: CmsValidation = {
   pageDraftSchema: selectedPageDraftSchema,
   blockDefinitions: selectedBlockDefinitions,
-}) {
+}, sitePackage?: ConstructorParameters<typeof CmsService>[0]['sitePackage']) {
   const page = {
     id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10',
     path: '/',
@@ -67,20 +67,21 @@ function createService(overrides: Partial<CmsRepository> = {}, validation: CmsVa
       page.draftRevision += 1
       return { updated: true, revision: page.draftRevision }
     },
-    createPageRevision: async () => ({ id: 'page-revision', pageId: page.id, revision: page.draftRevision, sourcePayload: heroDraft(page.draftRevision) }),
+    createPageRevision: async () => ({ id: 'page-revision', pageId: page.id, revision: page.draftRevision, sourcePayload: heroDraft(page.draftRevision), sitePackageSchemaVersion: 1 }),
     createContentEntryRevision: async () => ({ id: 'entry-revision', entryId: 'entry', revision: 1 }),
     getPolicy: async () => ({ key: 'default', editorCanPublish: false }),
     createApproval: async () => approval,
     getApproval: async () => approval,
     decideApproval: async ({ status }) => ({ ...approval, status, reviewerUserId: 'owner' }),
     createPublication: async () => publication,
-    getPageRevision: async () => ({ id: 'revision', pageId: page.id, revision: 1, sourcePayload: heroDraft(1) }),
+    getPageRevision: async () => ({ id: 'revision', pageId: page.id, revision: 1, sourcePayload: heroDraft(1), sitePackageSchemaVersion: 1 }),
     ...overrides,
   }
   const service = new CmsService({
     repository: repository as CmsRepository,
     snapshot: { createCandidate: async () => ({ snapshot: approval.candidateSnapshot as never, revisionMap: { revision: 1 } }) },
     validation,
+    sitePackage,
   })
   return { service, page, approval, publication }
 }
@@ -376,6 +377,7 @@ describe('CMS application service', () => {
         pageId: page.id,
         revision: 1,
         sourcePayload: heroDraft(1),
+        sitePackageSchemaVersion: 1,
       }),
     })
 
@@ -395,6 +397,43 @@ describe('CMS application service', () => {
       page.id,
     )
     expect(restored.revision).toBe(2)
+  })
+
+  test('migrates a restored immutable revision to the selected schema before validating and saving the draft', async () => {
+    let restoredPayload: unknown
+    const source = heroDraft(1)
+    const { title: _title, ...legacySource } = source
+    const { service, page } = createService({
+      getPageRevision: async () => ({
+        id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a17',
+        pageId: page.id,
+        revision: 1,
+        sourcePayload: { ...legacySource, legacyTitle: source.title },
+        sitePackageSchemaVersion: 1,
+      }),
+      updatePageDraft: async (_id, expectedRevision, payload) => {
+        restoredPayload = payload
+        return { updated: true, revision: expectedRevision + 1 }
+      },
+    }, undefined, {
+      schemaVersion: 2,
+      migrations: [{
+        from: 1,
+        to: 2,
+        migratePage(payload) {
+          const { legacyTitle, ...rest } = payload as Record<string, unknown>
+          return { ...rest, title: legacyTitle }
+        },
+      }],
+    })
+
+    await service.restorePage(
+      { id: 'editor', role: 'editor' },
+      '018f8c8d-5f34-7db2-8b98-2c7bf3d80a17',
+      page.id,
+    )
+
+    expect(restoredPayload).toMatchObject({ title: 'Главная', path: '/' })
   })
 
   test('approval publishes the exact frozen candidate snapshot', async () => {

@@ -66,6 +66,7 @@ describe('database deployment command', () => {
       calls.indexOf('grant:unused:none'),
     )
     expect(calls.indexOf('assert')).toBeGreaterThan(calls.indexOf('bootstrap:admin@example.com'))
+    expect(calls.indexOf('site-package')).toBeGreaterThan(calls.indexOf('assert'))
   })
 
   test('grants a separate runtime login after migration and before application checks', async () => {
@@ -84,6 +85,7 @@ describe('database deployment command', () => {
       'migrate',
       'grant:unused:product_app',
       'assert',
+      'site-package',
       'disconnect',
       'log',
     ])
@@ -150,6 +152,29 @@ describe('database deployment command', () => {
     expect(calls).toEqual(['create', 'disconnect'])
   })
 
+  test('propagates selected package migration failure after administrator verification', async () => {
+    const calls: string[] = []
+    await expect(deployDatabase(
+      { DATABASE_URL: databaseUrl },
+      {
+        ...dependenciesRecording(calls),
+        async migrateSitePackage() {
+          calls.push('site-package')
+          throw new Error('selected package ID mismatch')
+        },
+      },
+    )).rejects.toThrow('selected package ID mismatch')
+    expect(calls).toEqual([
+      'create',
+      'ownership:unused',
+      'migrate',
+      'grant:unused:none',
+      'assert',
+      'site-package',
+      'disconnect',
+    ])
+  })
+
   test('reports concrete ownership mismatches without mutating the database', async () => {
     await expect(
       assertMigrationSchemaOwnership(
@@ -187,6 +212,9 @@ const unusedDependencies = {
   },
   async assertMigrationOwnership() {
     throw new Error('assertMigrationOwnership must not run')
+  },
+  async migrateSitePackage() {
+    throw new Error('migrateSitePackage must not run')
   },
   log() {
     throw new Error('log must not run')
@@ -234,6 +262,9 @@ function dependenciesRecording(calls: string[]) {
     },
     migrate() {
       calls.push('migrate')
+    },
+    async migrateSitePackage() {
+      calls.push('site-package')
     },
   }
 }

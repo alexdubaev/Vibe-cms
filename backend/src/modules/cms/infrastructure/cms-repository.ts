@@ -183,6 +183,7 @@ export function createCmsRepository(db: DbClient): CmsRepository {
               publicPayload: asJson(input.publicPayload),
               authorUserId: input.authorUserId,
               publicationRevision: input.publicationRevision,
+              sitePackageSchemaVersion: input.sitePackageSchemaVersion,
             },
           })
         })
@@ -268,6 +269,7 @@ export function createCmsRepository(db: DbClient): CmsRepository {
             publicPayload: asJson(input.publicPayload),
             authorUserId: input.authorUserId,
             publicationRevision: input.publicationRevision,
+            sitePackageSchemaVersion: input.sitePackageSchemaVersion,
           },
         })
       })

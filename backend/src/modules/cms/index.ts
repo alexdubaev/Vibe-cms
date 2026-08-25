@@ -3,6 +3,7 @@ import type { DbClient } from '../../db'
 import { createCmsRepository } from './infrastructure/cms-repository'
 
 export { createCmsRepository }
+export { createCmsSitePackageMigrationRepository } from './infrastructure/site-package-repository'
 export { createCmsPreviewStore } from './infrastructure/cms-repository'
 export {
   CmsService,
@@ -13,6 +14,7 @@ export {
 } from './application/cms-service'
 export { CmsPreviewService } from './application/preview-service'
 export { CmsSnapshotService } from './application/snapshot-service'
+export { CmsSitePackageMigrationService, migratePagePayload } from './application/site-package-migration-service'
 export { toPublicMediaDescriptor } from './domain/media-descriptor'
 export { createCmsRoutes } from './transport/routes'
 export { createCmsPreviewExchangeRoutes } from './transport/routes'
@@ -21,6 +23,7 @@ export * from './application/ports'
 export * from './domain/errors'
 export * from './domain/path-policy'
 export * from './domain/registry'
+export * from './domain/site-package-state'
 
 export function createCmsModule(db: DbClient) {
   return { repository: createCmsRepository(db) }

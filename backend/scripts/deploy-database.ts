@@ -2,6 +2,12 @@ import 'dotenv/config'
 
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
+import { collectionEntryDraftSchema } from '@web-app-demo/contracts'
+import {
+  selectedPageDraftSchema,
+  selectedSitePackageDescriptor,
+  selectedSitePackageMigrations,
+} from '@vibe-cms/selected-site-package/contract'
 
 import { createPrisma, type DbClient } from '../src/db'
 import {
@@ -9,6 +15,9 @@ import {
   bootstrapAdmin,
   parseAdminSeedConfig,
 } from '../src/modules/users/infrastructure/admin-bootstrap'
+import { menuDraftSchema, siteSettingsDraftSchema } from '../src/modules/cms/application/cms-service'
+import { CmsSitePackageMigrationService } from '../src/modules/cms/application/site-package-migration-service'
+import { createCmsSitePackageMigrationRepository } from '../src/modules/cms/infrastructure/site-package-repository'
 
 type DatabaseDeployDependencies = {
   assertAdmin(db: DbClient): Promise<void>
@@ -30,6 +39,7 @@ type DatabaseDeployDependencies = {
     databaseUrl: string,
     source: Record<string, string | undefined>,
   ): void | Promise<void>
+  migrateSitePackage(db: DbClient): Promise<void>
 }
 
 const defaultDependencies: DatabaseDeployDependencies = {
@@ -53,6 +63,7 @@ const defaultDependencies: DatabaseDeployDependencies = {
       throw new Error(`Database migration failed with status ${migration.status ?? 1}`)
     }
   },
+  migrateSitePackage: migrateSelectedSitePackage,
 }
 
 export async function deployDatabase(
@@ -74,6 +85,7 @@ export async function deployDatabase(
       await dependencies.bootstrap(prisma, config.seed)
     }
     await dependencies.assertAdmin(prisma)
+    await dependencies.migrateSitePackage(prisma)
   } finally {
     await prisma.$disconnect()
   }
@@ -213,6 +225,35 @@ export async function grantRuntimeDatabaseAccess(
     },
     { timeout: 60_000 },
   )
+}
+
+export async function migrateSelectedSitePackage(db: DbClient) {
+  const service = new CmsSitePackageMigrationService({
+    repository: createCmsSitePackageMigrationRepository(db),
+    validation: {
+      validateSettings(payload, draftRevision) {
+        siteSettingsDraftSchema.parse({ ...asObject(payload), expectedRevision: draftRevision })
+      },
+      validatePage(payload, draftRevision) {
+        selectedPageDraftSchema.parse({ ...asObject(payload), expectedRevision: draftRevision })
+      },
+      validateContentEntry(payload, type, draftRevision) {
+        collectionEntryDraftSchema.parse({ ...asObject(payload), type, expectedRevision: draftRevision })
+      },
+      validateMenu(payload, _location, draftRevision) {
+        menuDraftSchema.parse({ ...asObject(payload), expectedRevision: draftRevision })
+      },
+    },
+  })
+  await service.migrateSelectedPackage(
+    selectedSitePackageDescriptor,
+    selectedSitePackageMigrations,
+  )
+}
+
+function asObject(payload: unknown): Record<string, unknown> {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return {}
+  return payload as Record<string, unknown>
 }
 
 export async function runtimeRolePrivilegeProblems(

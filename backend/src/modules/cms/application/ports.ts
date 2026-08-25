@@ -31,6 +31,7 @@ export type CmsPageRevisionRecord = {
   pageId: string
   revision: number
   sourcePayload: unknown
+  sitePackageSchemaVersion: number
 }
 
 export type CmsPageRevisionSummaryRecord = {
@@ -136,6 +137,7 @@ export type CmsRepository = {
     publicPayload: unknown
     authorUserId?: string
     publicationRevision?: number
+    sitePackageSchemaVersion: number
   }): Promise<CmsPageRevisionRecord>
   getPageRevision(revisionId: string): Promise<CmsPageRevisionRecord | null>
   listPageRevisions(pageId: string): Promise<CmsPageRevisionSummaryRecord[]>
@@ -151,6 +153,7 @@ export type CmsRepository = {
     publicPayload: unknown
     authorUserId?: string
     publicationRevision?: number
+    sitePackageSchemaVersion: number
   }): Promise<CmsContentEntryRevisionRecord>
   createMediaAsset(input: {
     filename?: string

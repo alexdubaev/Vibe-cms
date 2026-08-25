@@ -220,6 +220,17 @@ model CmsSiteSettings {
   @@map("cms_site_settings")
 }
 
+model CmsSitePackageState {
+  key            String   @id @default("default")
+  packageId      String   @map("package_id")
+  packageVersion String   @map("package_version")
+  schemaVersion  Int      @map("schema_version")
+  migratedAt     DateTime @map("migrated_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("cms_site_package_state")
+}
+
 model CmsPolicy {
   key             String   @id @default("default")
   editorCanPublish Boolean  @default(false) @map("editor_can_publish")
@@ -255,6 +266,7 @@ model CmsPageRevision {
   publicPayload      Json     @map("public_payload")
   authorUserId       String?  @map("author_user_id") @db.Uuid
   publicationRevision Int?    @map("publication_revision")
+  sitePackageSchemaVersion Int @default(1) @map("site_package_schema_version")
   createdAt          DateTime @default(now()) @map("created_at")
   page               CmsPage  @relation(fields: [pageId], references: [id], onDelete: Cascade, map: "cms_page_revisions_page_id_fkey")
 
@@ -287,6 +299,7 @@ model CmsContentEntryRevision {
   publicPayload       Json            @map("public_payload")
   authorUserId        String?         @map("author_user_id") @db.Uuid
   publicationRevision Int?            @map("publication_revision")
+  sitePackageSchemaVersion Int         @default(1) @map("site_package_schema_version")
   createdAt           DateTime        @default(now()) @map("created_at")
   entry               CmsContentEntry @relation(fields: [entryId], references: [id], onDelete: Cascade, map: "cms_content_entry_revisions_entry_id_fkey")
 
@@ -317,6 +330,7 @@ model CmsMenuRevision {
   publicPayload       Json     @map("public_payload")
   authorUserId        String?  @map("author_user_id") @db.Uuid
   publicationRevision Int?     @map("publication_revision")
+  sitePackageSchemaVersion Int @default(1) @map("site_package_schema_version")
   createdAt           DateTime @default(now()) @map("created_at")
   menu                CmsMenu  @relation(fields: [menuId], references: [id], onDelete: Cascade, map: "cms_menu_revisions_menu_id_fkey")
 

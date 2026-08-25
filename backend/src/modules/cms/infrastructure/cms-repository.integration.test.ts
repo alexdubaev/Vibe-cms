@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { createPrisma, type DbClient } from '../../../db'
 import { CmsConflictError, CmsImmutableRevisionError, CmsPublicationConflictError } from '../domain/errors'
 import { createCmsRepository } from './cms-repository'
+import { createCmsSitePackageMigrationRepository } from './site-package-repository'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 const maybeDescribe = databaseUrl ? describe : describe.skip
@@ -47,6 +48,7 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
     await db.cmsPolicy.deleteMany()
     await db.cmsSiteSettings.deleteMany()
     await db.cmsPublicationController.deleteMany()
+    await db.cmsSitePackageState.deleteMany()
   })
 
   afterAll(async () => {
@@ -101,6 +103,7 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
       sourceDraftRevision: page.draftRevision,
       sourcePayload: page.draftPayload,
       publicPayload: { path: page.path, title: page.title, blocks: [] },
+      sitePackageSchemaVersion: 1,
     })
 
     await expectRejected(repository.updatePageRevision(revision.id, { sourcePayload: { changed: true } }),
@@ -115,6 +118,7 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
       sourceDraftRevision: 1,
       sourcePayload: { secret: 'first' },
       publicPayload: { title: 'Первый' },
+      sitePackageSchemaVersion: 1,
     })
     await repository.updatePageDraft(page.id, 1, { blocks: [{ type: 'textImage' }] })
     await repository.createPageRevision({
@@ -123,6 +127,7 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
       sourcePayload: { secret: 'second' },
       publicPayload: { title: 'Второй' },
       publicationRevision: 7,
+      sitePackageSchemaVersion: 1,
     })
 
     const revisions = await repository.listPageRevisions(page.id)
@@ -203,6 +208,7 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
       sourceDraftRevision: page.draftRevision,
       sourcePayload: page.draftPayload,
       publicPayload: { path: page.path, title: page.title, blocks: [] },
+      sitePackageSchemaVersion: 1,
     })
     const asset = await repository.createMediaAsset({
       objectKey: 'media/asset-b',
@@ -215,5 +221,35 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
     await db.cmsPage.delete({ where: { id: page.id } })
     expect(await db.cmsPageRevision.count({ where: { pageId: page.id } })).toBe(0)
     await expectRejected(db.cmsMediaAsset.delete({ where: { id: asset.id } }), Error)
+  })
+
+  test('rolls back mutable package drafts and state without rewriting immutable revisions', async () => {
+    const page = await repository.createPage({ path: '/migration', title: 'Migration', payload: { version: 1 } })
+    const revision = await repository.createPageRevision({
+      pageId: page.id,
+      sourceDraftRevision: page.draftRevision,
+      sourcePayload: page.draftPayload,
+      publicPayload: page.draftPayload,
+      sitePackageSchemaVersion: 1,
+    })
+    const packageRepository = createCmsSitePackageMigrationRepository(db)
+
+    await expect(packageRepository.transaction(async (transaction) => {
+      const drafts = await transaction.readMutableDrafts()
+      drafts.pages[0]!.payload = { version: 2 }
+      drafts.pages[0]!.draftRevision += 1
+      await transaction.replaceMutableDrafts(drafts)
+      await transaction.setState({
+        packageId: 'vibe-core',
+        packageVersion: '2.0.0',
+        schemaVersion: 2,
+        migratedAt: new Date(),
+      })
+      throw new Error('rollback')
+    })).rejects.toThrow('rollback')
+
+    expect((await repository.getPage(page.id))?.draftPayload).toEqual({ version: 1 })
+    expect(await db.cmsSitePackageState.findUnique({ where: { key: 'default' } })).toBeNull()
+    expect((await repository.getPageRevision(revision.id))?.sourcePayload).toEqual({ version: 1 })
   })
 })

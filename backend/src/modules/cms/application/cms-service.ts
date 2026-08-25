@@ -22,6 +22,8 @@ import type {
 } from './ports'
 import { CmsSnapshotService } from './snapshot-service'
 import { CmsConflictError, CmsRepositoryError } from '../domain/errors'
+import { migratePagePayload } from './site-package-migration-service'
+import type { CmsSitePackageMigration } from '../domain/site-package-state'
 
 export type CmsActor = {
   id: string
@@ -196,6 +198,10 @@ type ServiceDependencies = {
   > & Partial<Pick<CmsRepository, 'retryPublication'>>
   snapshot: Pick<CmsSnapshotService, 'createCandidate'>
   validation: CmsValidation
+  sitePackage?: {
+    schemaVersion: number
+    migrations: readonly CmsSitePackageMigration[]
+  }
   clock?: { now(): Date }
 }
 
@@ -288,6 +294,7 @@ export class CmsService {
       sourcePayload: draft,
       publicPayload: draft,
       authorUserId: actor.id,
+      sitePackageSchemaVersion: this.selectedSchemaVersion,
     })
     return toEntryEditorDto(entry)
   }
@@ -381,6 +388,7 @@ export class CmsService {
         blocks: pageDraft.blocks,
       },
       authorUserId: actor.id,
+      sitePackageSchemaVersion: this.selectedSchemaVersion,
     })
 
     return {
@@ -412,6 +420,7 @@ export class CmsService {
       sourcePayload: payload,
       publicPayload: payload,
       authorUserId: actor.id,
+      sitePackageSchemaVersion: this.selectedSchemaVersion,
     })
     return {
       ...toEntryEditorDto(entry),
@@ -518,11 +527,21 @@ export class CmsService {
       throw new CmsRepositoryError('Page revision was not found', 'NOT_FOUND')
     }
     const page = await this.requirePage(revision.pageId)
+    const migratedSource = migratePagePayload(
+      revision.sourcePayload,
+      revision.sitePackageSchemaVersion ?? 1,
+      this.selectedSchemaVersion,
+      this.dependencies.sitePackage?.migrations ?? [],
+    )
     const source = this.parsePageDraft({
-      ...(revision.sourcePayload as Record<string, unknown>),
+      ...(migratedSource as Record<string, unknown>),
       expectedRevision: page.draftRevision,
     })
     return this.savePage(actor, page.id, source)
+  }
+
+  private get selectedSchemaVersion() {
+    return this.dependencies.sitePackage?.schemaVersion ?? 1
   }
 
   private async requirePage(pageId: string): Promise<CmsPageRecord> {
