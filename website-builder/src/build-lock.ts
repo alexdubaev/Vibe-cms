@@ -2,6 +2,27 @@ import { isAbsolute } from 'node:path'
 
 import { BuildProcessExitError, type BuildProcessRunner } from './build-site'
 
+export type BuilderRuntimeMode = 'local' | 'serverless' | 'studio-production'
+
+export function createBuildProcessRunnerFromEnvironment(
+  environment: Record<string, string | undefined>,
+  run: BuildProcessRunner,
+): BuildProcessRunner {
+  const configuredMode = environment.CMS_BUILDER_RUNTIME_MODE?.trim() || 'local'
+  if (!isBuilderRuntimeMode(configuredMode)) {
+    throw new Error('CMS_BUILDER_RUNTIME_MODE must be local, serverless, or studio-production')
+  }
+  if (configuredMode !== 'studio-production') return run
+
+  const lockFile = environment.CMS_ASTRO_BUILD_LOCK_FILE?.trim()
+  if (!lockFile) {
+    throw new Error(
+      'CMS_ASTRO_BUILD_LOCK_FILE is required when CMS_BUILDER_RUNTIME_MODE=studio-production',
+    )
+  }
+  return createFlockBuildProcessRunner({ lockFile, waitSeconds: 600, run })
+}
+
 export function createFlockBuildProcessRunner(options: {
   lockFile: string
   waitSeconds: number
@@ -40,4 +61,8 @@ export function createFlockBuildProcessRunner(options: {
       throw error
     }
   }
+}
+
+function isBuilderRuntimeMode(value: string): value is BuilderRuntimeMode {
+  return value === 'local' || value === 'serverless' || value === 'studio-production'
 }

@@ -3,7 +3,10 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { createFlockBuildProcessRunner } from '../src/build-lock'
+import {
+  createBuildProcessRunnerFromEnvironment,
+  createFlockBuildProcessRunner,
+} from '../src/build-lock'
 import { runBuildProcess } from '../src/build-site'
 
 const temporaryRoots: string[] = []
@@ -158,6 +161,68 @@ describe('createFlockBuildProcessRunner', () => {
 
     await expect(contender).rejects.toThrow('Astro build lock timed out after 0.05 seconds')
     await holder
+  })
+})
+
+describe('builder runtime mode', () => {
+  const command = {
+    command: 'bun',
+    args: ['x', 'astro', 'build'],
+    cwd: '/app/website',
+    env: { CMS_SNAPSHOT_FILE: '/tmp/snapshot.json' },
+  }
+
+  test.each(['local', 'serverless'] as const)('uses the direct runner in %s mode', async (mode) => {
+    const calls: unknown[] = []
+    const run = mock(async (input) => { calls.push(input) })
+    const selectedRun = createBuildProcessRunnerFromEnvironment({
+      CMS_BUILDER_RUNTIME_MODE: mode,
+    }, run)
+
+    await selectedRun(command)
+
+    expect(calls).toEqual([command])
+  })
+
+  test('requires the lock file in studio-production mode', () => {
+    expect(() => createBuildProcessRunnerFromEnvironment({
+      CMS_BUILDER_RUNTIME_MODE: 'studio-production',
+    }, async () => undefined)).toThrow(
+      'CMS_ASTRO_BUILD_LOCK_FILE is required when CMS_BUILDER_RUNTIME_MODE=studio-production',
+    )
+  })
+
+  test('selects the flock runner in studio-production mode', async () => {
+    const calls: unknown[] = []
+    const selectedRun = createBuildProcessRunnerFromEnvironment({
+      CMS_BUILDER_RUNTIME_MODE: 'studio-production',
+      CMS_ASTRO_BUILD_LOCK_FILE: '/var/lock/vibe-cms/astro-build.lock',
+    }, async (input) => { calls.push(input) })
+
+    await selectedRun(command)
+
+    expect(calls).toEqual([{
+      command: 'flock',
+      args: [
+        '--wait',
+        '600',
+        '/var/lock/vibe-cms/astro-build.lock',
+        'bun',
+        'x',
+        'astro',
+        'build',
+      ],
+      cwd: '/app/website',
+      env: command.env,
+    }])
+  })
+
+  test('rejects an unknown runtime mode instead of choosing a concurrency policy', () => {
+    expect(() => createBuildProcessRunnerFromEnvironment({
+      CMS_BUILDER_RUNTIME_MODE: 'shared',
+    }, async () => undefined)).toThrow(
+      'CMS_BUILDER_RUNTIME_MODE must be local, serverless, or studio-production',
+    )
   })
 })
 

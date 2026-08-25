@@ -13,6 +13,8 @@ test('boots the builder composition root with the Docker smoke environment', asy
     env: {
       ...process.env,
       ...builderSmokeEnvironment,
+      CMS_BUILDER_RUNTIME_MODE: 'local',
+      CMS_ASTRO_BUILD_LOCK_FILE: '',
       PORT: String(port),
     },
     stdout: 'pipe',
@@ -34,6 +36,7 @@ test('rejects a configured relative Astro build lock path before startup', async
     env: {
       ...process.env,
       ...builderSmokeEnvironment,
+      CMS_BUILDER_RUNTIME_MODE: 'studio-production',
       CMS_ASTRO_BUILD_LOCK_FILE: 'var/lock/vibe-cms/astro-build.lock',
     },
     stdout: 'pipe',
@@ -54,6 +57,84 @@ test('rejects a configured relative Astro build lock path before startup', async
     await server.exited
   }
 })
+
+test('boots in explicit serverless mode without a shared lock', async () => {
+  const port = await findOpenPort()
+  const server = Bun.spawn([process.execPath, 'run', 'src/server.ts'], {
+    cwd: builderRoot,
+    env: {
+      ...process.env,
+      ...builderSmokeEnvironment,
+      CMS_BUILDER_RUNTIME_MODE: 'serverless',
+      CMS_ASTRO_BUILD_LOCK_FILE: '',
+      PORT: String(port),
+    },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+
+  try {
+    const response = await waitForHttp(`http://127.0.0.1:${port}/`, server)
+    expect(response.status).toBe(405)
+  } finally {
+    server.kill()
+    await server.exited
+  }
+}, 15_000)
+
+test('rejects studio-production startup without a shared lock file', async () => {
+  const server = Bun.spawn([process.execPath, 'run', 'src/server.ts'], {
+    cwd: builderRoot,
+    env: {
+      ...process.env,
+      ...builderSmokeEnvironment,
+      CMS_BUILDER_RUNTIME_MODE: 'studio-production',
+      CMS_ASTRO_BUILD_LOCK_FILE: '',
+    },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+
+  try {
+    const exitCode = await Promise.race([
+      server.exited,
+      Bun.sleep(1_000).then(() => null),
+    ])
+    expect(exitCode).not.toBeNull()
+    const diagnostics = await new Response(server.stderr).text()
+    expect(exitCode).not.toBe(0)
+    expect(diagnostics).toContain(
+      'CMS_ASTRO_BUILD_LOCK_FILE is required when CMS_BUILDER_RUNTIME_MODE=studio-production',
+    )
+  } finally {
+    server.kill()
+    await server.exited
+  }
+})
+
+test('boots in studio-production mode with an absolute shared lock file', async () => {
+  const port = await findOpenPort()
+  const server = Bun.spawn([process.execPath, 'run', 'src/server.ts'], {
+    cwd: builderRoot,
+    env: {
+      ...process.env,
+      ...builderSmokeEnvironment,
+      CMS_BUILDER_RUNTIME_MODE: 'studio-production',
+      CMS_ASTRO_BUILD_LOCK_FILE: '/var/lock/vibe-cms/astro-build.lock',
+      PORT: String(port),
+    },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+
+  try {
+    const response = await waitForHttp(`http://127.0.0.1:${port}/`, server)
+    expect(response.status).toBe(405)
+  } finally {
+    server.kill()
+    await server.exited
+  }
+}, 15_000)
 
 function findOpenPort(): Promise<number> {
   return new Promise((resolvePort, reject) => {

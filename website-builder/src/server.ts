@@ -1,7 +1,7 @@
 import { selectedSitePackageDescriptor } from '@vibe-cms/selected-site-package/contract'
 
 import { createBuilderBackendClient } from './backend-client'
-import { createFlockBuildProcessRunner } from './build-lock'
+import { createBuildProcessRunnerFromEnvironment } from './build-lock'
 import { createAstroSiteRunner, createSnapshotDownloader, runBuildProcess } from './build-site'
 import { createBuilderHttpHandler, createBuilderWorker } from './index'
 import { publishBuiltRelease } from './release-pipeline'
@@ -19,14 +19,7 @@ const requiredEnvironment = readRequiredEnvironment([
   'CMS_WEBSITE_PURGE_URL',
   'CMS_WEBSITE_PROMOTION_TOKEN',
 ])
-const astroBuildLockFile = process.env.CMS_ASTRO_BUILD_LOCK_FILE?.trim()
-const buildProcessRunner = astroBuildLockFile
-  ? createFlockBuildProcessRunner({
-      lockFile: astroBuildLockFile,
-      waitSeconds: 600,
-      run: runBuildProcess,
-    })
-  : runBuildProcess
+const buildProcessRunner = createBuildProcessRunnerFromEnvironment(process.env, runBuildProcess)
 
 const websiteStorage = createS3PublicationStorageAdapter({
   ...s3PublicationStorageOptionsFromEnvironment(process.env),
