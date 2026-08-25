@@ -349,6 +349,32 @@ describe('CMS HTTP routes', () => {
     expect(response.headers.get('cache-control')).toBe('private, no-store')
   })
 
+  test('rejects a site package selector in a page save request', async () => {
+    const auth = createMiddleware<AuthHttpEnv>(async (c, next) => {
+      c.set('user', { id: 'editor', role: 'editor', email: 'editor@example.com', displayName: null, createdAt: new Date().toISOString(), sessionId: 'session' })
+      await next()
+    })
+    const service = { savePage: async () => ({ id: pageId, title: 'Страница', path: '/', draftPayload: {}, revision: 2 }) } as unknown as CmsService
+    const app = new Hono<AuthHttpEnv>()
+    app.route('/api/cms', createCmsRoutes({ requireAuth: auth, requireCmsAccess: auth, service, preview: {} as CmsPreviewService }))
+    app.onError(handleError)
+
+    const response = await app.request(`/api/cms/pages/${pageId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Страница',
+        path: '/',
+        blocks: [{ id: 'hero', type: 'hero', data: { title: 'Титул', text: 'Текст', primaryAction: { label: 'Далее', href: '/about' } } }],
+        expectedRevision: 1,
+        sitePackageId: 'other-package',
+      }),
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } })
+  })
+
   test('never returns approval or publication snapshots from mutation responses', async () => {
     const auth = createMiddleware<AuthHttpEnv>(async (c, next) => {
       c.set('user', { id: 'owner', role: 'owner', email: 'owner@example.com', displayName: null, createdAt: new Date().toISOString(), sessionId: 'session' })

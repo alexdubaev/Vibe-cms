@@ -1,8 +1,17 @@
 import { describe, expect, test } from 'bun:test'
+import { createContentBlockSchema, createPageDraftSchema } from '@web-app-demo/contracts'
+import {
+  selectedBlockDefinitions,
+  selectedPageDraftSchema,
+  selectedPublicationSnapshotSchema,
+  selectedSitePackageDescriptor,
+} from '@vibe-cms/selected-site-package/contract'
+import { z } from 'zod'
 
 import type { CmsRepository } from './application/ports'
-import { CmsService } from './application/cms-service'
+import { CmsService, type CmsValidation } from './application/cms-service'
 import { CmsPreviewService, type PreviewStore } from './application/preview-service'
+import { CmsSnapshotService } from './application/snapshot-service'
 import { CmsRepositoryError, CmsConflictError } from './domain/errors'
 import { materialiseSnapshot } from './domain/materialise-snapshot'
 
@@ -23,7 +32,10 @@ const heroDraft = (expectedRevision: number) => ({
   expectedRevision,
 })
 
-function createService(overrides: Partial<CmsRepository> = {}) {
+function createService(overrides: Partial<CmsRepository> = {}, validation: CmsValidation = {
+  pageDraftSchema: selectedPageDraftSchema,
+  blockDefinitions: selectedBlockDefinitions,
+}) {
   const page = {
     id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10',
     path: '/',
@@ -68,6 +80,7 @@ function createService(overrides: Partial<CmsRepository> = {}) {
   const service = new CmsService({
     repository: repository as CmsRepository,
     snapshot: { createCandidate: async () => ({ snapshot: approval.candidateSnapshot as never, revisionMap: { revision: 1 } }) },
+    validation,
   })
   return { service, page, approval, publication }
 }
@@ -222,6 +235,43 @@ describe('CMS application service', () => {
 
     expect(saved.revision).toBe(2)
     await expectRejected(service.savePage({ id: 'user', role: 'user' }, 'page', heroDraft(2)), CmsRepositoryError)
+  })
+
+  test('saves blocks registered by the selected CMS validation package', async () => {
+    const customBlockDefinitions = [{
+      type: 'callout',
+      label: 'Callout',
+      description: 'A package-defined callout',
+      dataSchema: z.object({ message: z.string().min(1) }).strict(),
+      defaultData: { message: 'Hello' },
+      editor: { kind: 'descriptor' as const, fields: [] },
+    }]
+    const { service } = createService({}, {
+      pageDraftSchema: createPageDraftSchema(createContentBlockSchema(customBlockDefinitions)),
+      blockDefinitions: customBlockDefinitions,
+    })
+
+    await expect(service.savePage({ id: 'editor', role: 'editor' }, 'page', {
+      title: 'Custom page',
+      path: '/custom',
+      blocks: [{ id: 'callout', type: 'callout', data: { message: 'Package block' } }],
+      expectedRevision: 1,
+    } as never)).resolves.toMatchObject({
+      id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10',
+      revision: 2,
+      draftPayload: { blocks: [{ id: 'callout', type: 'callout', data: { message: 'Package block' } }] },
+    })
+  })
+
+  test('reports CMS_VALIDATION when a block is not registered by the selected package', async () => {
+    const { service } = createService()
+
+    await expect(service.savePage({ id: 'editor', role: 'editor' }, 'page', {
+      title: 'Unknown block',
+      path: '/unknown-block',
+      blocks: [{ id: 'unknown', type: 'not-registered', data: {} }],
+      expectedRevision: 1,
+    } as never)).rejects.toMatchObject({ code: 'CMS_VALIDATION' })
   })
 
   test('lists safe active collection entries for selection blocks', async () => {
@@ -413,6 +463,13 @@ describe('CMS preview grants', () => {
 
 describe('public snapshot materialisation', () => {
   test('accepts the public allowlist and rejects draft-only fields', () => {
+    const snapshotSchema = selectedPublicationSnapshotSchema.extend({
+      sitePackage: z.object({
+        id: z.literal(selectedSitePackageDescriptor.id),
+        version: z.literal(selectedSitePackageDescriptor.version),
+        schemaVersion: z.literal(selectedSitePackageDescriptor.schemaVersion),
+      }).strict(),
+    })
     const snapshot = materialiseSnapshot(3, new Date('2026-08-24T10:00:00.000Z'), {
       settings: { companyName: 'Vibe CMS' },
       pages: [
@@ -427,7 +484,7 @@ describe('public snapshot materialisation', () => {
       menus: [],
       redirects: [],
       media: [],
-    })
+    }, selectedSitePackageDescriptor, snapshotSchema)
     expect(snapshot.revision).toBe(3)
     expect(snapshot.pages[0]).not.toHaveProperty('draftRevision')
 
@@ -439,8 +496,39 @@ describe('public snapshot materialisation', () => {
         menus: [],
         redirects: [],
         media: [],
-      }),
+      }, selectedSitePackageDescriptor, snapshotSchema),
     ).toThrow()
+  })
+
+  test('includes the fixed selected site package in candidate snapshots', async () => {
+    const snapshotSchema = selectedPublicationSnapshotSchema.extend({
+      sitePackage: z.object({
+        id: z.literal(selectedSitePackageDescriptor.id),
+        version: z.literal(selectedSitePackageDescriptor.version),
+        schemaVersion: z.literal(selectedSitePackageDescriptor.schemaVersion),
+      }).strict(),
+    })
+    const snapshot = new CmsSnapshotService(
+      async () => ({
+        settings: { companyName: 'Vibe CMS' },
+        pages: [{
+          id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10',
+          title: 'Главная',
+          path: '/',
+          blocks: heroDraft(1).blocks,
+        }],
+        collections: [],
+        menus: [],
+        redirects: [],
+        media: [],
+      }),
+      { now: () => new Date('2026-08-24T10:00:00.000Z') },
+      { sitePackage: selectedSitePackageDescriptor, snapshotSchema },
+    )
+
+    await expect(snapshot.createCandidate(3)).resolves.toMatchObject({
+      snapshot: { sitePackage: { id: 'vibe-core', version: '1.0.0', schemaVersion: 1 } },
+    })
   })
 })
 

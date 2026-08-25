@@ -1,6 +1,13 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
+import {
+  selectedBlockDefinitions,
+  selectedPageDraftSchema,
+  selectedPublicationSnapshotSchema,
+  selectedSitePackageDescriptor,
+} from '@vibe-cms/selected-site-package/contract'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
+import { z } from 'zod'
 
 import { createBackgroundTasks, type TaskDeferrer } from './background-tasks'
 import type { DbClient } from './db'
@@ -61,6 +68,17 @@ export function createApp({
   const storage = privateStorage ?? createPrivateStorage(env)
   const auth = createAuthModule({ db: prisma, emailDelivery, env })
   const cmsRepository = createCmsRepository(prisma)
+  const cmsValidation = {
+    pageDraftSchema: selectedPageDraftSchema,
+    blockDefinitions: selectedBlockDefinitions,
+  }
+  const selectedSnapshotSchema = selectedPublicationSnapshotSchema.extend({
+    sitePackage: z.object({
+      id: z.literal(selectedSitePackageDescriptor.id),
+      version: z.literal(selectedSitePackageDescriptor.version),
+      schemaVersion: z.literal(selectedSitePackageDescriptor.schemaVersion),
+    }).strict(),
+  })
   const publicationRepository = createPublicationRepository(prisma)
   const publicationArtifact = new PublicationArtifactService(publicationRepository, storage.storage)
   const publicationMediaCopy = new PublicationMediaCopyInputService(publicationRepository, storage.storage)
@@ -123,8 +141,11 @@ export function createApp({
       redirects: redirects.map((redirect) => ({ source: redirect.sourcePath, destination: redirect.destinationPath })),
       media: mediaAssets.map(toPublicMediaDescriptor),
     }
+  }, { now: () => new Date() }, {
+    sitePackage: selectedSitePackageDescriptor,
+    snapshotSchema: selectedSnapshotSchema,
   })
-  const cmsService = new CmsService({ repository: cmsRepository, snapshot: cmsSnapshot })
+  const cmsService = new CmsService({ repository: cmsRepository, snapshot: cmsSnapshot, validation: cmsValidation })
   const cmsPreview = new CmsPreviewService({
     store: createCmsPreviewStore(prisma),
     origin: (env.WEBAPP_ORIGIN ?? env.CORS_ORIGINS[0] ?? 'https://localhost').replace(/^http:/, 'https:'),

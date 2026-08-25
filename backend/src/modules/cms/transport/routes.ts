@@ -1,6 +1,7 @@
-import { collectionEntryCreateSchema, collectionEntryDraftSchema, collectionTypeSchema, pageDraftSchema, previewMediaResponseSchema } from '@web-app-demo/contracts'
+import { collectionEntryCreateSchema, collectionEntryDraftSchema, collectionTypeSchema, previewMediaResponseSchema } from '@web-app-demo/contracts'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
+import { selectedPageDraftSchema } from '@vibe-cms/selected-site-package/contract'
 import { z } from 'zod'
 
 import { validationErrorHook } from '../../../http/errors'
@@ -95,7 +96,7 @@ export function createCmsRoutes({
 
   routes.patch('/pages/:pageId', async (c) => {
     const pageId = pageIdParams.parse(c.req.param())
-    const body = pageDraftSchema.parse(await c.req.json())
+    const body = selectedPageDraftSchema.parse(await c.req.json())
     const result = await executeCms(() => service.savePage(c.var.user, pageId.pageId, body))
     return c.json(result, 200)
   })

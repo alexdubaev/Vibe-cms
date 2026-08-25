@@ -3,10 +3,8 @@ import {
   collectionEntryCreateSchema,
   collectionEntryDraftSchema,
   type CollectionEntryCreateInput,
-  pageDraftSchema,
   type CollectionEntryDraft,
   type CmsCapability,
-  type PageDraft,
 } from '@web-app-demo/contracts'
 import { z } from 'zod'
 
@@ -29,6 +27,21 @@ export type CmsActor = {
   id: string
   role: 'user' | 'editor' | 'owner'
   displayName?: string | null
+}
+
+export type CmsPageDraft = {
+  title: string
+  path: string
+  navigationLabel?: string
+  seo?: unknown
+  blocks: unknown[]
+  expectedRevision: number
+}
+
+/** The selected site package supplies these parsers at the composition root. */
+export type CmsValidation = {
+  pageDraftSchema: { parse(input: unknown): CmsPageDraft }
+  blockDefinitions: readonly { type: string }[]
 }
 
 export type PageEditorDto = {
@@ -182,6 +195,7 @@ type ServiceDependencies = {
     | 'getPageRevision'
   > & Partial<Pick<CmsRepository, 'retryPublication'>>
   snapshot: Pick<CmsSnapshotService, 'createCandidate'>
+  validation: CmsValidation
   clock?: { now(): Date }
 }
 
@@ -334,9 +348,9 @@ export class CmsService {
     return approvals.map(toPendingApprovalDto)
   }
 
-  async savePage(actor: CmsActor, pageId: string, input: PageDraft): Promise<PageEditorDto> {
+  async savePage(actor: CmsActor, pageId: string, input: unknown): Promise<PageEditorDto> {
     this.requireCapability(actor, 'cms:edit')
-    const pageDraft = pageDraftSchema.parse(input)
+    const pageDraft = this.parsePageDraft(input)
     const page = await this.requirePage(pageId)
     const result = await this.dependencies.repository.updatePageDraft(pageId, pageDraft.expectedRevision, {
       title: pageDraft.title,
@@ -504,7 +518,7 @@ export class CmsService {
       throw new CmsRepositoryError('Page revision was not found', 'NOT_FOUND')
     }
     const page = await this.requirePage(revision.pageId)
-    const source = pageDraftSchema.parse({
+    const source = this.parsePageDraft({
       ...(revision.sourcePayload as Record<string, unknown>),
       expectedRevision: page.draftRevision,
     })
@@ -521,6 +535,14 @@ export class CmsService {
     const approval = await this.dependencies.repository.getApproval(approvalId)
     if (!approval) throw new CmsRepositoryError('Approval was not found', 'NOT_FOUND')
     return approval
+  }
+
+  private parsePageDraft(input: unknown): CmsPageDraft {
+    try {
+      return this.dependencies.validation.pageDraftSchema.parse(input)
+    } catch (cause) {
+      throw new CmsRepositoryError('CMS page draft does not match the selected site package', 'CMS_VALIDATION', { cause })
+    }
   }
 
   private requireCapability(actor: CmsActor, capability: CmsCapability) {

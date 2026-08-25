@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 
 import { createPrisma, type DbClient } from '../../db'
 import { CmsService } from './application/cms-service'
+import { selectedBlockDefinitions, selectedPageDraftSchema } from '@vibe-cms/selected-site-package/contract'
 import { createCmsRepository } from './infrastructure/cms-repository'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -44,6 +45,7 @@ maybeDescribe('CMS application against PostgreSQL', () => {
     service = new CmsService({
       repository: createCmsRepository(db),
       snapshot: { createCandidate: async () => ({ snapshot, revisionMap: { page: 1 } }) },
+      validation: { pageDraftSchema: selectedPageDraftSchema, blockDefinitions: selectedBlockDefinitions },
     })
   })
 
