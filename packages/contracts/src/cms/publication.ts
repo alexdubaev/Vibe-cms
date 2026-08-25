@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { contentBlockSchema, contentPathSchema, seoSchema } from './content'
+import { contentBlockSchema, contentPathSchema, seoSchema, type ContentBlock } from './content'
 import { mediaMimeTypeSchema, publicMediaDescriptorSchema } from './media'
 
 const publicSettingsSchema = z
@@ -111,7 +111,9 @@ export const cmsConflictSchema = z
   })
   .strict()
 
-export type PublicationSnapshot = z.infer<typeof publicationSnapshotSchema>
+export type PublicationSnapshot = Omit<z.output<typeof publicationSnapshotSchema>, 'pages'> & {
+  pages: Array<Omit<z.output<typeof publicationSnapshotSchema>['pages'][number], 'blocks'> & { blocks: ContentBlock[] }>
+}
 export type PublicationMediaCopy = z.infer<typeof publicationMediaCopySchema>
 export type PublicationBuildInput = z.infer<typeof publicationBuildInputSchema>
 export type CmsConflict = z.infer<typeof cmsConflictSchema>

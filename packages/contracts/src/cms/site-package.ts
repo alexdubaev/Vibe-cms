@@ -63,6 +63,13 @@ export function createContentBlockSchema(definitions: readonly CmsBlockContractD
       context.addIssue({ code: 'custom', path: ['type'], message: 'Unknown CMS block type' })
       return z.NEVER
     }
-    return { ...block, data: definition.dataSchema.parse(block.data) }
+    const parsedData = definition.dataSchema.safeParse(block.data)
+    if (!parsedData.success) {
+      for (const issue of parsedData.error.issues) {
+        context.addIssue({ code: 'custom', path: ['data', ...issue.path], message: issue.message })
+      }
+      return z.NEVER
+    }
+    return { ...block, data: parsedData.data }
   })
 }

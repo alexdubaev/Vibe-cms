@@ -22,6 +22,9 @@ import {
   createContentBlockSchema,
   sitePackageDescriptorSchema,
   type CmsBlockContractDefinition,
+  type ContentBlock,
+  type PageDraft,
+  type PublicationSnapshot,
 } from './cms'
 
 describe('CMS contracts', () => {
@@ -58,10 +61,39 @@ describe('CMS contracts', () => {
     const schema = createContentBlockSchema([...coreBlockContractDefinitions, calculator])
     expect(schema.parse({ id: 'calculator-1', type: 'estimateCalculator', data: calculator.defaultData }).type)
       .toBe('estimateCalculator')
+    expect(schema.safeParse({ id: 'calculator-1', type: 'estimateCalculator', data: { title: '', unitPrice: -1 } }).success)
+      .toBe(false)
     expect(() => createContentBlockSchema([calculator, calculator])).toThrow('Duplicate CMS block type')
     expect(() => createContentBlockSchema([{ ...calculator, defaultData: { unitPrice: -1 } }])).toThrow(
       'Default data is invalid',
     )
+  })
+
+  test('returns a failed safeParse for invalid registered core block data', () => {
+    expect(contentBlockSchema.safeParse({ id: 'hero-1', type: 'hero', data: { title: 'Заголовок' } }).success).toBe(false)
+  })
+
+  test('preserves legacy core block, page, and publication type relationships', () => {
+    const block: ContentBlock = {
+      id: 'hero-1',
+      type: 'hero',
+      data: { title: 'Заголовок', text: 'Описание', primaryAction: { label: 'Подробнее', href: '/about' } },
+    }
+    const page: PageDraft = { title: 'Главная', path: '/', blocks: [block], expectedRevision: 0 }
+    const snapshot: PublicationSnapshot = {
+      revision: 1,
+      generatedAt: '2026-08-24T00:00:00.000Z',
+      settings: { companyName: 'Demo' },
+      pages: [{ id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10', title: 'Главная', path: '/', blocks: [block] }],
+      collections: [],
+      menus: [],
+      redirects: [],
+      media: [],
+    }
+
+    const pageBlock: ContentBlock = page.blocks[0]
+    const snapshotBlock: ContentBlock = snapshot.pages[0].blocks[0]
+    expect(pageBlock.type === 'hero' && snapshotBlock.type === 'hero' && snapshotBlock.data.title).toBe('Заголовок')
   })
 
   test('keeps preview responses safe for a private server-to-server boundary', () => {

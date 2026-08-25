@@ -318,8 +318,14 @@ export const collectionEntryCreateSchema = collectionEntryDraftSchema.omit({ exp
 
 export type ContentPath = z.output<typeof contentPathSchema>
 export type StructuredTextDocument = z.infer<typeof structuredTextDocumentSchema>
-export type ContentBlock = z.infer<typeof contentBlockSchema>
-export type PageDraft = z.infer<typeof pageDraftSchema>
+export type ContentBlock = {
+  [Type in keyof typeof blockDataByType]: {
+    id: string
+    type: Type
+    data: z.output<(typeof blockDataByType)[Type]>
+  }
+}[keyof typeof blockDataByType]
+export type PageDraft = Omit<z.output<typeof pageDraftSchema>, 'blocks'> & { blocks: ContentBlock[] }
 export type CollectionEntryDraft = z.infer<typeof collectionEntryDraftSchema>
 export type CollectionEntryCreateInput = z.infer<typeof collectionEntryCreateSchema>
 
