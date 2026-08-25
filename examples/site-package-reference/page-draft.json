@@ -1,0 +1,38 @@
+{
+  "title": "Калькулятор стоимости",
+  "path": "/calculator",
+  "navigationLabel": "Калькулятор",
+  "seo": {
+    "title": "Расчёт стоимости работ",
+    "description": "Рассчитайте предварительную стоимость работ по площади помещения.",
+    "canonicalMode": "self",
+    "noIndex": true
+  },
+  "blocks": [
+    {
+      "id": "calculator-hero",
+      "type": "hero",
+      "data": {
+        "eyebrow": "Демо Site Package",
+        "title": "Статичный сайт, живой расчёт",
+        "text": "Контент и параметры редактируются в CMS, а формула остаётся в коде пакета.",
+        "primaryAction": {
+          "label": "Перейти к расчёту",
+          "href": "#estimate"
+        }
+      }
+    },
+    {
+      "id": "estimate",
+      "type": "estimateCalculator",
+      "data": {
+        "title": "Рассчитайте стоимость",
+        "description": "Укажите площадь помещения для предварительного расчёта.",
+        "unitPrice": 1800,
+        "minimumPrice": 15000,
+        "minimumArea": 5,
+        "maximumArea": 300
+      }
+    }
+  ]
+}
