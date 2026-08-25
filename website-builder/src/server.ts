@@ -1,3 +1,5 @@
+import { selectedSitePackageDescriptor } from '@vibe-cms/selected-site-package/contract'
+
 import { createBuilderBackendClient } from './backend-client'
 import { createAstroSiteRunner, createSnapshotDownloader } from './build-site'
 import { createBuilderHttpHandler, createBuilderWorker } from './index'
@@ -39,6 +41,7 @@ const worker = createBuilderWorker({
     hmacSecret: requiredEnvironment.CMS_BUILDER_HMAC_SECRET,
   }),
   buildSite: createAstroSiteRunner({
+    descriptor: selectedSitePackageDescriptor,
     publicWebsiteUrl: requiredEnvironment.CMS_WEBSITE_PUBLIC_ORIGIN,
     websiteDirectory: process.env.CMS_WEBSITE_DIRECTORY ?? '/app/website',
   }),

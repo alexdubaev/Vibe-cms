@@ -152,6 +152,7 @@
       "name": "@web-app-demo/website-builder",
       "version": "0.0.0",
       "dependencies": {
+        "@vibe-cms/selected-site-package": "workspace:*",
         "@web-app-demo/contracts": "workspace:*",
         "zod": "^4.1.13",
       },

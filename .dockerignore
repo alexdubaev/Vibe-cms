@@ -5,7 +5,10 @@ dist
 build
 coverage
 .git
+.playwright-cli
+.ux-audit
 .scratch
+output
 .env
 .env.*
 infra
@@ -18,5 +21,7 @@ infra
 **/*.tfvars.json
 **/*.backend.hcl
 webapp/e2e/.artifacts
+webapp/.21st
+packages/.selected-site-package-*
 mobile/.maestro/reports
 *.log

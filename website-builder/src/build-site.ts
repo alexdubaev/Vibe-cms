@@ -1,8 +1,22 @@
-import { publicationSnapshotSchema, type PublicationSnapshot } from '@web-app-demo/contracts'
+import {
+  sitePackageDescriptorSchema,
+  type CmsSitePackageDescriptor,
+} from '@web-app-demo/contracts'
+import {
+  selectedPublicationSnapshotSchema,
+  selectedSitePackageDescriptor,
+} from '@vibe-cms/selected-site-package/contract'
 import type { FetchLike } from './backend-client'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { z } from 'zod'
+
+const builderPublicationSnapshotSchema = selectedPublicationSnapshotSchema.extend({
+  sitePackage: sitePackageDescriptorSchema,
+})
+
+export type BuilderPublicationSnapshot = z.output<typeof builderPublicationSnapshotSchema>
 
 export type SnapshotArtifact = {
   url: string
@@ -10,20 +24,20 @@ export type SnapshotArtifact = {
   etag: string
 }
 
-export type SnapshotDownloader = (artifact: SnapshotArtifact) => Promise<PublicationSnapshot>
+export type SnapshotDownloader = (artifact: SnapshotArtifact) => Promise<BuilderPublicationSnapshot>
 
 export type SiteBuildResult = {
   outputDirectory: string
   marker: string
   publicationRevision: number
-  redirects?: PublicationSnapshot['redirects']
+  redirects?: BuilderPublicationSnapshot['redirects']
 }
 
 export type SiteBuildRunner = (input: {
   buildId: string
   publicationRevision: number
   slot: 'blue' | 'green'
-  snapshot: PublicationSnapshot
+  snapshot: BuilderPublicationSnapshot
 }) => Promise<SiteBuildResult>
 
 export type BuildProcessRunner = (input: {
@@ -55,7 +69,23 @@ export function createSnapshotDownloader(options: {
     } catch {
       throw new Error('Snapshot artifact is not valid JSON')
     }
-    return publicationSnapshotSchema.parse(decoded)
+    return builderPublicationSnapshotSchema.parse(decoded)
+  }
+}
+
+export function assertSelectedSitePackage(
+  snapshot: Pick<BuilderPublicationSnapshot, 'sitePackage'>,
+  descriptor: CmsSitePackageDescriptor = selectedSitePackageDescriptor,
+): void {
+  const selected = snapshot.sitePackage
+  if (
+    selected.id !== descriptor.id
+    || selected.version !== descriptor.version
+    || selected.schemaVersion !== descriptor.schemaVersion
+  ) {
+    throw new Error(
+      `Snapshot Site Package ${selected.id}@${selected.version} does not match builder ${descriptor.id}@${descriptor.version}`,
+    )
   }
 }
 
@@ -65,6 +95,7 @@ export function publicationMarker(revision: number): string {
 
 /** Runs Astro against one immutable snapshot in an isolated temporary output directory. */
 export function createAstroSiteRunner(options: {
+  descriptor?: CmsSitePackageDescriptor
   websiteDirectory: string
   publicWebsiteUrl: string
   tempDirectory?: string
@@ -72,6 +103,7 @@ export function createAstroSiteRunner(options: {
 }): SiteBuildRunner {
   const run = options.run ?? runProcess
   return async ({ buildId, publicationRevision, slot, snapshot }) => {
+    assertSelectedSitePackage(snapshot, options.descriptor)
     const workDirectory = await mkdtemp(join(options.tempDirectory ?? tmpdir(), 'vibe-site-build-'))
     const snapshotFile = join(workDirectory, 'snapshot.json')
     const outputDirectory = join(workDirectory, 'dist')

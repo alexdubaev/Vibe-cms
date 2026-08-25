@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@vibe-cms/selected-site-package": "workspace:*",
     "@web-app-demo/contracts": "workspace:*",
     "zod": "^4.1.13"
   },

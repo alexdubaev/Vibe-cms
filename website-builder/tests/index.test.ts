@@ -1,19 +1,20 @@
 import { describe, expect, test } from 'bun:test'
 
 import { createBuilderWorker } from '../src'
-import type { PublicationSnapshot } from '@web-app-demo/contracts'
+import type { BuilderPublicationSnapshot } from '../src/build-site'
 
 const buildId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10'
 const snapshot = {
   revision: 4,
   generatedAt: '2026-08-24T10:00:00.000Z',
+  sitePackage: { id: 'vibe-core', version: '1.0.0', schemaVersion: 1 },
   settings: { companyName: 'Vibe' },
   pages: [{ id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a11', title: 'Home', path: '/', blocks: [{ type: 'hero', data: { title: 'Hello', body: 'World' } }] }],
   collections: [],
   menus: [],
   redirects: [],
   media: [],
-} as unknown as PublicationSnapshot
+} as unknown as BuilderPublicationSnapshot
 
 describe('builder worker', () => {
   test('processes a build sequentially and sends a verified terminal result', async () => {

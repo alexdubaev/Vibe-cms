@@ -33,36 +33,15 @@ COPY website-builder/package.json website-builder/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY --from=selected-site-package /app/packages/selected-site-package packages/selected-site-package
 
-RUN bun install --frozen-lockfile --filter @web-app-demo/backend
+RUN bun install --frozen-lockfile --ignore-scripts --network-concurrency=4 --filter @web-app-demo/webapp
 
 COPY packages/contracts packages/contracts
-COPY backend backend
+COPY webapp webapp
 
-WORKDIR /app/backend
+RUN bun run --cwd webapp build
 
-RUN DATABASE_URL="postgresql://superuser:superpassword@localhost:5432/web_app_demo?schema=public" bun run prisma:generate
+FROM nginx:1.29-alpine AS runtime
 
-FROM build AS production-dependencies
+COPY --from=build /app/webapp/dist /usr/share/nginx/html
 
-WORKDIR /app
-
-RUN rm -rf /app/node_modules
-RUN bun install --frozen-lockfile --production --filter @web-app-demo/backend
-
-FROM oven/bun:1.3.14 AS runtime
-
-WORKDIR /app
-
-COPY --from=build /app/package.json /app/bun.lock /app/bunfig.toml ./
-COPY --from=production-dependencies /app/node_modules ./node_modules
-COPY --from=build /app/packages/contracts ./packages/contracts
-COPY --from=build /app/packages/selected-site-package ./packages/selected-site-package
-COPY --from=build /app/backend ./backend
-
-WORKDIR /app/backend
-
-ENV NODE_ENV=production
-
-USER bun
-
-CMD ["bun", "src/index.ts"]
+EXPOSE 80
