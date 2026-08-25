@@ -274,7 +274,7 @@ function MediaUploadControl({
       </Button>
       <Input
         accept=".avif,.jpg,.jpeg,.mp4,.pdf,.png,.webp,image/avif,image/jpeg,image/png,image/webp,video/mp4,application/pdf"
-        className="sr-only"
+        className="sr-only !h-px !w-px !p-0"
         id="cms-media-upload"
         onChange={(event) => {
           const file = event.target.files?.[0]

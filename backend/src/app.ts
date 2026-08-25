@@ -152,6 +152,7 @@ export function createApp({
   const media = createMediaModule({
     backgroundTasks,
     db: prisma,
+    requireAuth: auth.requireAuth,
     requireCmsAccess: auth.requireCmsAccess,
     storage: storage.storage,
   })

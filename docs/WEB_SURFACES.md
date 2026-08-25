@@ -74,11 +74,13 @@ becoming live after a newer one, while the public marker proves what users actua
 
 The outbox coordinates durable requests and retries; it does not add another queue service. The
 actual build executor depends on the hosting path recorded in `CHECKLIST.md`. DigitalOcean can run
-the Git-backed build after a deployment trigger. The baseline Yandex Object Storage path has no
-automatic builder; keep automatic rebuild `absent` until a dedicated authenticated build/upload
-component is implemented, or choose manual release/runtime rendering for the recorded freshness
-need. Provider details live in [BACKGROUND_JOBS.md](BACKGROUND_JOBS.md), under "Rebuilding a static
-site".
+the Git-backed build after a deployment trigger. The Yandex path now has a dedicated authenticated
+`website-builder` build/upload component with inactive-slot promotion and marker verification. Its
+Terraform foundation now declares the opt-in queue/DLQ, dedicated runtime identities, Lockbox
+bindings, builder/preview containers, and preview gateway; a real `infra:plan -- yandex`, domain
+setup, and control-plane acceptance remain required before automatic rebuild is considered
+production-ready. Provider details live in
+[BACKGROUND_JOBS.md](BACKGROUND_JOBS.md), under "Rebuilding a static site".
 
 Keep SSG plus rebuild as the default. Request-time SSR, server islands, or client-only fetching of
 SEO-critical product data is an exception, not a shortcut. Use an exception only when the product

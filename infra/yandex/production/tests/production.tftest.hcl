@@ -330,3 +330,121 @@ run "extra_secret_is_granted_exactly" {
     error_message = "Every externally bound Lockbox secret needs an exact runtime grant."
   }
 }
+
+override_resource {
+  target          = yandex_iam_service_account.queue_sender
+  override_during = plan
+  values          = { id = "cms-queue-sender-id" }
+}
+
+override_resource {
+  target          = yandex_iam_service_account.queue_trigger
+  override_during = plan
+  values          = { id = "cms-queue-trigger-id" }
+}
+
+override_resource {
+  target          = yandex_iam_service_account.builder
+  override_during = plan
+  values          = { id = "cms-builder-id" }
+}
+
+override_resource {
+  target          = yandex_iam_service_account.preview
+  override_during = plan
+  values          = { id = "cms-preview-id" }
+}
+
+override_resource {
+  target          = yandex_iam_service_account.promotion
+  override_during = plan
+  values          = { id = "cms-promotion-id" }
+}
+
+override_resource {
+  target          = yandex_iam_service_account.builder_publisher
+  override_during = plan
+  values          = { id = "cms-builder-publisher-id" }
+}
+
+override_resource {
+  target          = yandex_iam_service_account_static_access_key.queue_sender
+  override_during = plan
+  values = {
+    access_key = "cms-queue-access-key"
+    secret_key = "cms-queue-secret-key"
+  }
+}
+
+override_resource {
+  target          = yandex_iam_service_account_static_access_key.builder_publisher
+  override_during = plan
+  values = {
+    access_key                    = "cms-builder-publisher-access-key"
+    output_to_lockbox_version_id = "cms-builder-storage-version"
+  }
+}
+
+override_resource {
+  target          = yandex_message_queue.publication
+  override_during = plan
+  values = {
+    id  = "cms-publication-queue-id"
+    arn = "arn:yandex:ymq:ru-central1:cms-publication-queue-id"
+  }
+}
+
+override_resource {
+  target          = yandex_message_queue.publication_dlq
+  override_during = plan
+  values = {
+    id  = "cms-publication-dlq-id"
+    arn = "arn:yandex:ymq:ru-central1:cms-publication-dlq-id"
+  }
+}
+
+run "cms_publication_is_opt_in_and_slot_scoped" {
+  command = plan
+
+  variables {
+    cms_publication_enabled       = true
+    builder_image_name            = "website-builder"
+    preview_image_name            = "website-preview"
+    preview_domain                = "preview.example.com"
+    preview_certificate_id        = "certificate-preview"
+    cms_builder_hmac_secret       = "builder-hmac-secret-with-at-least-32-characters"
+    cms_website_promotion_token   = "promotion-token-with-at-least-32-characters"
+    cms_website_selector_url      = "https://selector.example.com/switch"
+    cms_website_purge_url         = "https://selector.example.com/purge"
+  }
+
+  assert {
+    condition = (
+      length(yandex_iam_service_account.builder) == 1 &&
+      length(yandex_iam_service_account.preview) == 1 &&
+      length(yandex_iam_service_account.promotion) == 1 &&
+      yandex_iam_service_account.builder[0].id != yandex_iam_service_account.runtime.id &&
+      yandex_iam_service_account.preview[0].id != yandex_iam_service_account.runtime.id
+    )
+    error_message = "CMS publication must use dedicated builder, preview, and promotion identities."
+  }
+
+  assert {
+    condition = (
+      length(yandex_message_queue.publication) == 1 &&
+      length(yandex_message_queue.publication_dlq) == 1 &&
+      jsondecode(yandex_message_queue.publication[0].redrive_policy).maxReceiveCount == 5 &&
+      jsondecode(yandex_message_queue.publication[0].redrive_policy).deadLetterTargetArn == yandex_message_queue.publication_dlq[0].arn
+    )
+    error_message = "CMS publication must have a five-attempt redrive policy targeting its dedicated DLQ."
+  }
+
+  assert {
+    condition = (
+      strcontains(yandex_storage_bucket_policy.website_publisher.policy, "blue/*") &&
+      strcontains(yandex_storage_bucket_policy.website_publisher.policy, "green/*") &&
+      strcontains(yandex_storage_bucket_policy.website_publisher.policy, "cms-builder-publisher-access-key")
+    )
+    error_message = "The CMS builder must be limited to the blue/green website object prefixes."
+  }
+}

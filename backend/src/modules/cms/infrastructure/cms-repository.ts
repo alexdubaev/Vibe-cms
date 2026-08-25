@@ -68,6 +68,33 @@ export function createCmsRepository(db: DbClient): CmsRepository {
       })
     },
 
+    async retryPublication() {
+      return db.$transaction(async (tx) => {
+        const controller = await tx.cmsPublicationController.findUnique({ where: { key: DEFAULT_KEY } })
+        if (!controller || controller.desiredRevision === null || controller.activeBuildId !== null || controller.status !== 'failed') {
+          return false
+        }
+        const updated = await tx.cmsPublicationController.updateMany({
+          where: {
+            key: DEFAULT_KEY,
+            desiredRevision: controller.desiredRevision,
+            activeBuildId: null,
+            status: 'failed',
+          },
+          data: { status: 'queued', lastError: null, heartbeatAt: null },
+        })
+        if (updated.count !== 1) return false
+        await tx.taskOutbox.create({
+          data: {
+            type: 'website:rebuild:wakeup',
+            dedupeKey: `website:rebuild:retry:${controller.desiredRevision}:${Date.now()}`,
+            payload: { revision: controller.desiredRevision },
+          },
+        })
+        return true
+      })
+    },
+
     async createPage(input) {
       const path = normalizeCmsPath(input.path)
       try {

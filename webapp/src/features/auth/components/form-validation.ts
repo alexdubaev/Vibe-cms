@@ -7,9 +7,25 @@ export function toFieldErrors(issues: z.ZodIssue[]): FieldErrors {
     const field = issue.path[0]
     if (!isFieldName(field)) return errors
 
-    errors[field] = [...(errors[field] ?? []), { message: issue.message }]
+    errors[field] = [
+      ...(errors[field] ?? []),
+      { message: localizeAuthValidationMessage(issue.message) },
+    ]
     return errors
   }, {})
+}
+
+function localizeAuthValidationMessage(message: string) {
+  switch (message) {
+    case 'Invalid email address':
+      return 'Введите корректный адрес электронной почты.'
+    case 'Password must be at least 8 characters':
+      return 'Пароль должен содержать не менее 8 символов.'
+    case 'Password must be at most 128 characters':
+      return 'Пароль должен содержать не более 128 символов.'
+    default:
+      return message
+  }
 }
 
 export function clearFieldError(

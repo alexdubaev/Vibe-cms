@@ -122,6 +122,41 @@ describe('CMS HTTP routes', () => {
     expect(await policy.json()).toEqual({ editorCanPublish: true })
   })
 
+  test('retries a failed publication without accepting a revision or snapshot', async () => {
+    const auth = createMiddleware<AuthHttpEnv>(async (c, next) => {
+      c.set('user', {
+        id: 'owner',
+        role: 'owner',
+        email: 'owner@example.com',
+        displayName: null,
+        createdAt: new Date().toISOString(),
+        sessionId: 'session',
+      })
+      await next()
+    })
+    let calls = 0
+    const service = {
+      retryPublication: async () => {
+        calls += 1
+        return { retried: true as const }
+      },
+    } as unknown as CmsService
+    const app = new Hono<AuthHttpEnv>()
+    app.route('/api/cms', createCmsRoutes({
+      requireAuth: auth,
+      requireCmsAccess: createRequireAnyRole('editor', 'owner'),
+      service,
+      preview: {} as CmsPreviewService,
+    }))
+    app.onError(handleError)
+
+    const response = await app.request('/api/cms/publication/retry', { method: 'POST' })
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({ retried: true })
+    expect(calls).toBe(1)
+  })
+
   test('serves a draft page and authorized media URL only with a preview session', async () => {
     const service = {
       getPageForEditor: async () => ({

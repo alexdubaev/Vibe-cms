@@ -17,6 +17,9 @@ data-residency requirement. Common safety and release rules live in
 - a separate private media bucket and bucket-scoped runtime credentials stored in Lockbox;
 - separate migration, runtime, gateway, trigger, publisher, and storage-management service
   accounts with narrow roles;
+- when `cms_publication_enabled = true`, a CMS publication queue and DLQ, dedicated builder and
+  preview Serverless Containers, a protected preview API Gateway, and separate Lockbox bindings
+  for builder HMAC, queue, website-slot storage, and promotion credentials;
 - an optional Postbox sender and optional Cloud CDN resources;
 - a private versioned Object Storage bucket and scoped key for Terraform state.
 
@@ -83,6 +86,31 @@ email_from     = "Product <hello@example.com>"
 Terraform creates the sender service-account key directly into Lockbox; it is not returned to the
 terminal or written to a runtime env file.
 
+### CMS publication and preview
+
+The CMS path is deliberately opt-in until production domains and the external HTTPS selector and
+purge control plane are approved. Enable it only after supplying a preview domain/certificate,
+HTTPS selector and purge URLs, and two uncommitted 32+ character secrets:
+
+```hcl
+cms_publication_enabled = true
+preview_domain           = "preview.example.com"
+preview_certificate_id   = "..."
+cms_website_selector_url = "https://selector.example.com/switch"
+cms_website_purge_url    = "https://purge.example.com/purge"
+```
+
+```bash
+export TF_VAR_cms_builder_hmac_secret='<32+ character shared backend/builder secret>'
+export TF_VAR_cms_website_promotion_token='<32+ character selector/purge bearer token>'
+```
+
+The current builder contract uses one versioned website bucket with `blue/` and `green/` object
+prefixes. The builder key is scoped to those prefixes; the inactive slot is deleted, rebuilt,
+marker-checked, and promoted through the HTTPS selector before the purge. Terraform does not own
+the live slot decision. The preview container receives only `CMS_BACKEND_ORIGIN`; it has no
+database, media, queue, or builder credentials.
+
 ## Commands
 
 ```bash
@@ -108,8 +136,9 @@ user-facing domains redirect to HTTPS. Each policy also lets the bucket-scoped I
 configuration while explicitly denying bucket deletion and omitting object-version deletion. The
 IaC key cannot access the separate Terraform-state bucket in steady state.
 
-The release refuses foundation drift, builds and pushes one Linux AMD64 image from a `git archive`
-of the captured commit, and applies it to the independent migration root. The script invokes the
+The release refuses foundation drift, builds and pushes one Linux AMD64 backend image from a `git archive`
+of the captured commit, and, when CMS publication is enabled, separate immutable builder and
+preview images from the same archive. It applies the backend image to the independent migration root. The script invokes the
 authenticated task endpoint and requires HTTP 200 with `X-Task-Exit-Code: 0`; only then does it
 apply the independent API/jobs runtime root. Foundation or runtime configuration cannot change as
 a side effect of preparing the migration revision.
@@ -129,7 +158,8 @@ reported as the new release.
 
 The static publisher key is a sensitive Terraform output consumed in memory by the release
 process. Its exact-key bucket policies cover only the two public static buckets and cannot delete a
-bucket or a noncurrent object version. The API runtime uses a different exact-key policy scoped to
+bucket or a noncurrent object version. The CMS builder uses a separate Lockbox-backed key limited
+to the `blue/` and `green/` website prefixes. The API runtime uses a different exact-key policy scoped to
 ordinary objects in the private media bucket, and its credentials are delivered through Lockbox.
 Runtime access to Lockbox is also granted per referenced secret, including every
 `extra_secret_bindings` entry; the runtime identity is not a folder-wide payload viewer and cannot

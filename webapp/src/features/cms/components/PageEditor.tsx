@@ -13,15 +13,14 @@ import { Typography } from '@/components/typography'
 import type { CmsCollectionEntry, CmsPageEditor } from '../api'
 import { createSerializedAutosave, type AutosaveSnapshot } from '../editor'
 import { useCmsEntriesQuery, useCmsMediaQuery, useSaveCmsPageMutation } from '../queries'
+import { StructuredTextEditor } from './StructuredTextEditor'
 import {
   addBenefitItem,
   createEditorBlock,
   duplicateEditorBlock,
   moveEditorBlock,
-  plainTextToStructuredText,
   removeEditorBlock,
   removeBenefitItem,
-  structuredTextToPlainText,
   toggleMediaSelection,
   updateBenefitItem,
   type BenefitIcon,
@@ -372,19 +371,11 @@ function BlockFields({
           </Field>
           <div className="grid gap-2">
             <Typography as="span" variant="label">Текст блока</Typography>
-            <Textarea
-              defaultValue={structuredTextToPlainText(data.content)}
+            <StructuredTextEditor
               id={`cms-block-${block.id}-content`}
-              onChange={(event) => {
-                const content = plainTextToStructuredText(event.target.value)
-                if (content) onChange({ ...data, content })
-              }}
-              placeholder="Каждый абзац — с новой строки"
-              rows={6}
+              onChange={(content) => onChange({ ...data, content })}
+              value={data.content}
             />
-            <Typography tone="muted" variant="caption">
-              Простое форматирование вводится абзацами. Пустые строки не сохраняются.
-            </Typography>
           </div>
           <div className="grid gap-2">
             <Typography as="span" variant="label">Положение изображения</Typography>

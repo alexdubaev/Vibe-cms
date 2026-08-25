@@ -1,0 +1,24 @@
+---
+interface Props {
+  nodes: unknown
+}
+
+const { nodes } = Astro.props
+const children = Array.isArray(nodes) ? nodes : []
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+const marks = (value: unknown) => Array.isArray(value) ? value.filter((mark): mark is string => typeof mark === 'string') : []
+---
+
+{children.map((child) => {
+  const node = asRecord(child)
+  if (node.type === 'link' && typeof node.label === 'string' && typeof node.href === 'string') {
+    return <a class="underline underline-offset-4" href={node.href}>{node.label}</a>
+  }
+  if (node.type !== 'text' || typeof node.text !== 'string') return null
+  const nodeMarks = marks(node.marks)
+  if (nodeMarks.includes('bold') && nodeMarks.includes('italic')) return <strong><em>{node.text}</em></strong>
+  if (nodeMarks.includes('bold')) return <strong>{node.text}</strong>
+  if (nodeMarks.includes('italic')) return <em>{node.text}</em>
+  return node.text
+})}

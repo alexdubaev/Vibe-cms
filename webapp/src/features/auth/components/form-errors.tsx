@@ -2,7 +2,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 export function FormAlert({
   message,
-  title = 'Authentication failed',
+  title = 'Не удалось выполнить действие',
 }: {
   message: string | null
   title?: string

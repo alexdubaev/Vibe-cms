@@ -1806,6 +1806,8 @@ function planExistingReleaseRoots(context, options) {
   if (runtimeOutputs.runtime_image_digest) {
     const root = writeManagedRootInputs(context, 'runtime', {
       runtime_image_digest: runtimeOutputs.runtime_image_digest,
+      builder_image_digest: runtimeOutputs.builder_image_digest ?? null,
+      preview_image_digest: runtimeOutputs.preview_image_digest ?? null,
     })
     terraformPlan({
       root,
@@ -2226,7 +2228,9 @@ async function buildAndPushImage(
   repository,
   commit,
   assertLeaseHeld,
+  dockerfile = 'backend/Dockerfile',
 ) {
+  if (!repository) throw new Error(`Terraform did not return an image repository for ${dockerfile}`)
   if (provider === 'digitalocean') {
     runDigitalOceanCli(['registry', 'login', '--expiry-seconds', '1200'])
   } else {
@@ -2243,7 +2247,7 @@ async function buildAndPushImage(
       '--platform',
       'linux/amd64',
       '--file',
-      'backend/Dockerfile',
+      dockerfile,
       '--tag',
       tag,
       '-',
@@ -2570,6 +2574,25 @@ async function release(provider, options) {
     commit,
     assertLeaseHeld,
   )
+  const cmsImageDigests =
+    provider === 'yandex' && context.outputs.cms_publication_enabled
+      ? {
+          builder: await buildAndPushImage(
+            provider,
+            context.outputs.builder_image_repository,
+            commit,
+            assertLeaseHeld,
+            'website-builder/Dockerfile',
+          ),
+          preview: await buildAndPushImage(
+            provider,
+            context.outputs.preview_image_repository,
+            commit,
+            assertLeaseHeld,
+            'website/Dockerfile.preview',
+          ),
+        }
+      : { builder: null, preview: null }
   await assertProductionMutationLease(options)
   assertCleanReleaseSource(context.outputs.release_source, provider, commit)
 
@@ -2701,6 +2724,8 @@ async function release(provider, options) {
     async deployRuntime() {
       const root = writeManagedRootInputs(context, 'runtime', {
         runtime_image_digest: digest,
+        builder_image_digest: cmsImageDigests.builder,
+        preview_image_digest: cmsImageDigests.preview,
       })
       terraformPlan({
         root,

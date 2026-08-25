@@ -347,6 +347,46 @@ describe('Terraform configuration helpers', () => {
     expect(yandex).not.toHaveProperty('jwt_secret')
   })
 
+  test('declares isolated CMS publication infrastructure without leaking runtime secrets', () => {
+    const production = readFileSync(
+      resolve(repoRoot, 'infra/yandex/production/cms-publication.tf'),
+      'utf8',
+    )
+    const productionStorage = readFileSync(
+      resolve(repoRoot, 'infra/yandex/production/storage.tf'),
+      'utf8',
+    )
+    const runtime = readFileSync(
+      resolve(repoRoot, 'infra/yandex/runtime/cms-publication.tf'),
+      'utf8',
+    )
+
+    expect(productionStorage).toContain('resource "yandex_storage_bucket" "website"')
+    expect(productionStorage).toContain('prevent_destroy = true')
+    expect(production).toContain('yandex_message_queue.publication')
+    expect(production).toContain('yandex_message_queue.publication_dlq')
+    expect(production).toMatch(/maxReceiveCount\s*=\s*5/)
+    expect(production).toContain('resource "yandex_iam_service_account" "builder"')
+    expect(production).toContain('resource "yandex_iam_service_account" "preview"')
+    expect(production).toContain('resource "yandex_iam_service_account" "promotion"')
+    expect(productionStorage).toContain('blue/')
+    expect(productionStorage).toContain('green/')
+    expect(production).toContain('yandex_lockbox_secret.builder_hmac')
+    expect(production).toContain('yandex_lockbox_secret.builder_storage')
+    expect(production).not.toContain('DATABASE_URL')
+    expect(production).not.toContain('JWT_SECRET')
+
+    expect(runtime).toContain('yandex_serverless_container.builder')
+    expect(runtime).toContain('yandex_serverless_container.preview')
+    expect(runtime).toContain('resource "yandex_function_trigger" "publication"')
+    expect(runtime).toContain('batch_size         = "1"')
+    expect(runtime).toContain('execution_timeout  = "600s"')
+    expect(runtime).toContain('memory             = 2048')
+    expect(runtime).toContain('cores              = 1')
+    expect(runtime).toContain('resource "yandex_api_gateway" "preview"')
+    expect(runtime).not.toContain('var.runtime_secret_bindings')
+  })
+
   test('resumes local-to-remote migration after an interrupted bootstrap', () => {
     expect(
       bootstrapStateMode({ hasStateEnvironment: false, hasLocalState: false }),

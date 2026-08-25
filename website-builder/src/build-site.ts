@@ -16,6 +16,7 @@ export type SiteBuildResult = {
   outputDirectory: string
   marker: string
   publicationRevision: number
+  redirects?: PublicationSnapshot['redirects']
 }
 
 export type SiteBuildRunner = (input: {
@@ -65,6 +66,7 @@ export function publicationMarker(revision: number): string {
 /** Runs Astro against one immutable snapshot in an isolated temporary output directory. */
 export function createAstroSiteRunner(options: {
   websiteDirectory: string
+  publicWebsiteUrl: string
   tempDirectory?: string
   run?: BuildProcessRunner
 }): SiteBuildRunner {
@@ -83,9 +85,10 @@ export function createAstroSiteRunner(options: {
         CMS_PUBLICATION_REVISION: String(publicationRevision),
         CMS_PUBLICATION_SLOT: slot,
         CMS_BUILD_ID: buildId,
+        PUBLIC_WEBSITE_URL: options.publicWebsiteUrl,
       },
     })
-    return { outputDirectory, marker: publicationMarker(publicationRevision), publicationRevision }
+    return { outputDirectory, marker: publicationMarker(publicationRevision), publicationRevision, redirects: snapshot.redirects }
   }
 }
 

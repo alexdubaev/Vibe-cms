@@ -1,0 +1,31 @@
+---
+import InlineNodes from './InlineNodes.astro'
+
+interface Props {
+  value: unknown
+}
+
+const { value } = Astro.props
+const document = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+const blocks = Array.isArray(document.blocks) ? document.blocks : []
+const asRecord = (entry: unknown): Record<string, unknown> =>
+  entry && typeof entry === 'object' && !Array.isArray(entry) ? entry as Record<string, unknown> : {}
+---
+
+<div class="grid gap-4 leading-8 text-foreground/80">
+  {blocks.map((entry) => {
+    const block = asRecord(entry)
+    if (block.type === 'heading') {
+      return block.level === 3
+        ? <h3 class="text-xl font-semibold text-foreground"><InlineNodes nodes={block.children} /></h3>
+        : <h2 class="text-2xl font-semibold text-foreground"><InlineNodes nodes={block.children} /></h2>
+    }
+    if (block.type === 'quote') return <blockquote class="border-l-2 border-primary/40 pl-5 italic"><InlineNodes nodes={block.children} /></blockquote>
+    if (block.type === 'bulletList' || block.type === 'numberedList') {
+      const items = Array.isArray(block.items) ? block.items : []
+      const List = block.type === 'numberedList' ? 'ol' : 'ul'
+      return <List class="grid gap-2 pl-6 marker:text-primary">{items.map((item) => <li><InlineNodes nodes={asRecord(item).children} /></li>)}</List>
+    }
+    return <p><InlineNodes nodes={block.children} /></p>
+  })}
+</div>

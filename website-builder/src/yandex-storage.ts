@@ -82,6 +82,7 @@ export function createYandexObjectStorageAdapter(options: YandexObjectStorageOpt
         headers: {
           'content-type': object.contentType,
           ...(object.cacheControl ? { 'cache-control': object.cacheControl } : {}),
+          ...(object.redirectLocation ? { 'x-amz-website-redirect-location': object.redirectLocation } : {}),
         },
       })
     },

@@ -12,6 +12,7 @@ import { createMediaRoutes } from './transport/routes'
 export function createMediaModule(options: {
   backgroundTasks: TaskDeferrer
   db: DbClient
+  requireAuth: MiddlewareHandler<AuthHttpEnv>
   requireCmsAccess: MiddlewareHandler<AuthHttpEnv>
   storage: PrivateStorage
 }) {
@@ -28,7 +29,7 @@ export function createMediaModule(options: {
       })
     },
   })
-  return { routes: createMediaRoutes(options.requireCmsAccess, service), service }
+  return { routes: createMediaRoutes(options.requireAuth, options.requireCmsAccess, service), service }
 }
 
 export { MediaService } from './application/media-service'

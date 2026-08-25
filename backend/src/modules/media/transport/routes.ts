@@ -11,8 +11,13 @@ const assetParams = z.object({ assetId: z.uuid() }).strict()
 const uploadBody = z.object({ filename: z.string().trim().min(1).max(180), mimeType: z.string(), byteSize: z.number().int().positive() }).strict()
 const altBody = z.object({ alt: z.string().trim().max(200).nullable() }).strict()
 
-export function createMediaRoutes(requireCmsAccess: MiddlewareHandler<AuthHttpEnv>, service: MediaService) {
+export function createMediaRoutes(
+  requireAuth: MiddlewareHandler<AuthHttpEnv>,
+  requireCmsAccess: MiddlewareHandler<AuthHttpEnv>,
+  service: MediaService,
+) {
   const routes = new OpenAPIHono<AuthHttpEnv>({ defaultHook: validationErrorHook })
+  routes.use('*', requireAuth)
   routes.use('*', requireCmsAccess)
   routes.use('*', async (c, next) => {
     c.header('Cache-Control', 'private, no-store')

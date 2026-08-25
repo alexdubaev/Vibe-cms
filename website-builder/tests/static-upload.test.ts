@@ -57,4 +57,23 @@ describe('static release upload', () => {
     })).rejects.toThrow('escaped')
     expect(calls).toEqual([])
   })
+
+  test('uploads immutable website redirects after the static objects and before the marker', async () => {
+    const calls: Array<{ key: string; redirectLocation?: string }> = []
+    await uploadStaticRelease({
+      slot: 'green',
+      revision: 9,
+      redirects: [{ source: '/old-page', destination: '/new-page' }],
+      objects: [{ key: 'green/index.html', body: new Uint8Array([1]), contentType: 'text/html' }],
+      port: {
+        deleteInactivePrefix: async () => undefined,
+        putImmutable: async (object) => { calls.push({ key: object.key, redirectLocation: object.redirectLocation }) },
+      },
+    })
+    expect(calls).toEqual([
+      { key: 'green/index.html', redirectLocation: undefined },
+      { key: 'green/old-page', redirectLocation: '/new-page' },
+      { key: 'green/__publication_revision.txt', redirectLocation: undefined },
+    ])
+  })
 })

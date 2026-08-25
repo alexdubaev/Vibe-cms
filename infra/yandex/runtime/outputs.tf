@@ -1,4 +1,7 @@
 output "runtime_image_digest" { value = var.runtime_image_digest }
+output "builder_image_digest" { value = var.builder_image_digest }
+output "preview_image_digest" { value = var.preview_image_digest }
+output "publication_enabled" { value = var.publication_enabled }
 output "database_credential_slot" { value = var.database_credential_slot }
 output "api_url" { value = local.api_origin }
 output "webapp_url" { value = local.webapp_origin }

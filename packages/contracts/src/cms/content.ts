@@ -37,6 +37,7 @@ const reservedPathPrefixes = [
 const normalisePath = (input: string) => {
   let value = input.normalize('NFC').trim()
   if (!value) throw new Error('Path cannot be empty')
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)) throw new Error('Absolute URLs are not content paths')
   if (/[\\?#\u0000-\u001f\u007f]/.test(value)) throw new Error('Path contains forbidden characters')
   if (/%(?:2f|2F|5c|5C)/.test(value)) throw new Error('Encoded path separators are not allowed')
   try {
@@ -61,7 +62,18 @@ const normalisePath = (input: string) => {
   return value
 }
 
-export const contentPathSchema = z.string().max(180).transform(normalisePath)
+export const contentPathSchema = z
+  .string()
+  .max(180)
+  .refine((value) => {
+    try {
+      normalisePath(value)
+      return true
+    } catch {
+      return false
+    }
+  }, 'Invalid content path')
+  .transform(normalisePath)
 
 const safeHttpsUrlSchema = z
   .url()
@@ -84,7 +96,12 @@ const inlineMarkSchema = z.enum(['bold', 'italic'])
 const inlineTextSchema = z
   .object({
     type: z.literal('text'),
-    text: safeText(2_000),
+    text: z
+      .string()
+      .min(1)
+      .max(2_000)
+      .refine((value) => value.trim().length > 0, 'Inline text cannot be blank')
+      .refine((value) => !controlCharacterPattern.test(value), 'Control characters are not allowed'),
     marks: z.array(inlineMarkSchema).max(2).default([]),
   })
   .strict()

@@ -1,4 +1,4 @@
-import type { StructuredTextDocument } from '@web-app-demo/contracts'
+import { structuredTextDocumentSchema, type StructuredTextDocument } from '@web-app-demo/contracts'
 import type { ContentBlock } from '@web-app-demo/contracts'
 
 export type BenefitIcon = 'check' | 'star' | 'shield' | 'spark'
@@ -149,6 +149,110 @@ export function plainTextToStructuredText(value: string): StructuredTextDocument
   return blocks.length > 0 ? { type: 'document', blocks } : null
 }
 
+/**
+ * Converts the small, human-readable editor notation into the public-safe
+ * structured-text contract. The notation keeps formatting discoverable without
+ * exposing JSON: `##`/`###` headings, `-`/`1.` lists, `>` quotes, `**bold**`,
+ * `_italic_`, and `[label](url)` links.
+ */
+export function editorTextToStructuredText(value: string): StructuredTextDocument | null {
+  if (/\]\(\s*(?:javascript|data|vbscript):/i.test(value)) return null
+
+  const blocks: unknown[] = []
+  let paragraphLines: string[] = []
+  let list: { type: 'bulletList' | 'numberedList'; items: unknown[] } | null = null
+
+  const flushParagraph = () => {
+    const text = paragraphLines.join('\n').trim()
+    paragraphLines = []
+    if (!text) return
+    blocks.push({ type: 'paragraph', children: parseInlineText(text) })
+  }
+
+  const flushList = () => {
+    if (list && list.items.length > 0) blocks.push(list)
+    list = null
+  }
+
+  const flushInlineContent = () => {
+    flushParagraph()
+    flushList()
+  }
+
+  for (const rawLine of value.replace(/\r\n?/g, '\n').split('\n')) {
+    const line = rawLine.trim()
+    if (!line) {
+      flushInlineContent()
+      continue
+    }
+
+    const heading = line.match(/^(#{2,3})\s+(.+)$/)
+    if (heading) {
+      flushInlineContent()
+      blocks.push({
+        type: 'heading',
+        level: heading[1].length,
+        children: parseInlineText(heading[2]),
+      })
+      continue
+    }
+
+    const quote = line.match(/^>\s*(.+)$/)
+    if (quote) {
+      flushInlineContent()
+      blocks.push({ type: 'quote', children: parseInlineText(quote[1]) })
+      continue
+    }
+
+    const bullet = line.match(/^[-*]\s+(.+)$/)
+    const numbered = line.match(/^\d+[.)]\s+(.+)$/)
+    if (bullet || numbered) {
+      flushParagraph()
+      const type = bullet ? 'bulletList' : 'numberedList'
+      if (!list || list.type !== type) {
+        flushList()
+        list = { type, items: [] }
+      }
+      list.items.push({ type: 'listItem', children: parseInlineText((bullet ?? numbered)![1]) })
+      continue
+    }
+
+    flushList()
+    paragraphLines.push(rawLine)
+  }
+
+  flushInlineContent()
+  try {
+    const parsed = structuredTextDocumentSchema.safeParse({ type: 'document', blocks })
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
+
+/** Serialises a valid structured-text document back to the editor notation. */
+export function structuredTextToEditorText(value: unknown): string {
+  const parsed = structuredTextDocumentSchema.safeParse(value)
+  if (!parsed.success) return ''
+
+  return parsed.data.blocks
+    .map((block) => {
+      switch (block.type) {
+        case 'paragraph':
+          return inlineNodesToEditorText(block.children)
+        case 'heading':
+          return `${'#'.repeat(block.level)} ${inlineNodesToEditorText(block.children)}`
+        case 'quote':
+          return `> ${inlineNodesToEditorText(block.children)}`
+        case 'bulletList':
+          return block.items.map((item) => `- ${inlineNodesToEditorText(item.children)}`).join('\n')
+        case 'numberedList':
+          return block.items.map((item, index) => `${index + 1}. ${inlineNodesToEditorText(item.children)}`).join('\n')
+      }
+    })
+    .join('\n\n')
+}
+
 export function updateBenefitItem(
   items: readonly BenefitItem[],
   index: number,
@@ -182,6 +286,53 @@ function inlineChildrenToText(value: unknown): string {
     })
     .join('')
     .trim()
+}
+
+function parseInlineText(value: string): unknown[] {
+  const nodes: unknown[] = []
+  const pattern = /(\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|_[^_]+_|\[[^\]]+\]\([^)]*\))/g
+  let cursor = 0
+
+  for (const match of value.matchAll(pattern)) {
+    const token = match[0]
+    const index = match.index ?? 0
+    if (index > cursor) nodes.push({ type: 'text', text: value.slice(cursor, index), marks: [] })
+
+    if (token.startsWith('[')) {
+      const link = token.match(/^\[([^\]]+)\]\(([^)]*)\)$/)
+      if (link) nodes.push({ type: 'link', label: link[1], href: link[2] })
+    } else if (token.startsWith('***')) {
+      nodes.push({ type: 'text', text: token.slice(3, -3), marks: ['bold', 'italic'] })
+    } else if (token.startsWith('**')) {
+      nodes.push({ type: 'text', text: token.slice(2, -2), marks: ['bold'] })
+    } else {
+      nodes.push({ type: 'text', text: token.slice(1, -1), marks: ['italic'] })
+    }
+    cursor = index + token.length
+  }
+
+  if (cursor < value.length) nodes.push({ type: 'text', text: value.slice(cursor), marks: [] })
+  return nodes.filter((node) => {
+    if (!isRecord(node)) return false
+    return node.type === 'link' || (typeof node.text === 'string' && node.text.length > 0)
+  })
+}
+
+function inlineNodesToEditorText(nodes: readonly unknown[]): string {
+  return nodes.map((node) => {
+    if (!isRecord(node)) return ''
+    if (node.type === 'link' && typeof node.label === 'string' && typeof node.href === 'string') {
+      return `[${node.label}](${node.href})`
+    }
+    if (node.type !== 'text' || typeof node.text !== 'string') return ''
+    const marks = Array.isArray(node.marks) ? node.marks : []
+    const bold = marks.includes('bold')
+    const italic = marks.includes('italic')
+    if (bold && italic) return `***${node.text}***`
+    if (bold) return `**${node.text}**`
+    if (italic) return `_${node.text}_`
+    return node.text
+  }).join('')
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

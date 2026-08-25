@@ -60,7 +60,7 @@ export function ProfilePanel({ user }: { user: UserDto }) {
               )}
             </Field>
             <Field>
-              <FieldLabel htmlFor="profile-email">Email</FieldLabel>
+              <FieldLabel htmlFor="profile-email">Электронная почта</FieldLabel>
               <Input
                 aria-readonly="true"
                 id="profile-email"

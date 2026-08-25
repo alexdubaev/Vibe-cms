@@ -6,6 +6,7 @@ import { collectStaticObjects, uploadStaticRelease, type StaticUploadPort } from
 export async function publishBuiltRelease(input: {
   build: BuildInput
   outputDirectory: string
+  redirects?: ReadonlyArray<{ source: string; destination: string }>
   copyMedia: MediaCopyPort
   uploader: StaticUploadPort
   promotion: PublicationPromotionPort
@@ -15,6 +16,7 @@ export async function publishBuiltRelease(input: {
     port: input.uploader,
     slot: input.build.slot,
     objects,
+    redirects: input.redirects,
     revision: input.build.publicationRevision,
     beforeStaticUpload: () => copyPublicationMedia(input.copyMedia, input.build.media),
   })

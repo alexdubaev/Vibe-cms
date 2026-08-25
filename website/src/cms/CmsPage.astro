@@ -6,12 +6,13 @@ import Block from './components/Block.astro'
 interface Props {
   page: PublicPage
   media?: PublicationSnapshot['media']
+  collections?: PublicationSnapshot['collections']
   mediaBasePath?: string
 }
 
-const { media, mediaBasePath, page } = Astro.props
+const { collections, media, mediaBasePath, page } = Astro.props
 ---
 
 <main id="main-content">
-  {page.blocks.map((block) => <Block block={block} media={media ?? []} mediaBasePath={mediaBasePath} />)}
+  {page.blocks.map((block) => <Block block={block} collections={collections ?? []} media={media ?? []} mediaBasePath={mediaBasePath} />)}
 </main>

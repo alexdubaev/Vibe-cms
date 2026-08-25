@@ -35,5 +35,17 @@ media_bucket_name   = "example-product-prod-media-globally-unique"
 email_delivery = "disabled"
 email_from     = null
 
+# CMS publication stays disabled until production domains, the HTTPS selector/purge control plane,
+# and isolated builder/preview credentials are approved. When enabling it, supply the sensitive
+# values below through TF_VAR_* or another uncommitted tfvars file; never commit real values.
+cms_publication_enabled = false
+builder_image_name      = "website-builder"
+preview_image_name      = "website-preview"
+# preview_domain               = "preview.example.com"
+# preview_certificate_id       = "REPLACE_WITH_PREVIEW_CERTIFICATE_ID"
+# cms_website_selector_url     = "https://selector.example.com/switch"
+# cms_website_purge_url        = "https://purge.example.com/purge"
+# TF_VAR_cms_builder_hmac_secret and TF_VAR_cms_website_promotion_token must be 32+ characters.
+
 # Runtime/migration digests and one-time administrator values are release-owned inputs. The
 # wrapper writes them only inside the separate migration/runtime Terraform roots.

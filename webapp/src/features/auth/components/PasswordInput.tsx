@@ -13,11 +13,11 @@ type PasswordInputProps = Omit<ComponentProps<typeof Input>, 'type'> & {
 export function PasswordInput({
   className,
   id,
-  visibilityLabel = 'entered password',
+  visibilityLabel = 'введённый пароль',
   ...props
 }: PasswordInputProps) {
   const [isVisible, setIsVisible] = useState(false)
-  const actionLabel = `${isVisible ? 'Hide' : 'Show'} ${visibilityLabel}`
+  const actionLabel = `${isVisible ? 'Скрыть' : 'Показать'} ${visibilityLabel}`
 
   return (
     <div className="relative">

@@ -167,6 +167,23 @@ locals {
     var.extra_secret_bindings,
     local.base_secret_bindings,
     local.postbox_secret_bindings,
+    var.cms_publication_enabled ? {
+      CMS_BUILDER_HMAC_ACTIVE_SECRET = {
+        secret_id  = yandex_lockbox_secret.builder_hmac[0].id
+        version_id = yandex_lockbox_secret_version_hashed.builder_hmac[0].id
+        key        = "value"
+      }
+      CMS_BUILDER_YMQ_ACCESS_KEY_ID = {
+        secret_id  = yandex_lockbox_secret.builder_queue[0].id
+        version_id = yandex_lockbox_secret_version_hashed.builder_queue[0].id
+        key        = "access_key_id"
+      }
+      CMS_BUILDER_YMQ_SECRET_ACCESS_KEY = {
+        secret_id  = yandex_lockbox_secret.builder_queue[0].id
+        version_id = yandex_lockbox_secret_version_hashed.builder_queue[0].id
+        key        = "secret_access_key"
+      }
+    } : {},
   )
 
   migration_secret_bindings = {

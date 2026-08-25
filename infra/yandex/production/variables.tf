@@ -298,3 +298,61 @@ variable "task_memory_mb" {
   type    = number
   default = 512
 }
+
+variable "cms_publication_enabled" {
+  description = "Provision the dedicated CMS builder, preview runtime, queue, DLQ, and blue/green website path."
+  type        = bool
+  default     = false
+}
+
+variable "builder_image_name" {
+  type    = string
+  default = "website-builder"
+}
+
+variable "preview_image_name" {
+  type    = string
+  default = "website-preview"
+}
+
+variable "preview_domain" {
+  type     = string
+  default  = null
+  nullable = true
+}
+
+variable "preview_certificate_id" {
+  type     = string
+  default  = null
+  nullable = true
+}
+
+variable "cms_builder_hmac_secret" {
+  description = "Shared HMAC secret for backend-to-builder callbacks; supply through TF_VAR_."
+  type        = string
+  default     = null
+  nullable    = true
+  sensitive   = true
+}
+
+variable "cms_website_promotion_token" {
+  description = "Bearer token for the HTTPS selector and purge control plane; supply through TF_VAR_."
+  type        = string
+  default     = null
+  nullable    = true
+  sensitive   = true
+}
+
+variable "cms_website_selector_url" {
+  description = "HTTPS control-plane endpoint that switches the active website slot."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "cms_website_purge_url" {
+  description = "HTTPS control-plane endpoint that purges the public website cache."
+  type        = string
+  default     = null
+  nullable    = true
+}

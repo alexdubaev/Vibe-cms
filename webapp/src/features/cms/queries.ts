@@ -27,6 +27,7 @@ import {
   approveCmsApproval,
   publishCmsCurrent,
   rejectCmsApproval,
+  retryCmsPublication,
   saveCmsPage,
   saveCmsEntry,
   restoreCmsPageRevision,
@@ -175,6 +176,19 @@ export function useCmsPublicationSummaryQuery() {
   return useQuery({
     queryKey: cmsQueryKeys.publication(),
     queryFn: () => getCmsPublicationSummary(auth.transport),
+    refetchInterval: (query) => {
+      const status = query.state.data?.controller?.status
+      return status === 'queued' || status === 'building' ? 2_000 : false
+    },
+  })
+}
+
+export function useRetryCmsPublicationMutation() {
+  const auth = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => retryCmsPublication(auth.transport),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: cmsQueryKeys.publication() }),
   })
 }
 

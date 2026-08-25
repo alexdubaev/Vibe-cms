@@ -2,7 +2,6 @@ import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { AVATAR_MAX_BYTES, type UploadTicket } from '@web-app-demo/contracts'
 
 import {
-  AvatarUploadError,
   describeAvatarFile,
   resolveAvatarContentType,
   uploadAvatarObject,
@@ -97,9 +96,10 @@ describe('uploadAvatarObject', () => {
   test('reports a refused transfer', async () => {
     globalThis.fetch = mock(async () => new Response(null, { status: 403 })) as unknown as typeof fetch
 
-    await expect(uploadAvatarObject(ticket(2048), file('a.png', 'image/png', 2048))).rejects.toMatchObject(
-      { reason: 'transfer-failed' },
-    )
+    await expect(uploadAvatarObject(ticket(2048), file('a.png', 'image/png', 2048))).rejects.toMatchObject({
+      reason: 'transfer-failed',
+      message: 'Хранилище отклонило загрузку. Попробуйте другой файл.',
+    })
   })
 
   test('reports a network failure without letting it surface as a raw fetch error', async () => {
@@ -107,9 +107,10 @@ describe('uploadAvatarObject', () => {
       throw new TypeError('Failed to fetch')
     }) as unknown as typeof fetch
 
-    await expect(uploadAvatarObject(ticket(2048), file('a.png', 'image/png', 2048))).rejects.toBeInstanceOf(
-      AvatarUploadError,
-    )
+    await expect(uploadAvatarObject(ticket(2048), file('a.png', 'image/png', 2048))).rejects.toMatchObject({
+      reason: 'transfer-failed',
+      message: 'Не удалось загрузить файл в хранилище. Проверьте соединение и повторите попытку.',
+    })
   })
 
   test('refuses to send a file whose size no longer matches the signed ticket', async () => {
@@ -119,9 +120,10 @@ describe('uploadAvatarObject', () => {
       return new Response(null, { status: 200 })
     }) as unknown as typeof fetch
 
-    await expect(uploadAvatarObject(ticket(2048), file('a.png', 'image/png', 4096))).rejects.toMatchObject(
-      { reason: 'size-changed' },
-    )
+    await expect(uploadAvatarObject(ticket(2048), file('a.png', 'image/png', 4096))).rejects.toMatchObject({
+      reason: 'size-changed',
+      message: 'Файл изменился во время загрузки. Выберите его снова.',
+    })
     expect(called).toBe(false)
   })
 })

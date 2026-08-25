@@ -6,9 +6,9 @@ import { createAvatarUpload, deleteAvatar, fetchAvatar, finalizeAvatarUpload } f
 import { AvatarUploadError, describeAvatarFile, uploadAvatarObject } from './upload'
 
 function describeRejection(reason: 'type' | 'too-small' | 'too-large') {
-  if (reason === 'type') return 'Pick a JPEG, PNG, or HEIC image.'
-  if (reason === 'too-small') return 'That file is too small to be a photo. Pick another one.'
-  return 'Pick an image smaller than 5 MB.'
+  if (reason === 'type') return 'Выберите изображение JPEG, PNG или HEIC.'
+  if (reason === 'too-small') return 'Файл слишком маленький для фотографии. Выберите другой.'
+  return 'Выберите изображение размером менее 5 МБ.'
 }
 
 export const avatarQueryKeys = {

@@ -69,3 +69,147 @@ variable "runtime_image_digest" {
     error_message = "runtime_image_digest must be an immutable sha256 digest."
   }
 }
+
+variable "publication_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "builder_image_name" {
+  type    = string
+  default = "website-builder"
+}
+
+variable "preview_image_name" {
+  type    = string
+  default = "website-preview"
+}
+
+variable "builder_service_account" {
+  type    = string
+  default = null
+  nullable = true
+}
+
+variable "preview_service_account" {
+  type    = string
+  default = null
+  nullable = true
+}
+
+variable "promotion_service_account" {
+  type    = string
+  default = null
+  nullable = true
+}
+
+variable "publication_trigger_service_account" {
+  type    = string
+  default = null
+  nullable = true
+}
+
+variable "builder_hmac_secret_binding" {
+  type = object({
+    secret_id  = string
+    version_id = string
+    key        = string
+  })
+  default  = null
+  nullable = true
+}
+
+variable "builder_storage_secret_bindings" {
+  type = map(object({
+    secret_id  = string
+    version_id = string
+    key        = string
+  }))
+  default = {}
+}
+
+variable "website_promotion_token_binding" {
+  type = object({
+    secret_id  = string
+    version_id = string
+    key        = string
+  })
+  default  = null
+  nullable = true
+}
+
+variable "preview_backend_origin" {
+  type    = string
+  default = null
+}
+
+variable "preview_domain" {
+  type     = string
+  default  = null
+  nullable = true
+}
+
+variable "preview_certificate_id" {
+  type     = string
+  default  = null
+  nullable = true
+}
+
+variable "website_public_origin" {
+  type    = string
+  default = null
+}
+
+variable "website_selector_url" {
+  type     = string
+  default = null
+  nullable = true
+}
+
+variable "website_purge_url" {
+  type     = string
+  default  = null
+  nullable = true
+}
+
+variable "website_bucket" {
+  type    = string
+  default = null
+}
+
+variable "website_storage_endpoint" {
+  type    = string
+  default = "https://storage.yandexcloud.net"
+}
+
+variable "publication_queue_id" {
+  type    = string
+  default = null
+}
+
+variable "publication_dlq_id" {
+  type    = string
+  default = null
+}
+
+variable "builder_image_digest" {
+  type    = string
+  default = null
+  nullable = true
+
+  validation {
+    condition     = var.builder_image_digest == null || can(regex("^sha256:[0-9a-f]{64}$", var.builder_image_digest))
+    error_message = "builder_image_digest must be an immutable sha256 digest when publication is enabled."
+  }
+}
+
+variable "preview_image_digest" {
+  type    = string
+  default = null
+  nullable = true
+
+  validation {
+    condition     = var.preview_image_digest == null || can(regex("^sha256:[0-9a-f]{64}$", var.preview_image_digest))
+    error_message = "preview_image_digest must be an immutable sha256 digest when publication is enabled."
+  }
+}

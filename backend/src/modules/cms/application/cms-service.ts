@@ -180,7 +180,7 @@ type ServiceDependencies = {
     | 'decideApproval'
     | 'createPublication'
     | 'getPageRevision'
-  >
+  > & Partial<Pick<CmsRepository, 'retryPublication'>>
   snapshot: Pick<CmsSnapshotService, 'createCandidate'>
   clock?: { now(): Date }
 }
@@ -298,6 +298,23 @@ export class CmsService {
       controller: controller ? toPublicationControllerDto(controller) : null,
       latestPublication: latestPublication ? toLatestPublicationDto(latestPublication) : null,
     }
+  }
+
+  async retryPublication(actor: CmsActor): Promise<{ retried: true }> {
+    if (actor.role === 'editor') {
+      const policy = await this.dependencies.repository.getPolicy()
+      if (!policy?.editorCanPublish) {
+        throw new CmsRepositoryError('Editor publishing is disabled by the owner', 'FORBIDDEN')
+      }
+    } else {
+      this.requireCapability(actor, 'cms:publish')
+    }
+    if (!this.dependencies.repository.retryPublication) {
+      throw new CmsRepositoryError('Publication retry is not configured', 'CMS_RETRY_UNAVAILABLE')
+    }
+    const retried = await this.dependencies.repository.retryPublication()
+    if (!retried) throw new CmsRepositoryError('No failed publication is available to retry', 'CMS_RETRY_NOT_AVAILABLE')
+    return { retried: true }
   }
 
   async savePublicationPolicy(actor: CmsActor, input: PublicationPolicyDto): Promise<PublicationPolicyDto> {

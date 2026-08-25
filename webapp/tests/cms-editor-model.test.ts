@@ -5,10 +5,12 @@ import {
   addBenefitItem,
   createEditorBlock,
   duplicateEditorBlock,
+  editorTextToStructuredText,
   moveEditorBlock,
   plainTextToStructuredText,
   removeEditorBlock,
   removeBenefitItem,
+  structuredTextToEditorText,
   structuredTextToPlainText,
   toggleMediaSelection,
   updateBenefitItem,
@@ -73,6 +75,66 @@ test('structured text helpers expose readable paragraphs and keep schema limits'
     ],
   })
   expect(plainTextToStructuredText('   ')).toBeNull()
+})
+
+test('rich structured text editor round-trips headings, lists, quotes, marks, and safe links', () => {
+  const source = [
+    '## Важный раздел',
+    '',
+    '**Сильный** и _мягкий_ текст с [подробностями](/about)',
+    '',
+    '- Первый пункт',
+    '- Второй пункт',
+    '',
+    '> Цитата клиента',
+    '',
+    '### Следующий шаг',
+    '',
+    '1. Сначала',
+    '2. Затем',
+  ].join('\n')
+
+  const document = editorTextToStructuredText(source)
+
+  expect(document).toEqual({
+    type: 'document',
+    blocks: [
+      { type: 'heading', level: 2, children: [{ type: 'text', text: 'Важный раздел', marks: [] }] },
+      {
+        type: 'paragraph',
+        children: [
+          { type: 'text', text: 'Сильный', marks: ['bold'] },
+          { type: 'text', text: ' и ', marks: [] },
+          { type: 'text', text: 'мягкий', marks: ['italic'] },
+          { type: 'text', text: ' текст с ', marks: [] },
+          { type: 'link', label: 'подробностями', href: '/about' },
+        ],
+      },
+      {
+        type: 'bulletList',
+        items: [
+          { type: 'listItem', children: [{ type: 'text', text: 'Первый пункт', marks: [] }] },
+          { type: 'listItem', children: [{ type: 'text', text: 'Второй пункт', marks: [] }] },
+        ],
+      },
+      { type: 'quote', children: [{ type: 'text', text: 'Цитата клиента', marks: [] }] },
+      { type: 'heading', level: 3, children: [{ type: 'text', text: 'Следующий шаг', marks: [] }] },
+      {
+        type: 'numberedList',
+        items: [
+          { type: 'listItem', children: [{ type: 'text', text: 'Сначала', marks: [] }] },
+          { type: 'listItem', children: [{ type: 'text', text: 'Затем', marks: [] }] },
+        ],
+      },
+    ],
+  })
+
+  expect(structuredTextToEditorText(document)).toBe(source)
+})
+
+test('rich structured text editor rejects unsafe links instead of persisting them', () => {
+  expect(editorTextToStructuredText('[Секрет](javascript:alert(1))')).toBeNull()
+  expect(editorTextToStructuredText('[Секрет](https://user:pass@example.com/private)')).toBeNull()
 })
 
 test('benefit item helpers enforce editable bounds', () => {

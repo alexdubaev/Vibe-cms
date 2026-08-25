@@ -26,5 +26,8 @@ locals {
     EMAIL_DELIVERY                             = var.email_delivery
     EMAIL_FROM                                 = var.email_from == null ? "" : var.email_from
     EMAIL_POSTBOX_REGION                       = "ru-central1"
+    CMS_BUILDER_QUEUE_URL                      = var.cms_publication_enabled ? yandex_message_queue.publication[0].id : ""
+    CMS_BUILDER_YMQ_ENDPOINT                   = var.cms_publication_enabled ? "https://message-queue.api.cloud.yandex.net" : ""
+    CMS_BUILDER_YMQ_REGION                     = "ru-central1"
   })
 }

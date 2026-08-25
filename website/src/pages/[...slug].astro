@@ -9,16 +9,16 @@ export async function getStaticPaths() {
     .filter((page) => page.path !== '/')
     .map((page) => ({
       params: { slug: page.path.slice(1) },
-      props: { page, media: snapshot?.media ?? [] },
+      props: { collections: snapshot?.collections ?? [], page, media: snapshot?.media ?? [] },
     }))
 }
 
-const { media, page } = Astro.props
+const { collections, media, page } = Astro.props
 const canonicalUrl = import.meta.env.PUBLIC_WEBSITE_URL
   ? new URL(Astro.url.pathname, import.meta.env.PUBLIC_WEBSITE_URL).toString()
   : undefined
 ---
 
 <BaseLayout canonicalUrl={canonicalUrl} description={page.seo?.description ?? page.title} title={page.seo?.title ?? page.title}>
-  <CmsPage page={page} media={media} />
+  <CmsPage collections={collections} page={page} media={media} />
 </BaseLayout>

@@ -9,3 +9,14 @@ export function resolveCmsMediaSrc(
   if (previewBasePath) return `${previewBasePath.replace(/\/$/, '')}/${mediaId}`
   return media.find((asset) => asset.id === mediaId)?.publicPath
 }
+
+export function resolveCmsMediaSources(
+  media: PublicationSnapshot['media'],
+  mediaIds: readonly string[],
+  previewBasePath?: string,
+): string[] {
+  return mediaIds.flatMap((mediaId) => {
+    const source = resolveCmsMediaSrc(media, mediaId, previewBasePath)
+    return source ? [source] : []
+  })
+}

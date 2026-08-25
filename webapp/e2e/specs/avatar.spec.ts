@@ -21,16 +21,16 @@ async function registerAndOpenProfile(page: Page) {
   const email = uniqueEmail('avatar-e2e')
 
   await page.goto('/signup')
-  await page.getByLabel('Full Name').fill('Avatar E2E User')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(e2ePassword)
-  await page.getByLabel('Confirm Password').fill(e2ePassword)
-  await page.getByRole('button', { name: 'Create Account' }).click()
+  await page.getByLabel('Имя').fill('Avatar E2E User')
+  await page.getByLabel('Электронная почта').fill(email)
+  await page.getByLabel('Пароль', { exact: true }).fill(e2ePassword)
+  await page.getByLabel('Повторите пароль').fill(e2ePassword)
+  await page.getByRole('button', { name: 'Создать учётную запись' }).click()
   await expect(page).toHaveURL(/\/app$/)
 
-  await page.getByRole('link', { name: 'Profile' }).click()
+  await page.getByRole('link', { name: 'Профиль' }).click()
   await expect(page).toHaveURL(/\/app\/profile$/)
-  await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Профиль' })).toBeVisible()
   await expect(page.getByTestId('avatar-fallback')).toBeVisible()
 
   return email
@@ -53,25 +53,25 @@ test('uploads an avatar, keeps it across a reload, replaces it, and removes it',
   await registerAndOpenProfile(page)
 
   await pickFile(page, pngImage)
-  await expect(page.getByTestId('avatar-notice')).toContainText('Photo updated.')
+  await expect(page.getByTestId('avatar-notice')).toContainText('Фотография обновлена.')
   await expect(avatarImage(page)).toBeVisible()
 
   // Survives a reload, which is what distinguishes a stored object from a local preview.
   await page.reload()
-  await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Профиль' })).toBeVisible()
   await expect(avatarImage(page)).toBeVisible()
 
   await pickFile(page, jpegImage)
-  await expect(page.getByTestId('avatar-notice')).toContainText('Photo updated.')
+  await expect(page.getByTestId('avatar-notice')).toContainText('Фотография обновлена.')
   await expect(avatarImage(page)).toBeVisible()
 
-  await page.getByRole('button', { name: 'Remove' }).click()
-  await expect(page.getByTestId('avatar-notice')).toContainText('Photo removed.')
+  await page.getByRole('button', { name: 'Удалить' }).click()
+  await expect(page.getByTestId('avatar-notice')).toContainText('Фотография удалена.')
   await expect(avatarImage(page)).toHaveCount(0)
   await expect(page.getByTestId('avatar-fallback')).toBeVisible()
 
   await page.reload()
-  await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Профиль' })).toBeVisible()
   await expect(avatarImage(page)).toHaveCount(0)
 })
 
@@ -96,7 +96,7 @@ test('recovers from an interrupted upload when the user tries again', async ({ p
   // The retry gets a fresh write-once key, so it succeeds rather than colliding with the
   // abandoned one.
   await pickFile(page, pngImage)
-  await expect(page.getByTestId('avatar-notice')).toContainText('Photo updated.')
+  await expect(page.getByTestId('avatar-notice')).toContainText('Фотография обновлена.')
   await expect(avatarImage(page)).toBeVisible()
 
   await page.reload()
@@ -111,7 +111,7 @@ test('refuses a file that is not the image it claims to be', async ({ page }) =>
   // message keeps this from passing on a client-side size or type check instead.
   await pickFile(page, disguisedTextFile)
 
-  await expect(page.getByTestId('avatar-error')).toContainText('not a supported image')
+  await expect(page.getByTestId('avatar-error')).toContainText('Этот файл не поддерживается')
   await expect(avatarImage(page)).toHaveCount(0)
   await expect(page.getByTestId('avatar-fallback')).toBeVisible()
 })
@@ -121,7 +121,7 @@ test('keeps one user’s avatar invisible to another', async ({ browser }) => {
   const ownerPage = await ownerContext.newPage()
   await registerAndOpenProfile(ownerPage)
   await pickFile(ownerPage, pngImage)
-  await expect(ownerPage.getByTestId('avatar-notice')).toContainText('Photo updated.')
+  await expect(ownerPage.getByTestId('avatar-notice')).toContainText('Фотография обновлена.')
 
   const otherContext = await browser.newContext()
   const otherPage = await otherContext.newPage()

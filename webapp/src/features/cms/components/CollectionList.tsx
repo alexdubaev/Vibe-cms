@@ -30,9 +30,13 @@ export function CollectionList({
         <div className="flex flex-wrap gap-2 pt-2">
           {(['service', 'review', 'teamMember', 'faq', 'case'] as const).map((itemType) => (
             <Button asChild key={itemType} size="sm" variant={itemType === type ? 'secondary' : 'outline'}>
-              <Link params={{ type: itemType }} to="/admin/content/$type">
-                {collectionEntryTypeLabel(itemType)}
-              </Link>
+              {itemType === 'service' ? (
+                <Link to="/admin/content/service">{collectionEntryTypeLabel(itemType)}</Link>
+              ) : (
+                <Link params={{ type: itemType }} to="/admin/content/$type">
+                  {collectionEntryTypeLabel(itemType)}
+                </Link>
+              )}
             </Button>
           ))}
         </div>
@@ -53,7 +57,7 @@ export function CollectionList({
               >
                 <span className="flex items-center justify-between gap-3">
                   <Typography as="span" variant="bodySmMedium">{entry.name}</Typography>
-                  <Badge variant={entry.archived ? 'outline' : 'secondary'}>{entry.archived ? 'Архив' : `Версия ${entry.revision}`}</Badge>
+                  <Badge variant={entry.archived ? 'outline' : 'secondary'}>{entry.archived ? 'Архив' : 'Черновик'}</Badge>
                 </span>
                 <Typography as="span" tone="muted" variant="caption" wrap="break">
                   {entry.summary || 'Без краткого описания'}

@@ -70,7 +70,7 @@ export async function uploadAvatarObject(ticket: UploadTicket, file: File) {
   if (file.size !== ticket.contentLength) {
     throw new AvatarUploadError(
       'size-changed',
-      'The file changed while it was being uploaded. Pick it again.',
+      'Файл изменился во время загрузки. Выберите его снова.',
     )
   }
 
@@ -87,14 +87,14 @@ export async function uploadAvatarObject(ticket: UploadTicket, file: File) {
   } catch {
     throw new AvatarUploadError(
       'transfer-failed',
-      'The upload could not reach storage. Check your connection and try again.',
+      'Не удалось загрузить файл в хранилище. Проверьте соединение и повторите попытку.',
     )
   }
 
   if (!response.ok && response.status !== 412) {
     throw new AvatarUploadError(
       'transfer-failed',
-      'Storage rejected the upload. Try again with a different file.',
+      'Хранилище отклонило загрузку. Попробуйте другой файл.',
     )
   }
 }

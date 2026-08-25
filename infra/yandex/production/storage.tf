@@ -88,6 +88,10 @@ resource "yandex_storage_bucket" "website" {
   https {
     certificate_id = var.website_certificate_id
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "yandex_storage_bucket" "media" {
@@ -221,7 +225,7 @@ resource "yandex_storage_bucket_policy" "website_publisher" {
   secret_key = yandex_iam_service_account_static_access_key.storage_manager.secret_key
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid       = "TerraformBucketConfiguration"
         Effect    = "Allow"
@@ -266,7 +270,36 @@ resource "yandex_storage_bucket_policy" "website_publisher" {
         Resource  = "arn:aws:s3:::${yandex_storage_bucket.website.bucket}/*"
         Condition = { StringEquals = { "yc:access-key-id" = yandex_iam_service_account_static_access_key.static_publisher.access_key } }
       },
-    ]
+    ], var.cms_publication_enabled ? [
+      {
+        Sid       = "BuilderBucketDataPlane"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = ["s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"]
+        Resource  = "arn:aws:s3:::${yandex_storage_bucket.website.bucket}"
+        Condition = {
+          StringEquals = { "yc:access-key-id" = yandex_iam_service_account_static_access_key.builder_publisher[0].access_key }
+          StringLike   = { "s3:prefix" = ["blue/*", "green/*"] }
+        }
+      },
+      {
+        Sid       = "BuilderObjectDataPlane"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = [
+          "s3:AbortMultipartUpload",
+          "s3:DeleteObject",
+          "s3:GetObject",
+          "s3:ListMultipartUploadParts",
+          "s3:PutObject",
+        ]
+        Resource  = [
+          "arn:aws:s3:::${yandex_storage_bucket.website.bucket}/blue/*",
+          "arn:aws:s3:::${yandex_storage_bucket.website.bucket}/green/*",
+        ]
+        Condition = { StringEquals = { "yc:access-key-id" = yandex_iam_service_account_static_access_key.builder_publisher[0].access_key } }
+      },
+    ] : [])
   })
 }
 

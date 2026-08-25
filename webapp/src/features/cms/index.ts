@@ -13,6 +13,7 @@ export {
   cmsMediaUploadResponseSchema,
   approveCmsApproval,
   publishCmsCurrent,
+  retryCmsPublication,
   rejectCmsApproval,
   getCmsPage,
   getCmsEntries,
@@ -47,6 +48,7 @@ export {
   type CmsPageSaveResponse,
   type CmsPendingApproval,
   type CmsPublicationMutationResponse,
+  type CmsPublicationRetryResponse,
   type CmsPublicationSummary,
   type CmsMediaDeleteResponse,
   type CmsMediaResponse,
@@ -82,6 +84,7 @@ export {
   useCmsSiteSettingsQuery,
   useSaveCmsSiteSettingsMutation,
   usePublishCmsCurrentMutation,
+  useRetryCmsPublicationMutation,
   useRejectCmsApprovalMutation,
   useSaveCmsPageMutation,
   useCreateCmsEntryMutation,
@@ -97,9 +100,11 @@ export {
 export { formatMediaBytes, mediaDimensionsLabel, mediaStateLabel } from './media-model'
 export {
   addBenefitItem,
+  editorTextToStructuredText,
   plainTextToStructuredText,
   removeBenefitItem,
   structuredTextToPlainText,
+  structuredTextToEditorText,
   toggleMediaSelection,
   updateBenefitItem,
   type BenefitIcon,
@@ -113,6 +118,7 @@ export {
 } from './media-upload'
 export { CmsContentPage, CmsPageDetailPage, CmsPagesPage, CmsPublicationsPage } from './pages'
 export { MediaLibraryPage } from './components/MediaLibrary'
+export { StructuredTextEditor } from './components/StructuredTextEditor'
 export { SiteIdentityPanel } from './components/SiteIdentityPanel'
 export { NavigationEditor } from './components/NavigationEditor'
 export { PublicationPolicyPanel } from './components/PublicationPolicyPanel'

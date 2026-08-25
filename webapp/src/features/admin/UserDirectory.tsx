@@ -96,9 +96,9 @@ export function UserDirectory({ currentUser }: { currentUser: UserDto }) {
   }
 
   const summary = usersQuery.data
-    ? `Page ${usersQuery.data.page} of ${pagination?.totalPages ?? 1} · ${usersQuery.data.total} users${
+    ? `Страница ${usersQuery.data.page} из ${pagination?.totalPages ?? 1} · участников: ${usersQuery.data.total}${
         pagination?.wasBounded
-          ? ` · First ${pagination.reachableUsers} matches available`
+          ? ` · показаны первые ${pagination.reachableUsers}`
           : ''
       }`
     : viewState === 'error'
@@ -216,7 +216,7 @@ export function UserDirectory({ currentUser }: { currentUser: UserDto }) {
                         Добавлен
                       </Typography>
                       <Typography as="span" variant="bodySm">
-                        {new Date(user.createdAt).toLocaleDateString()}
+                        {new Date(user.createdAt).toLocaleDateString('ru-RU')}
                       </Typography>
                     </TableCell>
                   </TableRow>

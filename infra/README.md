@@ -15,7 +15,7 @@ infra/
     ├── operations/  # provider-wide production mutation lease
     ├── production/  # stateful foundation: network, DB, secrets, buckets, IAM
     ├── migration/   # isolated one-shot migration container
-    └── runtime/     # API, gateway, jobs, DNS, and optional CDN
+    └── runtime/     # API, gateway, jobs, optional CMS builder/preview, DNS, and CDN
 ```
 
 The split is a release guarantee. A routine code release first requires a clean foundation plan,
@@ -71,6 +71,13 @@ Provider static-access-key resources are intentionally never import targets: the
 DigitalOcean providers cannot import them or recover their secret. Adopt the surrounding resources,
 let Terraform create replacement keys, switch and verify consumers, then revoke legacy keys using
 the sequence in [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
+
+When the Yandex production variable `cms_publication_enabled` is true, the foundation also owns
+the CMS publication queue/DLQ, dedicated builder/preview/promotion identities, Lockbox bindings,
+and the website bucket policy for only the `blue/` and `green/` release prefixes. The runtime root
+owns immutable builder and preview image revisions and the YMQ trigger/API Gateway bindings.
+The external selector and purge endpoints remain an explicit control-plane dependency; Terraform
+does not own the live slot choice.
 
 ## Ownership rules
 

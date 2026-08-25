@@ -73,6 +73,19 @@ function createService(overrides: Partial<CmsRepository> = {}) {
 }
 
 describe('CMS application service', () => {
+  test('retries a failed publication without creating a new snapshot', async () => {
+    let retried = false
+    const { service } = createService({
+      retryPublication: async () => {
+        retried = true
+        return true
+      },
+    })
+
+    await expect(service.retryPublication({ id: 'owner', role: 'owner' })).resolves.toEqual({ retried: true })
+    expect(retried).toBe(true)
+  })
+
   test('projects site settings and menus into strict presentation DTOs', async () => {
     const menuId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a30'
     const { service } = createService({

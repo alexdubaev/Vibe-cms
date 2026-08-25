@@ -38,12 +38,16 @@ const worker = createBuilderWorker({
     baseUrl: requiredEnvironment.CMS_BACKEND_INTERNAL_BASE_URL,
     hmacSecret: requiredEnvironment.CMS_BUILDER_HMAC_SECRET,
   }),
-  buildSite: createAstroSiteRunner({ websiteDirectory: process.env.CMS_WEBSITE_DIRECTORY ?? '/app/website' }),
+  buildSite: createAstroSiteRunner({
+    publicWebsiteUrl: requiredEnvironment.CMS_WEBSITE_PUBLIC_ORIGIN,
+    websiteDirectory: process.env.CMS_WEBSITE_DIRECTORY ?? '/app/website',
+  }),
   downloadSnapshot: createSnapshotDownloader(),
   publishRelease: async ({ build, output }) => {
     return publishBuiltRelease({
       build,
       outputDirectory: output.outputDirectory,
+      redirects: output.redirects,
       copyMedia: websiteStorage,
       uploader: websiteStorage,
       promotion: publicationPromotion,

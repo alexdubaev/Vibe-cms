@@ -79,7 +79,7 @@ export function CollectionEditor({
             <CardTitle>{entry ? 'Редактирование записи' : 'Новая запись'}</CardTitle>
             <CardDescription>{collectionEntryTypeLabel(type)}</CardDescription>
           </div>
-          {entry && <Badge variant={entry.archived ? 'outline' : 'secondary'}>{entry.archived ? 'Архив' : `Черновик · версия ${entry.draftRevision}`}</Badge>}
+          {entry && <Badge variant={entry.archived ? 'outline' : 'secondary'}>{entry.archived ? 'Архив' : 'Черновик'}</Badge>}
         </div>
       </CardHeader>
       <CardContent>

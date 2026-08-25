@@ -104,6 +104,7 @@ const cmsPublicationSummarySchema = z
   })
   .strict()
 const cmsPublicationPolicySchema = z.object({ editorCanPublish: z.boolean() }).strict()
+const cmsPublicationRetrySchema = z.object({ retried: z.literal(true) }).strict()
 
 const cmsPendingApprovalSchema = z
   .object({
@@ -203,6 +204,7 @@ export type CmsPublicationSummary = z.infer<typeof cmsPublicationSummarySchema>
 export type CmsPendingApproval = z.infer<typeof cmsPendingApprovalSchema>
 export type CmsApprovalMutationResponse = z.infer<typeof cmsApprovalMutationResponseSchema>
 export type CmsPublicationMutationResponse = z.infer<typeof cmsPublicationMutationResponseSchema>
+export type CmsPublicationRetryResponse = z.infer<typeof cmsPublicationRetrySchema>
 export type CmsMediaResponse = z.infer<typeof cmsMediaListSchema>
 export type CmsMediaImageDownload = z.infer<typeof cmsMediaImageDownloadSchema>
 export type CmsMediaUpdateResponse = z.infer<typeof cmsMediaUpdateSchema>
@@ -438,4 +440,8 @@ export function publishCmsCurrent(transport: AuthenticatedTransport, revision: n
     method: 'POST',
     body: { revision: z.number().int().positive().parse(revision) },
   })
+}
+
+export function retryCmsPublication(transport: AuthenticatedTransport) {
+  return transport.request('/api/cms/publication/retry', cmsPublicationRetrySchema, { method: 'POST' })
 }

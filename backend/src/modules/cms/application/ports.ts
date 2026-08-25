@@ -120,6 +120,7 @@ export type CmsRepository = {
   ensurePolicy(input?: { editorCanPublish?: boolean; updatedByUserId?: string }): Promise<CmsPolicyRecord>
   getController(): Promise<CmsControllerRecord | null>
   getLatestPublication(): Promise<CmsLatestPublicationRecord | null>
+  retryPublication(): Promise<boolean>
   listPendingApprovals(): Promise<CmsPendingApprovalRecord[]>
   ensureController(): Promise<CmsControllerRecord>
   createPage(input: { path: string; title: string; payload: unknown }): Promise<CmsPageRecord>

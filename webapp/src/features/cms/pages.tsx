@@ -35,6 +35,7 @@ import {
   useCmsPreviewGrantMutation,
   useApproveCmsApprovalMutation,
   usePublishCmsCurrentMutation,
+  useRetryCmsPublicationMutation,
   useRejectCmsApprovalMutation,
   useSubmitCmsApprovalMutation,
   useRestoreCmsPageRevisionMutation,
@@ -75,7 +76,6 @@ export function CmsPagesPage() {
                 <TableRow>
                   <TableHead>Название</TableHead>
                   <TableHead>Путь</TableHead>
-                  <TableHead>Изменения</TableHead>
                   <TableHead>Статус</TableHead>
                 </TableRow>
               </TableHeader>
@@ -96,7 +96,6 @@ export function CmsPagesPage() {
                     <TableCell>
                       <Typography variant="codeXs">{page.path}</Typography>
                     </TableCell>
-                    <TableCell>{page.draftRevision === 0 ? 'Ещё не сохранялась' : `Сохранений: ${page.draftRevision}`}</TableCell>
                     <TableCell>
                       <Badge variant={page.archived ? 'outline' : 'secondary'}>
                         {page.archived ? 'Архив' : 'Черновик'}
@@ -114,8 +113,11 @@ export function CmsPagesPage() {
 }
 
 export function CmsContentPage() {
-  const { type: rawType } = useParams({ from: '/adminWorkspace/admin/content/$type' })
-  const parsedType = collectionTypeSchema.safeParse(rawType)
+  // This screen is mounted by both the dynamic collection route and the explicit
+  // `/admin/content/service` entry route. Read the shared param set without pinning
+  // the component to only one of those sibling matches.
+  const { type: rawType } = useParams({ strict: false })
+  const parsedType = collectionTypeSchema.safeParse(rawType ?? 'service')
   const type = parsedType.success ? parsedType.data : 'service'
   const entries = useCmsEntriesQuery(type)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -245,9 +247,10 @@ export function CmsPublicationsPage() {
   const approve = useApproveCmsApprovalMutation()
   const reject = useRejectCmsApprovalMutation()
   const publish = usePublishCmsCurrentMutation()
+  const retry = useRetryCmsPublicationMutation()
   const canApprove = auth.user?.role === 'owner'
   const canPublish = canApprove || Boolean(publication.data?.policy.editorCanPublish)
-  const actionError = approve.error ?? reject.error ?? publish.error
+  const actionError = approve.error ?? reject.error ?? publish.error ?? retry.error
 
   return (
     <PageContainer>
@@ -262,7 +265,9 @@ export function CmsPublicationsPage() {
           canPublish={canPublish}
           data={publication.data}
           isPublishing={publish.isPending}
+          isRetrying={retry.isPending}
           onPublish={(revision) => publish.mutate(revision)}
+          onRetry={() => retry.mutate()}
         />
       )}
       {actionError && <CmsActionError />}
@@ -290,7 +295,6 @@ function CmsDraftSummaryCard({ page }: { page: Parameters<typeof summarizeCmsDra
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2">
         <SummaryItem label="Путь" value={page.path} />
-        <SummaryItem label="Сохранений" value={String(page.draftRevision)} />
         <SummaryItem label="Секций" value={String(summary.blockCount)} />
         <SummaryItem label="SEO" value={summary.hasSeo ? 'Заполнено' : 'Не заполнено'} />
         <SummaryItem label="Метка навигации" value={summary.navigationLabel ?? 'Не задана'} />
@@ -374,12 +378,16 @@ function PublicationStatusCard({
   data,
   canPublish,
   isPublishing,
+  isRetrying,
   onPublish,
+  onRetry,
 }: {
   data: Awaited<ReturnType<typeof import('./api').getCmsPublicationSummary>>
   canPublish: boolean
   isPublishing: boolean
+  isRetrying: boolean
   onPublish: (revision: number) => void
+  onRetry: () => void
 }) {
   const status = data.controller?.status
   return (
@@ -410,11 +418,17 @@ function PublicationStatusCard({
             </Alert>
           </div>
         )}
-        {canPublish && data.controller?.desiredRevision && (
+        {canPublish && data.controller?.desiredRevision && status !== 'failed' && (
           <div className="sm:col-span-2 lg:col-span-4">
             <Button disabled={isPublishing} onClick={() => onPublish(data.controller!.desiredRevision!)}>
               {isPublishing ? 'Публикуем…' : 'Опубликовать изменения'}
             </Button>
+          </div>
+        )}
+        {canPublish && status === 'failed' && (
+          <div className="grid gap-2 sm:col-span-2 lg:col-span-4">
+            <Typography tone="muted" variant="caption">Предыдущая попытка не завершилась. Повторный запуск использует тот же проверенный черновик.</Typography>
+            <div><Button disabled={isRetrying} onClick={onRetry}>{isRetrying ? 'Запускаем повторно…' : 'Повторить публикацию'}</Button></div>
           </div>
         )}
       </CardContent>

@@ -24,7 +24,7 @@ export function SectionCards({
   items: ReadonlyArray<SectionMetric>
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs md:grid-cols-2 xl:grid-cols-3 dark:*:data-[slot=card]:bg-card">
+    <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:shadow-xs md:grid-cols-2 xl:grid-cols-3">
       {items.map((item) => (
         <Card className="@container/card" key={item.label}>
           <CardHeader>

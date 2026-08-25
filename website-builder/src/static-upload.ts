@@ -6,6 +6,7 @@ export type StaticObject = {
   body: Uint8Array
   contentType: string
   cacheControl?: string
+  redirectLocation?: string
 }
 
 export async function collectStaticObjects(input: {
@@ -34,18 +35,33 @@ export async function uploadStaticRelease(input: {
   port: StaticUploadPort
   slot: 'blue' | 'green'
   objects: StaticObject[]
+  redirects?: ReadonlyArray<{ source: string; destination: string }>
   revision: number
   beforeStaticUpload?: () => Promise<void>
 }) {
   const prefix = `${input.slot}/`
+  const redirectObjects = (input.redirects ?? []).map((redirect) => {
+    if (!redirect.source.startsWith('/') || !redirect.destination.startsWith('/') || redirect.source.includes('..') || redirect.destination.includes('..')) {
+      throw new Error('Website redirect path is invalid')
+    }
+    const sourcePath = redirect.source.slice(1) || 'index.html'
+    return {
+      key: `${prefix}${sourcePath}`,
+      body: new Uint8Array(),
+      contentType: 'text/html; charset=utf-8',
+      cacheControl: 'no-cache',
+      redirectLocation: redirect.destination,
+    } satisfies StaticObject
+  })
+  const releaseObjects = [...input.objects, ...redirectObjects]
   // Validate the complete object set before removing anything from the slot.
   // A late invalid key must never leave a previously published release empty.
-  for (const object of input.objects) {
+  for (const object of releaseObjects) {
     if (!isStaticObjectKey(object.key, input.slot)) throw new Error('Static upload object escaped the assigned slot')
   }
   await input.port.deleteInactivePrefix(prefix)
   await input.beforeStaticUpload?.()
-  for (const object of input.objects) {
+  for (const object of releaseObjects) {
     await input.port.putImmutable(object)
   }
   const marker = new TextEncoder().encode(`vibe-publication:${input.revision}`)

@@ -1,28 +1,43 @@
-import assert from 'node:assert/strict'
+import { deepEqual, strictEqual } from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { resolveCmsMediaSrc } from '../src/cms/media'
-import type { PublicationSnapshot } from '@web-app-demo/contracts'
+import { resolveCmsMediaSrc, resolveCmsMediaSources } from '../src/cms/media'
 
 const media = [
   {
     id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10',
     contentVersion: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a11',
     filename: 'hero.png',
-    mimeType: 'image/png',
-    byteSize: 128,
-    width: 640,
-    height: 480,
+    mimeType: 'image/png' as const,
+    byteSize: 100,
+    width: 800,
+    height: 600,
     alt: 'Hero',
     publicPath: '/media/018f8c8d-5f34-7db2-8b98-2c7bf3d80a10/018f8c8d-5f34-7db2-8b98-2c7bf3d80a11/hero.png',
   },
-] as unknown as PublicationSnapshot['media']
+  {
+    id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a12',
+    contentVersion: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a13',
+    filename: 'gallery.webp',
+    mimeType: 'image/webp' as const,
+    byteSize: 200,
+    width: 900,
+    height: 700,
+    alt: 'Gallery',
+    publicPath: '/media/018f8c8d-5f34-7db2-8b98-2c7bf3d80a12/018f8c8d-5f34-7db2-8b98-2c7bf3d80a13/gallery.webp',
+  },
+]
 
-test('CMS media resolver uses the immutable public path for live pages', () => {
-  assert.equal(resolveCmsMediaSrc(media, media[0].id), media[0].publicPath)
-  assert.equal(resolveCmsMediaSrc(media, '018f8c8d-5f34-7db2-8b98-2c7bf3d80a99'), undefined)
+test('resolves every published media path used by a gallery', () => {
+  deepEqual(resolveCmsMediaSources(media, [media[0].id, media[1].id]), [
+    media[0].publicPath,
+    media[1].publicPath,
+  ])
+  deepEqual(resolveCmsMediaSources(media, ['missing-media-id']), [])
 })
 
-test('CMS media resolver overrides public paths with the scoped preview proxy', () => {
-  assert.equal(resolveCmsMediaSrc(media, media[0].id, '/__preview/media'), `/__preview/media/${media[0].id}`)
+test('preview media resolution remains scoped to the server-side proxy', () => {
+  strictEqual(resolveCmsMediaSrc(media, media[0].id, '/__preview/media'),
+    `/__preview/media/${media[0].id}`,
+  )
 })

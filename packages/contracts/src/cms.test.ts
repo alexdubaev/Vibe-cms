@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   CMS_CAPABILITIES,
+  actionSchema,
   capabilitiesForRole,
   cmsConflictSchema,
   contentBlockSchema,
@@ -55,6 +56,8 @@ describe('CMS contracts', () => {
     expect(() => contentPathSchema.parse('/a/../b')).toThrow()
     expect(() => contentPathSchema.parse('/a%2Fb')).toThrow()
     expect(() => contentPathSchema.parse('/page?draft=true')).toThrow()
+    expect(actionSchema.parse({ label: 'Открыть', href: 'https://example.com/about' }).href).toBe('https://example.com/about')
+    expect(actionSchema.safeParse({ label: 'Опасно', href: 'javascript:alert(1)' }).success).toBe(false)
   })
 
   test('keeps structured text strict and bounded', () => {
@@ -85,6 +88,29 @@ describe('CMS contracts', () => {
         blocks: [{ type: 'paragraph', children: [{ type: 'text', text: 'x'.repeat(2_001) }] }],
       }),
     ).toThrow()
+  })
+
+  test('preserves meaningful whitespace between formatted inline nodes', () => {
+    const parsed = structuredTextDocumentSchema.parse({
+      type: 'document',
+      blocks: [{
+        type: 'paragraph',
+        children: [
+          { type: 'text', text: 'Сильный', marks: ['bold'] },
+          { type: 'text', text: ' и ', marks: [] },
+          { type: 'text', text: 'мягкий', marks: ['italic'] },
+        ],
+      }],
+    })
+
+    expect(parsed.blocks[0]).toEqual({
+      type: 'paragraph',
+      children: [
+        { type: 'text', text: 'Сильный', marks: ['bold'] },
+        { type: 'text', text: ' и ', marks: [] },
+        { type: 'text', text: 'мягкий', marks: ['italic'] },
+      ],
+    })
   })
 
   test('validates every registered block through a discriminated union', () => {
