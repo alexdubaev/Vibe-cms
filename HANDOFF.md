@@ -1,379 +1,196 @@
-# Vibe CMS — handoff для следующего агента
-
-## Актуальное состояние на 2026-08-25
-
-Рабочий каталог: `D:\codex\VIBE-cms\app`
-Ветка: `main`
-Remote: `origin = https://github.com/alexdubaev/Vibe-cms.git`
-Последний опубликованный commit: `2aa71ab fix(cms): initialize default site settings`.
-
-Этот блок имеет приоритет над историческими заметками ниже. Исторические секции сохраняются как журнал
-предыдущих этапов и могут содержать старые номера тестов, ветку или описание «незакоммиченной работы».
-
-### Что закрыто в последнем UI-блоке
-
-- Завершена Russian-first полировка fallback-сообщений auth/avatar/command palette и добавлены тесты.
-- Выполнен visual QA целевых маршрутов: `/admin/users`, `/admin/media`, `/admin/publications`,
-  `/admin/content/service`, `/admin/settings`, `/app/profile`, `/app/settings` на desktop/mobile.
-- Исправлен router error на `/admin/content/service`: explicit service route теперь корректно получает тип коллекции.
-- Исправлен горизонтальный overflow media library на viewport 375 px.
-- Добавлены Playwright-регрессии для default content route и mobile media width.
-- Текущий webapp E2E прогон: **19 pass, 0 fail**; базовые 17 сценариев плюс 2 регрессии.
-
-### Что закрыто после UI-блока
-
-- Исправлена загрузка singleton site settings: `getSiteSettings()` теперь лениво создаёт default row
-  после миграций, без зависимости от отдельного seed шага.
-- Добавлен PostgreSQL integration regression test; изолированный прогон: **11 pass, 0 fail**.
-- `/admin/settings` повторно проверен на desktop/mobile: форма загружается, сохраняется и не создаёт overflow.
-- Полный webapp E2E после исправления: **19 pass, 0 fail**.
-
-### Проверки после UI-блока
-
-- `bun run test:webapp` — **70 pass, 0 fail**;
-- `bun run lint` — успешно;
-- `bun run typecheck:webapp` — успешно;
-- `bun run build:webapp` — успешно;
-- `bun run architecture:check` — успешно, 442 source files;
-- `git diff --check` — успешно;
-- `bun run test` не считать зелёным на Windows: воспроизводятся 3 transaction-timeout в
-  `deploy-database.integration.test.ts` (`Transaction API error: Unable to start a transaction in the given time`),
-  известное ограничение Bun/Prisma integration runner.
-
-### Что осталось следующим агентом
-
-1. Дождаться Linux/CI прогона backend integration и Terraform validation; локальный CI-harness добавлен в
-   `.github/workflows/infrastructure-and-backend.yml` и не использует cloud credentials.
-2. Для release отдельно согласовать домены, сертификаты и HTTPS selector/purge endpoints, затем выполнить только
-   credential-free Yandex plan; cloud apply выполнять после явного согласования параметров.
-3. Повторить Docker builds и deployment smoke на стабильном runner; не считать зависание внешнего `bun install`
-   локальным build success.
-4. Добавить operational publication retry Playwright для существующего `POST /api/cms/publication/retry`.
-   Rollback E2E отложен: публичного CMS rollback endpoint пока нет; restore revision меняет draft, не live publication.
-
-Важно для передачи:
-
-- Untracked-инструментальные каталоги `.ux-audit/`, `webapp/.21st/` и `output/` не добавлять в commit.
-- При следующем commit проверить `git diff --check` и staged-набор; не использовать force-push без явного запроса.
-
-## Что уже сделано
-
-Текущий функциональный прогресс оценивается примерно в 90% кодового объёма; production-развёртывание намеренно не включено без согласованных доменов и облачных параметров. Реализованы:
-
-- роли `user/editor/owner`, capability-политика и совместимость старого `admin` с `owner`;
-- Prisma-модели и миграции CMS: страницы, ревизии, media/usage, approvals, publications, controller/builds, preview grants/sessions, builder nonces, audit/outbox;
-- CMS backend API с приватными ответами и optimistic revision conflicts;
-- безопасная передача: approval/publication snapshots не возвращаются через HTTP mutation responses;
-- CMS media API: signed-ticket upload/finalize, list/search, alt-текст, owner-only durable delete;
-- media finalize извлекает bounded dimensions для PNG/JPEG/WebP/AVIF без декодирования пикселей и сохраняет их в asset record;
-- publication snapshot включает только ready media descriptors с безопасным immutable `publicPath`, а live/preview Astro renderer разрешает media IDs без private object keys;
-- публикационная логика, immutable artifacts, builder HMAC/nonce, Yandex queue/storage adapters;
-- website snapshot loader, static rendering, robots/sitemap и fail-closed preview exchange helper;
-- request-time Astro preview runtime: Node adapter, external `/__preview/*` rewrite, one-time exchange,
-  session revalidation on every render, private draft page DTO, authorized media proxy и security headers;
-- website-builder publication runtime: static release upload в inactive Yandex slot, прямое подтверждение marker/index,
-  HTTPS selector switch, CDN purge, public marker polling и fail-closed runtime configuration;
-- website-builder provider-side media copy: backend signed build input resolves only frozen ready media into short-lived
-  signed URLs plus slot-scoped public destinations/content types; builder copies them after inactive-slot cleanup and
-  before static objects/marker, failing closed before promotion on any copy error;
-- public CMS renderer: hero/text-image/benefits/gallery/CTA/contacts/form-placeholder and collection-selection blocks,
-  structured text, safe inline links, public media paths and preview media proxy;
-- immutable website redirects are uploaded into the inactive slot before the publication marker;
-- failed publication recovery: backend queues a fresh reconcile wake-up for the same desired revision, while the CMS UI
-  polls queued/building state and exposes a human-readable «Повторить публикацию» action;
-- webapp CMS routes:
-  - `/admin/pages`;
-  - `/admin/pages/$pageId`;
-  - `/admin/media`;
-  - `/admin/publications`;
-- редактор страниц: core fields, SEO, порядок блоков, autosave, conflict preservation;
-- поля Hero/CTA/TextImage и выбор изображений для Hero/TextImage/Gallery;
-- structured text-поле TextImage (многострочный редактор с безопасным преобразованием в paragraphs);
-- редактор карточек Benefits (2–8 карточек, заголовок/описание/иконка, add/remove/update);
-- дополнительные кнопки Hero/CTA, переключатели Contacts и способ связи FormPlaceholder;
-- отправка на согласование, approve/reject/publish UI;
-- история ревизий: список безопасных metadata и scoped restore;
-- русская CMS-навигация для editor/owner;
-- TDD-тесты backend/webapp/integration.
-
-## Последний завершённый блок
-
-Расширение полей редактора блоков:
-
-- pure helpers для structured text и bounded benefits items с TDD-проверками;
-- TextImage получил многострочный редактор контента с лимитами schema;
-- Benefits получил карточки с ограничениями 2–8 и выбором иконки;
-- Hero/CTA получили дополнительную кнопку с безопасным добавлением/удалением;
-- Contacts получили переключатели видимости полей, FormPlaceholder — способ связи.
-- collection selection blocks получили безопасный список активных записей и picker по типам service/case/review/faq;
-- backend `GET /api/cms/entries?type=...` отдаёт только id, тип, имя, summary, revision и archived.
-
-Preview runtime end-to-end:
-
-- backend `GET /api/cms/preview/pages/:pageId` revalidates the opaque session, current actor role and page scope;
-- backend `GET /api/cms/preview/media/:assetId` returns only a short-lived signed download URL, never an object key;
-- website renders dynamic draft pages through the private Node runtime and follows media URLs server-side;
-- all preview successes and indistinguishable failures carry `private, no-store` and `X-Robots-Tag: noindex, nofollow`;
-- Astro ignores leading-underscore page directories, so middleware rewrites external `/__preview/*` to internal `src/pages/preview/*` routes.
-
-Website publication promotion end-to-end:
-
-- `website-builder/src/server.ts` теперь собирает concrete `publishRelease` из Yandex Object Storage и HTTP control-plane adapters;
-- перед selector switch проверяются `blue|green/__publication_revision.txt` и `index.html` напрямую из storage;
-- selector и purge требуют HTTPS endpoints и Bearer token, purge получает `paths: ['/*']` и publication revision;
-- публикация считается успешной только после polling публичного marker с `no-store` и revision query parameter;
-- server fail-closed при отсутствии storage, public origin, selector/purge или promotion token env.
-
-Media finalize dimensions:
-
-- parser читает только ограниченный prefix объекта и поддерживает PNG IHDR, JPEG SOF, WebP VP8/VP8L/VP8X и AVIF `ispe`;
-- image upload без подтверждённых положительных dimensions отклоняется, видео/PDF проходят прежний signature-only путь;
-- unit и PostgreSQL integration тесты подтверждают, что width/height доходят до persisted `cmsMediaAsset`.
-
-CMS production builder/preview infrastructure:
-
-- Yandex foundation получил opt-in `cms_publication_enabled`: отдельные builder/preview/promotion/trigger identities,
-  Message Queue + DLQ с `maxReceiveCount = 5`, Lockbox bindings и immutable builder/preview image repositories;
-- builder запускается отдельным Serverless Container с 2 GiB/1 core/600 s и получает только HMAC, queue,
-  website-storage и promotion bindings; runtime сохраняет только нужные backend queue/HMAC bindings;
-- preview получает только backend origin, публикуется через отдельный API Gateway custom domain и не получает CMS secrets;
-- существующий защищённый website bucket сохранён как один versioned bucket с blue/green object prefixes,
-  а builder policy ограничена этими prefixes; selector/purge control-plane остаётся внешним HTTPS контрактом;
-- release wrapper при включённом Yandex CMS строит и пушит backend, builder и preview по immutable digests;
-- добавлены production/runtime Terraform acceptance contracts и синхронизирована документация; реальный cloud plan/apply
-  не выполнялся.
-
-Продолжение UI-плана — rich structured text editor:
-
-- TextImage теперь сохраняет не только абзацы, но и заголовки `##`/`###`, bullet/numbered lists, цитаты,
-  bold/italic и внутренние либо безопасные HTTPS-ссылки через человекочитаемую разметку без JSON;
-- добавлен `StructuredTextEditor` с подсказкой, aria-состоянием ошибки и отказом от небезопасных ссылок;
-- CMS inline-text contract сохраняет значимые пробелы между форматированными узлами, а `contentPathSchema` больше
-  не принимает абсолютные URL как внутренние пути;
-- проверки UI-среза: `bun run test:webapp` — **68 pass, 0 fail**; contracts — **26 pass, 0 fail**;
-  `bun run typecheck:webapp`, `bun run lint`, `bun run architecture:check` — успешно.
-
-Продолжение UI-плана — visual QA и CMS Playwright smoke:
-
-- login визуально проверен на 375/768/1024/1440 px; CMS workspace дополнительно проверен на 375 и 1440 px;
-  mobile скрывает sidebar без горизонтального overflow, desktop сохраняет двухколоночный редактор секций;
-- добавлен `webapp/e2e/specs/cms.spec.ts`: owner login → страницы → открытие редактора → structured text → сохранение → reload;
-- smoke прогнан на чистой PostgreSQL E2E БД: **1 pass, 0 fail**;
-- smoke выявил и закрыл дефект wiring: `/api/cms/media` проверял CMS role до установки authenticated principal;
-  media routes теперь последовательно применяют `requireAuth`, затем `requireCmsAccess`, добавлен backend RED/GREEN test;
-- контрольные кадры сохранены в `output/playwright/`;
-- auth/avatar/RBAC E2E синхронизированы с Russian-first labels, сообщениями и ролями текущего UI;
-- полный Playwright-набор на чистой PostgreSQL E2E БД: **17 pass, 0 fail** (auth, avatar, CMS smoke и RBAC).
-
-Проверки блока: `bun run test:webapp` — **68 pass, 0 fail**; CMS backend app/routes — **25 pass, 0 fail**;
-`bun run --cwd webapp e2e` — **17 pass, 0 fail**; `bun run lint`, `bun run typecheck:webapp`,
-`bun run build:webapp`, `bun run architecture:check` — успешно.
-
-## Следующий блок: закончить UI-полировку и русификацию
-
-Следующий агент должен начать именно с этого блока, не возвращаясь к уже закрытому structured-text editor.
-Это bounded-доработка существующего `webapp`, без изменения backend/API-архитектуры.
-
-### Цель
-
-Довести пользовательский интерфейс до цельного Russian-first состояния и закрыть финальный visual QA по
-админским поверхностям. Базовая функциональность уже зелёная: `bun run --cwd webapp e2e` — **17 pass, 0 fail**.
-Новые изменения не должны ухудшить этот baseline.
-
-### Очередь реализации
-
-1. Перевести оставшиеся пользовательские fallback-сообщения на русский, сохранив API-контракты:
-   - `webapp/src/features/auth/components/form-errors.tsx` — default title `Authentication failed`;
-   - `webapp/src/features/avatar/queries.ts` — rejected file / too-small / too-large messages;
-   - `webapp/src/features/avatar/upload.ts` — transfer/storage failure messages;
-   - `webapp/src/components/ui/command.tsx` — default command palette title/description;
-   - сообщения валидации auth из `packages/contracts/src/auth.ts` (`Invalid email address`, password length),
-     если они отображаются напрямую в UI. Не ломать backend tests: допустима frontend mapping-функция.
-2. Сначала добавить unit/component tests на выбранный mapping сообщений (RED → минимальная реализация → GREEN),
-   затем обновить E2E-ожидания для соответствующих edge states. Assertion должен описывать видимый русский текст.
-3. Провести visual QA и при необходимости точечную полировку следующих маршрутов на desktop и mobile:
-   - `/admin/users` — таблица/поиск/empty/error/role dialog;
-   - `/admin/media` — upload/list/search/delete/error;
-   - `/admin/publications` — queued/building/failed/retry/empty;
-   - `/admin/content/service` — collection list/editor/empty/error;
-   - `/admin/settings`, `/app/profile`, `/app/settings` — формы, alerts, session states.
-   Проверять overflow, клиппинг, доступные labels, focus/keyboard, loading/error/empty states и читаемость карточек.
-4. Добавить операционные Playwright-проверки publication retry/rollback только после появления реальных production
-   endpoints; текущий CMS editor smoke уже зелёный и повторно переписывать его не нужно.
-
-### Файлы для первого прохода
-
-- `webapp/src/features/auth/components/form-errors.tsx`;
-- `webapp/src/features/avatar/queries.ts`;
-- `webapp/src/features/avatar/upload.ts`;
-- `webapp/src/components/ui/command.tsx`;
-- `packages/contracts/src/auth.ts` и связанные auth tests — только если выбран contract-level перевод;
-- `webapp/e2e/specs/auth.spec.ts`, `avatar.spec.ts`, `rbac.spec.ts`, `cms.spec.ts`;
-- `webapp/tests/*` для unit/component coverage.
-
-### Проверки после каждого заметного шага
-
-```powershell
-Set-Location D:\codex\VIBE-cMS\app
-bun run test:webapp
-bun run lint
-bun run typecheck:webapp
-bun run --cwd webapp e2e
-```
-
-Для E2E при занятом порте использовать свободные значения `E2E_BACKEND_PORT` и `E2E_WEB_PORT`, например 57001/59001.
-Не считать root `bun run test` зелёным на Windows из-за зафиксированных Bun/Prisma integration transaction timeouts.
-
-История ревизий end-to-end:
-
-- backend repository: `listPageRevisions` с сортировкой newest-first;
-- service: `listPageRevisions` и scoped `restorePage`;
-- routes:
-  - `GET /api/cms/pages/:pageId/revisions`;
-  - `POST /api/cms/pages/:pageId/revisions/:revisionId/restore`;
-- webapp API/query hooks и карточка «История версий» в редакторе;
-- source payload и служебные поля не попадают в safe revision DTO.
-
-Основные изменённые файлы последнего блока:
-
-- `backend/src/modules/cms/application/ports.ts`;
-- `backend/src/modules/cms/application/cms-service.ts`;
-- `backend/src/modules/cms/infrastructure/cms-repository.ts`;
-- `backend/src/modules/cms/transport/routes.ts`;
-- `backend/src/modules/cms/cms.test.ts`;
-- `backend/src/modules/cms/infrastructure/cms-repository.integration.test.ts`;
-- `backend/src/modules/cms/transport/routes.test.ts`;
-- `webapp/src/features/cms/api.ts`;
-- `webapp/src/features/cms/queries.ts`;
-- `webapp/src/features/cms/pages.tsx`;
-- `webapp/src/features/cms/components/PageEditor.tsx`;
-- `webapp/src/features/cms/editor-model.ts`;
-- `webapp/tests/cms-api.test.ts`;
-- `webapp/tests/cms-editor-model.test.ts`.
-
-Дополнительно изменены:
-
-- `backend/src/modules/cms/transport/routes.test.ts` — HTTP smoke для bodyless retry.
-- `webapp/src/components/ui/*`, `webapp/src/components/dashboard/SectionCards.tsx` и
-  `webapp/src/features/admin/UserDirectory.tsx` — русские доступные подписи, скрытие служебных revision-полей
-  и более спокойная визуальная иерархия.
-- `webapp/src/features/cms/api.ts`, `queries.ts`, `pages.tsx`, `index.ts` и `webapp/tests/cms-api.test.ts` — retry,
-  polling queued/building и понятное состояние failed publication.
-- `website/src/cms/components/Block.astro`, `StructuredText.astro`, `InlineNodes.astro`, `CmsPage.astro`,
-  `website/src/cms/media.ts`, route pages и `website/tests/cms-media-rendering.test.ts` — полный public-safe
-  renderer для CMS block types/media/structured text.
-- `website-builder/src/{build-site,release-pipeline,server,static-upload,yandex-storage}.ts` и tests — public origin,
-  redirects, inactive-slot upload и provider redirect metadata.
-- `CHECKLIST.md` и `docs/WEB_SURFACES.md` — capability ledger синхронизирован с реальным кодом.
-
-## Последние проверки
-
-Последние успешные результаты:
-
-- `bun run typecheck` — все workspace typechecks успешны; website оставляет только существующий hint о deprecated `verticalAlign`;
-- `bun run test:backend:unit` — **339 pass, 0 fail**;
-- `bun run test:contracts` — **26 pass, 0 fail**;
-- `bun run test:website-builder` — **25 pass, 0 fail**;
-- CMS backend app/routes tests — **25 pass, 0 fail**;
-- CMS repository integration — **10 pass, 0 fail**;
-- `bun run test:webapp` — **68 pass, 0 fail**;
-- `bun run build:webapp` — успешно;
-- `bun run architecture:check` — успешно, 442 source files;
-- media PostgreSQL integration — **1 pass, 0 fail**;
-- `bun run --cwd website test` — **12 pass, 0 fail**; website typecheck/build успешны, остаётся только существующий `verticalAlign` hint;
-- `bun run --cwd website-builder test` — **25 pass, 0 fail**;
-- `bun run --cwd website-builder typecheck` — успешно;
-- `bun run typecheck`, `bun run lint`, `bun run build` — успешно; website оставляет только существующий hint о deprecated `verticalAlign`;
-- `bun run test` — не завершает backend integration на Windows/Bun/Prisma; root runner остановлен после
-  воспроизводимых transaction-timeout failures. До этого infra (71), contracts (26) и backend unit (339) прошли;
-  webapp/website/builder suites также прошли отдельно. Не считать полный root test зелёным на Windows.
-- `docker build -f website-builder/Dockerfile -t vibe-cms-builder-test .` — остановлен на зависшем внешнем `bun install --frozen-lockfile` без прогресса;
-- `docker compose ps` — `app-postgres-1` и `app-postgres_test-1` healthy.
-
-Последний отдельный полный прогон после изменений:
-
-- `bun run lint` — успешно.
-- `bun run typecheck` — успешно; website: только существующий Astro hint `verticalAlign`.
-- `bun run build` — успешно; website также сообщает только Vite warning о размере server chunk.
-- `bun run architecture:check` — успешно (442 source files).
-- `bun run test:infra` — 71 pass; `bun run test:contracts` — 26 pass;
-- `bun run test:infra` после CMS-инфраструктуры — **72 pass, 0 fail**; отдельный `bun test scripts/infra.test.mjs` —
-  **43 pass, 0 fail**;
-  `bun run test:backend:unit` — 339 pass; `bun run test:webapp` — 68 pass;
-  `bun run test:website` — 12 pass; `bun run test:website-builder` — 25 pass.
-
-Детализация integration-проверки на `127.0.0.1:38900`:
-
-- `db.integration.test.ts` — 6 pass; `outbox.integration.test.ts` — 9 pass;
-- `cms.integration.test.ts` — 3 pass; `media.integration.test.ts` — 1 pass;
-  `uploads.integration.test.ts` — 15 pass;
-- `cms-repository.integration.test.ts` — 10 pass; `publication-repository.integration.test.ts` — 7 pass;
-  `builder-nonce-store.integration.test.ts` — 1 pass;
-- `users.integration.test.ts` — чистый изолированный запуск проходит 9 первых тестов, затем зависает
-  на следующем seed/bootstrap transaction; полный файл на Windows не считать завершённым.
-- `auth.integration.test.ts` — 12 pass, 1 fail: тест отката password change получил
-  `Transaction API error: Unable to start a transaction in the given time.` вместо `outbox unavailable`;
-- `deploy-database.integration.test.ts` — первый grant test и migration privilege test проходят, но
-  `runtime database reconciliation rolls back every revoke when a later grant fails` получает тот же P2028
-  вместо injected failure, `runtime database reconciliation refuses inherited roles` получает P2028 вместо
-  `inherits role`, а `legacy public schema ownership is inventoried and transferred explicitly` превышает
-  стандартный timeout 5 секунд.
-
-Изолированная диагностика подтвердила, что обычный Prisma transaction и те же SQL вне `bun:test` проходят;
-проблема возникает на Windows/Bun/Prisma adapter при повторном интерактивном transaction в integration runner.
-Попытка увеличить `maxWait` превращает быстрый P2028 в зависание и удалена; production-код не изменён
-спекулятивным workaround. Повторять integration после переноса на Linux/CI или после обновления Bun/Prisma.
-
-Для repository integration используется отдельный тестовый контейнер на `127.0.0.1:38900`; credentials бери из локального test env, не добавляй их в код или handoff.
-
-Terraform acceptance сейчас не запускается в этой Windows-сессии: `bun run test:terraform` завершается сообщением
-`terraform is not installed or is not available on PATH`. После установки Terraform первым делом прогнать весь
-`bun run test:terraform`, затем сделать credential-free `infra:plan` с согласованными Yandex domain/certificate и
-selector/purge inputs.
-
-## Что делать дальше
-
-Приоритетный порядок:
-
-1. Выполнить блок «закончить UI-полировку и русификацию» выше; сохранить полный E2E baseline **17/17**.
-2. Установить Terraform и прогнать production/runtime acceptance; затем выполнить credential-free Yandex plan с
-   согласованными preview domain/certificate и HTTPS selector/purge endpoints. Cloud apply по-прежнему не выполнять
-   без явного согласования параметров.
-3. Добавить операционные Playwright-проверки publication retry/rollback после появления production endpoints;
-   CMS editor smoke уже добавлен и зелёный.
-4. Повторить полный release-gate: backend integration на стабильном runner, Docker builds и deployment smoke.
-
-## Известные ограничения и gotchas
-
-- `website-builder/src/server.ts` намеренно fail-closed: без полного набора production env процесс не стартует; live control-plane
-  endpoints должны предоставлять HTTPS selector/purge API с Bearer token.
-- Docker image build для website-builder и preview ранее/сейчас зависает на `bun install`; `docker build -f website/Dockerfile.preview`
-  завершался внешней Bun tarball integrity/extraction ошибкой для нескольких пакетов, а `website-builder/Dockerfile`
-  остановлен после длительного отсутствия прогресса на том же install этапе.
-- Полный backend integration suite упирается в Windows/Bun/Prisma `Transaction API error: Unable to start a transaction in the given time` в auth/deploy-database integration tests; не заявлять, что весь integration suite зелёный. Изменение `maxWait` не является рабочим решением и в коде не оставлено.
-- Не возвращать `candidateSnapshot`/`snapshot` через transport routes. Внутренние service DTO могут содержать snapshot для frozen approval/publication logic — это намеренно.
-- Page autosave должен сохранять стабильный mutation ref и не пересоздавать queue на каждом React Query state change. Текущий `PageEditor` использует `mutationRef` и remount key `${id}:${draftRevision}`.
-- Signed media upload обязан отправлять ticket headers verbatim, `credentials: omit`; object keys и signed URLs не показывать в UI/DTO.
-- Основной CMS foundation закоммичен как `23ee9ae feat(cms): add content collections and preview foundations`;
-  preview runtime закоммичен как `ea7af76 feat(cms): ship protected website preview runtime`,
-  blue/green publication — как `4ad4854 feat(cms): wire blue-green website publication`.
-
-## Полезные команды
+# VIBE CMS — handoff для следующего агента
+
+## Текущая цель
+
+Реализовать Site Packages и студийную API-модель для VIBE CMS:
+
+- студия создаёт разные лендинги по правилам `vibe-landing`;
+- каждый клиент получает один фиксированный уникальный дизайн;
+- клиент редактирует только разрешённые поля через CMS;
+- исходный репозиторий и CMS/API остаются у студии;
+- для каждого клиента запускается отдельная изолированная CMS/API-установка;
+- публикация собирает статический сайт и отправляет его на клиентское S3-совместимое хранилище;
+- обычные посетители не обращаются к CMS API;
+- браузерные калькуляторы работают без backend, а запись/CRM/платежи проектируются отдельно.
+
+Архитектура подтверждена пользователем 2026-08-25.
+
+## Обязательные документы
+
+Читать в таком порядке:
+
+1. `AGENTS.md`;
+2. `docs/superpowers/specs/2026-08-25-vibe-cms-site-packages-api-design.md`;
+3. `docs/superpowers/plans/2026-08-25-vibe-cms-site-packages-api.md`;
+4. `docs/specs/vibe-cms-module-design.md` — только как описание уже реализованного CMS core;
+5. `docs/CMS_SITE_WORKFLOW.md`;
+6. `docs/WEB_SURFACES.md`;
+7. текущий код и тесты файлов, перечисленных в выполняемой задаче плана.
+
+Новая спецификация имеет приоритет над старым решением о передаче каждому клиенту отдельного
+репозитория и отсутствии студийного CMS-хостинга.
+
+## Состояние репозитория на момент handoff
+
+- Рабочий каталог: `D:\codex\VIBE-cms\app`.
+- Ветка: `main`.
+- Remote: `origin = https://github.com/alexdubaev/Vibe-cms.git`.
+- Последний запушенный функциональный commit до новой спецификации:
+  `8c48996 feat(cms): add branding and site delivery guide`.
+- Спецификация закоммичена:
+  `7f88712 docs(cms): define site package API architecture`.
+- Подробный implementation plan и этот handoff находятся в следующем docs-коммите.
+- Реализация Site Packages ещё не начата. Следующий шаг — Task 1 плана.
+- Спецификация и план не требуют cloud apply.
+
+Перед любым изменением выполнить:
 
 ```powershell
 Set-Location D:\codex\VIBE-cms\app
+git status --short --branch
+git log -5 --oneline --decorate
+```
 
-docker compose up -d
-docker compose ps
+## Что уже реализовано и не должно дублироваться
 
-bun run typecheck
-bun run lint
-bun run architecture:check
+- роли `owner/editor` и capability-проверки;
+- страницы, коллекции, меню, настройки и redirects;
+- черновики, autosave и optimistic concurrency;
+- ревизии и restore-to-draft;
+- CMS media upload/finalize/list/delete и безопасные public descriptors;
+- authenticated preview;
+- approval/publication flow и retry;
+- immutable publication snapshot/artifact;
+- HMAC, timestamp и nonce для builder API;
+- publication controller/build records и outbox;
+- Astro build через `CMS_SNAPSHOT_FILE`;
+- `StaticUploadPort`, media copy, blue/green slots, marker verification и promotion;
+- добавление, удаление, дублирование и перестановка текущих блоков в `PageEditor`;
+- core block schemas и generic Astro renderer;
+- логотип VIBE CMS в login/admin UI;
+- нейтральная `/cms-demo` fixture и документы для агента без контекста.
+
+Новая работа должна извлечь реестры и добавить точки расширения. Не создавать вторые версии
+редактора страниц, media API, preview, snapshot или publication pipeline.
+
+## Что предстоит реализовать
+
+Мастер-план содержит 13 последовательных задач:
+
+1. package-aware contract factories;
+2. build-selected Site Package staging;
+3. package-aware backend validation и snapshots;
+4. package state и content migrations;
+5. registry-driven CMS admin editor;
+6. package layout/renderers в Astro;
+7. reference calculator Site Package;
+8. package mismatch и selected-only Docker images;
+9. generic S3 publication adapter;
+10. общий VDS `flock` для Astro builds;
+11. отдельный studio Compose stack на клиента;
+12. export, backups, retention и capacity smoke;
+13. полный E2E, документация и финальный handoff.
+
+Каждая задача в плане содержит точные файлы, интерфейсы, RED/GREEN-команды и отдельный commit.
+Не выполнять задачи вне порядка: поздние интерфейсы ссылаются на имена, определённые ранними.
+
+## Начало работы
+
+Использовать `superpowers:subagent-driven-development` для выполнения плана с отдельным агентом и
+review на каждую задачу либо `superpowers:executing-plans` для последовательных batches.
+
+Первое действие — baseline перед Task 1:
+
+```powershell
+bun run test:contracts
 bun run test:backend:unit
 bun run test:webapp
-bun run build:webapp
 bun run test:website
 bun run test:website-builder
 ```
 
-Для следующего feature-блока соблюдать TDD: сначала добавить тест, убедиться в корректном RED, затем минимальная реализация и GREEN, затем рефакторинг.
+Затем выполнить только Task 1 из
+`docs/superpowers/plans/2026-08-25-vibe-cms-site-packages-api.md`, начиная с failing tests.
+
+## Ключевые технические решения
+
+- Multi-tenant таблицы и `tenantId/siteId` не добавлять.
+- Каждая установка получает отдельную базу, роль БД, origins, secrets, private media scope и
+  destination credentials.
+- Выбор пакета происходит при build/deploy; browser и snapshot не могут выбирать пакет.
+- Stored block shape остаётся `{ id, type, data }`.
+- Core blocks становятся registry entries.
+- Обычные bespoke fields описываются ограниченными field descriptors.
+- Сложный блок может иметь package-owned React editor, но backend всё равно валидирует его schema.
+- Публичный Astro output статический; CMS API не участвует в page views.
+- Первый bespoke acceptance package — browser-only calculator.
+- Первый destination adapter — S3-compatible blue/green hosting.
+- Builder concurrency на общем VDS ограничивается Linux `flock` через общий volume.
+- Клиентские runtime APIs, booking, payments, CRM inbox, SFTP, FTP, DRM, Kubernetes, Redis и
+  multi-tenancy не входят в этот план.
+
+## Инфраструктурная модель
+
+Для пилота согласована гипотеза VDS 4 vCPU / 8 GB RAM / 80 GB disk. Публичные сайты и опубликованные
+изображения находятся на стороне клиента. VDS обслуживает admin/API, operational database, preview и
+редкие bounded builds.
+
+Не обещать фиксированное количество клиентов до Task 12 capacity smoke. Ограничить build
+concurrency, временные файлы, Docker image retention и логи; резервные копии хранить вне VDS.
+
+## Проверки и известные ограничения
+
+Последний полный функциональный baseline до planning-коммитов был зелёным для webapp/website/builder,
+typecheck, lint, production builds и architecture check. Этот docs-only этап не перезапускал полный
+release gate.
+
+Известное ограничение Windows:
+
+- полный backend integration suite может получать Prisma P2028 transaction timeout в
+  `deploy-database.integration.test.ts`;
+- Linux CI ранее подтверждал backend integration;
+- не менять production transaction semantics ради Windows workaround.
+
+Известная отдельная CI-проблема:
+
+- Terraform Yandex validation имеет ранее зафиксированную conditional type error;
+- она не относится к Site Packages и не должна маскироваться изменениями этого плана.
+
+Перед завершением каждой задачи выполнять команды, указанные в плане. Перед заявлением о полной
+готовности использовать `superpowers:verification-before-completion` и полный gate из Task 13.
+
+## Git и workspace hygiene
+
+Не добавлять и не удалять пользовательские/инструментальные каталоги:
+
+- `.playwright-cli/`;
+- `.ux-audit/`;
+- `output/`;
+- `webapp/.21st/`.
+
+Стадировать только файлы текущей задачи. Перед commit:
+
+```powershell
+git diff --check
+git diff --cached --name-status
+```
+
+Не использовать force-push, reset, stash, checkout поверх чужих изменений или cloud apply без
+явного запроса пользователя.
+
+## Необходимые решения перед реальным production deploy
+
+Кодовый план можно выполнить без этих значений. Для production понадобятся отдельно:
+
+- клиентский package ID и реальный business brief;
+- admin/API/preview domains;
+- PostgreSQL database/user credentials;
+- private media bucket;
+- customer public S3 destination и CDN/promotion endpoints;
+- TLS/DNS;
+- backup destination и retention;
+- первый owner account;
+- коммерческий срок managed CMS/hosting и export/handoff policy.
+
+Не запрашивать эти значения и не выполнять deploy, пока кодовые задачи и локальный acceptance не
+завершены.
