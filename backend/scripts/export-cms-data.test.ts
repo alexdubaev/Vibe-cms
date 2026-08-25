@@ -32,6 +32,11 @@ function fixtureSource(): CmsExportSource {
       draftPayload: {
         siteName: 'Автосервис',
         passwordHash: 'settings-password-hash',
+        downloadUrl: 'https://objects.example/private?X-Amz-Credential=fake&X-Amz-Signature=fake-signature',
+        href: 'http://storage.test/private/file?x-op=get&x-exp=1787650000&x-sig=fake-signature',
+        accountUrl: 'https://app.example/reset#token=fake-reset-token',
+        publicUrl: 'https://www.example/services?utm_source=cms#diagnostics',
+        styleReferenceUrl: 'https://design.example/pattern?signature=diagonal',
       },
       installationId: 'other-customer',
     }),
@@ -104,6 +109,14 @@ describe('CMS customer export', () => {
     })
 
     expect(verifyCmsExportChecksum(exported)).toBe(true)
+    expect(exported.settings).toEqual({
+      revision: 3,
+      payload: {
+        siteName: 'Автосервис',
+        publicUrl: 'https://www.example/services?utm_source=cms#diagnostics',
+        styleReferenceUrl: 'https://design.example/pattern?signature=diagonal',
+      },
+    })
     expect(exported).toMatchObject({
       formatVersion: 1,
       sitePackage: { id: 'client-auto', version: '1.0.0', schemaVersion: 1 },
@@ -132,6 +145,8 @@ describe('CMS customer export', () => {
       'apiToken',
       'signedDownloadUrl',
       'privateKey',
+      'fake-signature',
+      'fake-reset-token',
       'objectKey',
       'sourceUrl',
       'secret',

@@ -13,7 +13,9 @@ public media manifest. It does not serialize database rows wholesale. Password h
 reset-token hashes, builder/storage secrets, private object keys, signed/source URLs, audit
 diagnostics, and storage credentials are excluded. The media manifest contains the stable public
 path and stored content hash only; media bytes are delivered separately from the customer's backup
-or publication destination.
+or publication destination. Credential-bearing URL values are removed even when stored under an
+otherwise ordinary field such as `url`, `href`, or `downloadUrl`; ordinary public HTTP(S) links
+without authority-bearing query or fragment parameters remain exportable.
 
 Run with the isolated installation's read-capable runtime database URL and an explicit output file:
 
@@ -116,8 +118,8 @@ database restore.
 
 The capacity smoke is intentionally local and fake. It queues three serialized fake publish jobs,
 writes bounded temporary artifacts to the local temp directory, samples process RSS, and records
-build duration, queue wait, and temporary disk bytes. It never calls the CMS API, customer storage,
-the builder queue, or a cloud endpoint.
+build duration, queue wait, and aggregate temporary disk bytes for every artifact that coexists in
+the workspace. It never calls the CMS API, customer storage, the builder queue, or a cloud endpoint.
 
 ```powershell
 bun scripts/studio-capacity-smoke.mjs --dry-run

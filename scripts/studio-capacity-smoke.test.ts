@@ -41,8 +41,13 @@ describe('studio capacity smoke', () => {
       expect(request.peakRssBytes).toBeGreaterThan(0)
       expect(request.buildDurationMs).toBeGreaterThanOrEqual(0)
       expect(request.queueWaitMs).toBeGreaterThanOrEqual(0)
-      expect(request.temporaryDiskBytes).toBe(1024)
     }
+    expect(result.report.requests.map((request) => request.temporaryDiskBytes)).toEqual([
+      1024,
+      2048,
+      3072,
+    ])
+    expect(result.report.peaks.temporaryDiskBytes).toBe(3072)
 
     const serialized = await readFile(outputPath, 'utf8')
     expect(serialized).not.toContain('customerCount')
@@ -50,19 +55,20 @@ describe('studio capacity smoke', () => {
     expect(JSON.parse(serialized).requests).toHaveLength(3)
   })
 
-  test('reports a failed ceiling when controlled temporary disk exceeds the configured limit', async () => {
+  test('fails the ceiling against all three simultaneously retained artifacts', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'vibe-capacity-test-'))
     temporaryDirectories.push(directory)
 
     const result = await runCapacitySmoke({
       outputPath: join(directory, 'capacity.json'),
       memoryCeilingBytes: Number.MAX_SAFE_INTEGER,
-      diskCeilingBytes: 511,
-      fakeArtifactBytes: 512,
+      diskCeilingBytes: 1500,
+      fakeArtifactBytes: 1024,
       fakeBuildDelayMs: 0,
     })
 
     expect(result.withinCeilings).toBe(false)
-    expect(result.failures).toEqual(['temporary disk 512 bytes exceeded ceiling 511 bytes'])
+    expect(result.report.peaks.temporaryDiskBytes).toBe(3072)
+    expect(result.failures).toEqual(['temporary disk 3072 bytes exceeded ceiling 1500 bytes'])
   })
 })

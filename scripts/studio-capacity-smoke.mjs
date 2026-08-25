@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { performance } from 'node:perf_hooks'
@@ -32,7 +32,7 @@ export async function runCapacitySmoke({
       const buildStarted = performance.now()
       await delay(fakeBuildDelayMs)
       await writeFile(artifactPath, Buffer.alloc(fakeArtifactBytes, index))
-      const builtBytes = (await stat(artifactPath)).size
+      const temporaryDiskBytes = await directoryBytes(workspace)
       const buildDurationMs = performance.now() - buildStarted
       const afterRss = process.memoryUsage.rss()
       requests.push({
@@ -41,7 +41,7 @@ export async function runCapacitySmoke({
         peakRssBytes: Math.max(beforeRss, afterRss),
         buildDurationMs: roundMilliseconds(buildDurationMs),
         queueWaitMs: roundMilliseconds(queueWaitMs),
-        temporaryDiskBytes: builtBytes,
+        temporaryDiskBytes,
       })
     }
 
@@ -87,6 +87,15 @@ function delay(milliseconds) {
 
 function roundMilliseconds(value) {
   return Math.round(value * 1000) / 1000
+}
+
+async function directoryBytes(directory) {
+  let bytes = 0
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name)
+    bytes += entry.isDirectory() ? await directoryBytes(path) : (await stat(path)).size
+  }
+  return bytes
 }
 
 function parseByteOption(argv, name, fallback) {
