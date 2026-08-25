@@ -3,13 +3,15 @@ import {
   collectionEntryDraftSchema,
   collectionTypeSchema,
   mediaAssetSchema,
-  pageDraftSchema,
   previewGrantResponseSchema,
   type CollectionEntryCreateInput,
   type CollectionEntryDraft,
-  type PageDraft,
   uploadTicketSchema,
 } from '@web-app-demo/contracts'
+import {
+  selectedPageDraftSchema,
+  type SelectedPageDraft,
+} from '@vibe-cms/selected-site-package/contract'
 import { z } from 'zod'
 
 import type { AuthenticatedTransport } from '@/platform/api'
@@ -288,14 +290,14 @@ export function restoreCmsPageRevision(
 export function saveCmsPage(
   transport: AuthenticatedTransport,
   pageId: string,
-  input: PageDraft,
+  input: SelectedPageDraft,
 ) {
   return transport.request(
     `/api/cms/pages/${encodeURIComponent(pageId)}`,
     cmsPageSaveResponseSchema,
     {
       method: 'PATCH',
-      body: pageDraftSchema.parse(input),
+      body: selectedPageDraftSchema.parse(input),
     },
   )
 }

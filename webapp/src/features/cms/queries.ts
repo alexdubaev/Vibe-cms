@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { CollectionEntryCreateInput, CollectionEntryDraft, PageDraft } from '@web-app-demo/contracts'
+import type { CollectionEntryCreateInput, CollectionEntryDraft } from '@web-app-demo/contracts'
+import type { SelectedPageDraft } from '@vibe-cms/selected-site-package/contract'
 
 import { useAuth } from '@/features/auth'
 import {
@@ -124,7 +125,7 @@ export function useSaveCmsPageMutation() {
   const auth = useAuth()
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ pageId, draft }: { pageId: string; draft: PageDraft }) =>
+    mutationFn: ({ pageId, draft }: { pageId: string; draft: SelectedPageDraft }) =>
       saveCmsPage(auth.transport, pageId, draft),
     onSuccess: async (saved, variables) => {
       await Promise.all([

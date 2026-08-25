@@ -1,5 +1,10 @@
-import { structuredTextDocumentSchema, type StructuredTextDocument } from '@web-app-demo/contracts'
-import type { ContentBlock } from '@web-app-demo/contracts'
+import {
+  structuredTextDocumentSchema,
+  type RegisteredContentBlock,
+  type StructuredTextDocument,
+} from '@web-app-demo/contracts'
+
+import { createAdminBlock } from './site-package/registry'
 
 export type BenefitIcon = 'check' | 'star' | 'shield' | 'spark'
 
@@ -9,73 +14,19 @@ export type BenefitItem = {
   icon: BenefitIcon
 }
 
-/** Blocks that can be inserted without first selecting an existing media or catalogue item. */
-export type InsertableBlockType = Extract<
-  ContentBlock['type'],
-  'hero' | 'textImage' | 'benefits' | 'cta' | 'contacts' | 'formPlaceholder'
->
-
-export function createEditorBlock(type: InsertableBlockType, id: string): ContentBlock {
-  switch (type) {
-    case 'hero':
-      return {
-        id,
-        type,
-        data: {
-          eyebrow: 'Новый раздел',
-          title: 'Новый первый экран',
-          text: 'Расскажите посетителю, почему это важно.',
-          primaryAction: { label: 'Подробнее', href: '/' },
-        },
-      }
-    case 'textImage':
-      return {
-        id,
-        type,
-        data: {
-          title: 'Новый раздел',
-          content: { type: 'document', blocks: [{ type: 'paragraph', children: [{ type: 'text', text: 'Добавьте текст.', marks: [] }] }] },
-          imageSide: 'right',
-        },
-      }
-    case 'benefits':
-      return {
-        id,
-        type,
-        data: {
-          title: 'Почему выбирают нас',
-          items: [
-            { title: 'Первое преимущество', text: 'Коротко опишите ценность.', icon: 'check' },
-            { title: 'Второе преимущество', text: 'Коротко опишите ценность.', icon: 'star' },
-          ],
-        },
-      }
-    case 'cta':
-      return {
-        id,
-        type,
-        data: { title: 'Готовы начать?', text: 'Свяжитесь с нами, чтобы обсудить задачу.', primaryAction: { label: 'Связаться', href: '/' } },
-      }
-    case 'contacts':
-      return {
-        id,
-        type,
-        data: { title: 'Контакты', showAddress: true, showHours: true, showContacts: true, showSocials: false, showMap: false },
-      }
-    case 'formPlaceholder':
-      return {
-        id,
-        type,
-        data: { title: 'Свяжитесь с нами', text: 'Выберите удобный способ связи.', contactMethod: 'phone' },
-      }
-  }
+export function createEditorBlock(type: string, id: string): RegisteredContentBlock {
+  return createAdminBlock(type, id)
 }
 
-export function duplicateEditorBlock(block: ContentBlock, id: string): ContentBlock {
+export function duplicateEditorBlock(block: RegisteredContentBlock, id: string): RegisteredContentBlock {
   return { ...structuredClone(block), id }
 }
 
-export function moveEditorBlock(blocks: readonly ContentBlock[], index: number, direction: -1 | 1): ContentBlock[] {
+export function moveEditorBlock(
+  blocks: readonly RegisteredContentBlock[],
+  index: number,
+  direction: -1 | 1,
+): RegisteredContentBlock[] {
   const target = index + direction
   if (index < 0 || index >= blocks.length || target < 0 || target >= blocks.length) return [...blocks]
   const next = [...blocks]
@@ -84,7 +35,7 @@ export function moveEditorBlock(blocks: readonly ContentBlock[], index: number, 
   return next
 }
 
-export function removeEditorBlock(blocks: readonly ContentBlock[], index: number): ContentBlock[] {
+export function removeEditorBlock(blocks: readonly RegisteredContentBlock[], index: number): RegisteredContentBlock[] {
   if (blocks.length <= 1 || index < 0 || index >= blocks.length) return [...blocks]
   return blocks.filter((_, blockIndex) => blockIndex !== index)
 }

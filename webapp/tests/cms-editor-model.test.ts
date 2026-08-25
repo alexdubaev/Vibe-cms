@@ -1,4 +1,4 @@
-import { contentBlockSchema } from '@web-app-demo/contracts'
+import { selectedContentBlockSchema } from '@vibe-cms/selected-site-package/contract'
 import { expect, test } from 'bun:test'
 
 import {
@@ -16,16 +16,16 @@ import {
   updateBenefitItem,
 } from '@/features/cms/editor-model'
 
-test('page block helpers create contract-valid human defaults', () => {
+test('page block helpers create selected-package schema-validated defaults', () => {
   const hero = createEditorBlock('hero', 'hero-1')
   const benefits = createEditorBlock('benefits', 'benefits-1')
 
-  expect(contentBlockSchema.safeParse(hero).success).toBe(true)
-  expect(contentBlockSchema.safeParse(benefits).success).toBe(true)
+  expect(selectedContentBlockSchema.safeParse(hero).success).toBe(true)
+  expect(selectedContentBlockSchema.safeParse(benefits).success).toBe(true)
   expect(hero).toMatchObject({
     id: 'hero-1',
     type: 'hero',
-    data: { title: 'Новый первый экран', primaryAction: { label: 'Подробнее', href: '/' } },
+    data: { title: 'Заголовок', primaryAction: { label: 'Подробнее', href: '/about' } },
   })
   expect(benefits).toMatchObject({ id: 'benefits-1', type: 'benefits' })
 })
