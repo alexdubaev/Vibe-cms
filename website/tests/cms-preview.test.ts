@@ -76,4 +76,14 @@ describe('protected preview helpers', () => {
     assert.equal(response.headers.get('Cache-Control'), 'private, no-store')
     assert.equal(response.headers.get('X-Robots-Tag'), 'noindex, nofollow')
   })
+
+  test('an expired session never becomes a cookie, and a short fuse clamps Max-Age down', () => {
+    const now = Date.parse('2026-08-24T10:00:00.000Z')
+    const expired = { ...session, expiresAt: new Date(now - 1_000).toISOString() }
+    assert.throws(() => previewSessionCookie(expired, now), /Preview is unavailable/)
+
+    // Ten minutes left on the session: the cookie must not outlive it up to the 15-minute cap.
+    const shortFuse = { ...session, expiresAt: new Date(now + 10 * 60 * 1_000).toISOString() }
+    assert.equal(previewSessionCookie(shortFuse, now).endsWith('Max-Age=600'), true)
+  })
 })

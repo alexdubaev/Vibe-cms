@@ -90,3 +90,38 @@ describe('request-time preview runtime helpers', () => {
     assert.equal(result.mimeType, 'image/png')
   })
 })
+
+describe('preview failure closure', () => {
+  test('a non-ok backend response becomes the same generic error for 401 and 404', async () => {
+    // Cross-page access and a bad token must be indistinguishable to the caller.
+    for (const status of [401, 404]) {
+      await assert.rejects(
+        fetchPreviewPage({
+          backendOrigin: 'https://api.example.test',
+          pageId,
+          sessionToken,
+          fetcher: async () => new Response('no', { status }),
+        }),
+        /Preview is unavailable/,
+      )
+    }
+  })
+
+  test('a draft payload that does not satisfy the selected draft schema is refused', async () => {
+    const invalid = {
+      id: pageId,
+      title: 'Черновая страница',
+      path: '/draft',
+      draftPayload: { ...pagePayload, blocks: [{ id: 'x', type: 'not-registered', data: {} }] },
+      draftRevision: 4,
+      archived: false,
+    }
+    const dto = await fetchPreviewPage({
+      backendOrigin: 'https://api.example.test',
+      pageId,
+      sessionToken,
+      fetcher: async () => new Response(JSON.stringify(invalid), { status: 200 }),
+    })
+    assert.throws(() => previewPageToPublicPage(dto), /Preview is unavailable/)
+  })
+})

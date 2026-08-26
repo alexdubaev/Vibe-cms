@@ -102,3 +102,50 @@ test('page metadata combines page and default SEO without treating the snapshot 
     title: 'Page title',
   })
 })
+
+test('a snapshot with an unknown block type fails the parse instead of being skipped', () => {
+  const tampered = structuredClone(snapshot)
+  tampered.pages[0]!.blocks.push({ id: 'evil', type: 'malicious-custom', data: {} })
+  assert.throws(() => parsePublicationSnapshot(tampered), /Unknown CMS block type/)
+})
+
+test('block data is policed by the selected package per-type schemas, not just by type name', () => {
+  const calculatorBlock = {
+    id: 'calc',
+    type: 'estimateCalculator',
+    data: {
+      title: 'Калькулятор',
+      description: 'Считает стоимость',
+      unitPrice: 100,
+      minimumPrice: 0,
+      minimumArea: 50,
+      maximumArea: 10,
+    },
+  }
+  assert.throws(
+    () => {
+      const tampered = structuredClone(snapshot)
+      tampered.pages[0]!.blocks = [calculatorBlock]
+      parsePublicationSnapshot(tampered)
+    },
+    /Максимальная площадь|maximumArea/,
+  )
+
+  const withExtraKey = structuredClone(snapshot)
+  withExtraKey.pages[0]!.blocks = [
+    { ...withExtraKey.pages[0]!.blocks[0]!, data: { ...withExtraKey.pages[0]!.blocks[0]!.data, sql: 'drop table' } },
+  ]
+  assert.throws(() => parsePublicationSnapshot(withExtraKey), /Unrecognized key/)
+
+  const valid = structuredClone(snapshot)
+  valid.pages[0]!.blocks = [{ ...calculatorBlock, data: { ...calculatorBlock.data, maximumArea: 500 } }]
+  parsePublicationSnapshot(valid)
+})
+
+test('snapshot pages cannot claim reserved paths', () => {
+  for (const path of ['/__preview/evil', '/api/anything', '/media/stolen']) {
+    const tampered = structuredClone(snapshot)
+    tampered.pages[0]!.path = path
+    assert.throws(() => parsePublicationSnapshot(tampered), /Invalid content path/, `path ${path} must be rejected`)
+  }
+})
