@@ -100,6 +100,85 @@ describe('media service', () => {
     expect(result.asset.height).toBe(480)
   })
 
+  test('finalize is single-use: a second call never touches storage', async () => {
+    let pending: MediaAssetRecord | null = asset()
+    let storageReads = 0
+    const service = createService({
+      // Mirrors the real repository: findPending only returns assets still in state 'pending'.
+      findPending: async () => pending ?? null,
+      markReady: async () => {
+        pending = null
+        return { ...asset(), state: 'ready', storageEtag: 'etag' }
+      },
+    }, {
+      headObject: async () => {
+        storageReads += 1
+        return { key: 'cms-media/2026/08/object', contentLength: 128, contentType: 'image/png', etag: 'etag' }
+      },
+      readRange: async () => {
+        storageReads += 1
+        return pngSignature()
+      },
+    })
+    const editor = { id: 'editor', role: 'editor' as const }
+
+    const first = await service.finalize(editor, uuid)
+    expect(first.asset.state).toBe('ready')
+
+    const second = service.finalize(editor, uuid)
+    await expectRejected(second, MediaError)
+    await expect(second).rejects.toMatchObject({ code: 'MEDIA_NOT_FOUND' })
+    expect(storageReads).toBe(2)
+  })
+
+  test('enforces per-mime size limits before issuing any upload ticket', async () => {
+    let ticketsIssued = 0
+    let assetsCreated = 0
+    const service = createService({
+      createPending: async () => {
+        assetsCreated += 1
+        return asset()
+      },
+    }, {
+      createUploadUrl: async () => {
+        ticketsIssued += 1
+        return { key: 'cms-media/2026/08/object', method: 'PUT', url: 'https://storage.test/upload', headers: {}, contentLength: 128, expiresAt: '2026-08-24T10:01:00.000Z' }
+      },
+    })
+    const editor = { id: 'editor', role: 'editor' as const }
+    const oversized = (mimeType: 'video/mp4' | 'application/pdf' | 'image/png', byteSize: number) =>
+      service.createUpload(editor, { filename: 'file.bin', mimeType, byteSize })
+
+    await expect(oversized('video/mp4', 100 * 1024 * 1024 + 1)).rejects.toMatchObject({ code: 'MEDIA_REJECTED' })
+    await expect(oversized('application/pdf', 25 * 1024 * 1024 + 1)).rejects.toMatchObject({ code: 'MEDIA_REJECTED' })
+    await expect(oversized('image/png', 99)).rejects.toMatchObject({ code: 'MEDIA_REJECTED' })
+    expect(ticketsIssued).toBe(0)
+    expect(assetsCreated).toBe(0)
+
+    // The boundary itself is allowed: no off-by-one at the limit.
+    await expect(
+      service.createUpload(editor, { filename: 'hero.png', mimeType: 'image/png', byteSize: 15 * 1024 * 1024 }),
+    ).resolves.toHaveProperty('upload')
+    expect(ticketsIssued).toBe(1)
+    expect(assetsCreated).toBe(1)
+  })
+
+  test('rejects bytes of one format finalized under another format\u2019s declared type', async () => {
+    const pngBytes = pngDimensions(640, 480)
+    // The declared PDF must match PDF bytes; PNG magic under a PDF declaration is a lie.
+    const declared = asset({ contentType: 'application/pdf', byteSize: pngBytes.byteLength })
+    const pdfService = createService({
+      findPending: async () => declared,
+    }, {
+      headObject: async () => ({ key: declared.objectKey, contentLength: declared.byteSize, contentType: declared.contentType, etag: 'etag' }),
+      readRange: async () => pngBytes,
+    })
+
+    const finalize = pdfService.finalize({ id: 'editor', role: 'editor' }, uuid)
+    await expectRejected(finalize, MediaError)
+    await expect(finalize).rejects.toMatchObject({ code: 'MEDIA_REJECTED' })
+  })
+
   test('does not queue deletion while usage references remain', async () => {
     let deferred = false
     const service = new MediaService({

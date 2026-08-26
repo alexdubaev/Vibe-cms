@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { createPrisma, type DbClient } from '../../db'
 import type { PrivateStorage } from '../../storage/port'
 import { MediaService } from './application/media-service'
+import { MediaError } from './domain/errors'
 import { createMediaRepository } from './infrastructure/media-repository'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -37,6 +38,7 @@ maybeDescribe('media repository and service against PostgreSQL', () => {
     deleted.length = 0
     await db.cmsMediaUsage.deleteMany()
     await db.cmsMediaAsset.deleteMany()
+    await db.cmsPage.deleteMany()
   })
 
   afterAll(async () => {
@@ -59,6 +61,48 @@ maybeDescribe('media repository and service against PostgreSQL', () => {
     expect((await db.cmsMediaAsset.findUniqueOrThrow({ where: { id: created.asset.id } })).state).toBe('deleting')
     expect(deleted).toEqual(['cms-media/2026/08/integration-key'])
   })
+
+  test('blocks deletion of a referenced asset until its usage row disappears', async () => {
+    const owner = { id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a20', role: 'owner' as const }
+    const created = await service.createUpload(owner, { filename: 'used.png', mimeType: 'image/png', byteSize: 128 })
+    await service.finalize(owner, created.asset.id)
+
+    const page = await db.cmsPage.create({
+      data: { path: '/usage', title: 'Usage', draftPayload: { blocks: [] } },
+    })
+    await db.cmsMediaUsage.create({
+      data: {
+        assetId: created.asset.id,
+        ownerType: 'page',
+        ownerId: page.id,
+        scope: 'draft',
+      },
+    })
+
+    // TODO(local): pause lets the pooled connection from the finalize transaction return on
+    // the local Windows pg adapter; root-cause and remove (same as the approvals suite).
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const blocked = service.remove(owner, created.asset.id)
+    await expect(blocked).rejects.toBeInstanceOf(MediaError)
+    await expect(blocked).rejects.toMatchObject({ code: 'CMS_MEDIA_IN_USE' })
+    // A blocked removal must leave the asset fully usable, with nothing queued for deletion.
+    expect(
+      (await db.cmsMediaAsset.findUniqueOrThrow({ where: { id: created.asset.id } })).state,
+    ).toBe('ready')
+    expect(deleted).toEqual([])
+
+    await db.cmsMediaUsage.deleteMany({ where: { assetId: created.asset.id } })
+    await service.remove(owner, created.asset.id)
+    expect(
+      (await db.cmsMediaAsset.findUniqueOrThrow({ where: { id: created.asset.id } })).state,
+    ).toBe('deleting')
+    expect(deleted).toEqual(['cms-media/2026/08/integration-key'])
+  })
+
+  // Known gap: replaceMediaUsage has no production caller, so content saves never record
+  // media usage and the in-use deletion guard only triggers on rows created manually (as
+  // above). Wiring content saves to usage tracking needs a product decision first.
+  test.todo('saving content records and replaces media usage rows')
 })
 
 function pngDimensions(width: number, height: number) {
