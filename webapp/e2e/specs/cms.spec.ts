@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test'
 import { createPrisma, type DbClient } from '../../../backend/src/db'
 import { e2eAdminEmail, e2eAdminPassword } from '../env'
 import { expect, test } from '../helpers/test'
+import { pngImage } from '../helpers/images'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 if (!databaseUrl) throw new Error('TEST_DATABASE_URL is required for the CMS E2E smoke')
@@ -52,6 +53,11 @@ test.beforeAll(() => {
 })
 
 test.beforeEach(async () => {
+  await db.cmsApprovalRequest.deleteMany()
+  await db.taskOutbox.deleteMany({ where: { type: 'website:rebuild:wakeup' } })
+  await db.cmsMediaUsage.deleteMany()
+  await db.cmsMediaAsset.deleteMany()
+  await db.cmsPageRevision.deleteMany()
   await db.cmsPage.deleteMany()
   await db.cmsPage.create({
     data: {
@@ -128,4 +134,159 @@ test('media library fits a narrow mobile viewport', async ({ page }) => {
     scrollWidth: document.documentElement.scrollWidth,
   }))
   expect(width.scrollWidth).toBeLessThanOrEqual(width.clientWidth)
+})
+
+test('autosave persists edits and a competing save surfaces the conflict UI', async ({ page }) => {
+  test.setTimeout(120_000)
+  await signInAsOwner(page)
+  await page.getByRole('link', { name: 'Страницы' }).click()
+  await page.getByRole('link', { name: 'О компании' }).click()
+  await page.getByRole('button', { name: /2\. Текст и изображение/ }).click()
+  const editor = page.getByRole('textbox', { name: 'Добавьте текст или начните строку с ##, -, >' })
+
+  // The access token lives in browser memory only, so capture the Authorization header
+  // while the autosave itself is still in flight - a plain page.request has just cookies.
+  let authorization: string | undefined
+  page.on('request', (request) => {
+    const header = request.headers()['authorization']
+    if (header && request.url().includes('/api/cms/pages/')) authorization = header
+  })
+
+  // Type and walk away: the debounced autosave must land in the database on its own.
+  const autosavedText = '## Автосохранённый текст\n\nАбзац без нажатия кнопок.'
+  await editor.fill(autosavedText)
+  await expect.poll(async () => {
+    const saved = await db.cmsPage.findFirstOrThrow({ where: { path: pageDraft.path } })
+    const payload = saved.draftPayload as typeof pageDraft
+    return payload.blocks[1]?.type === 'textImage'
+      ? payload.blocks[1].data.content.blocks[0]?.children[0]?.text
+      : undefined
+  }, { timeout: 15_000 }).toBe('Автосохранённый текст')
+
+  const pageRow = await db.cmsPage.findFirstOrThrow({ where: { path: pageDraft.path } })
+  const backendOrigin = process.env.E2E_BACKEND_URL
+  if (!backendOrigin) throw new Error('E2E_BACKEND_URL is required for the conflict E2E flow')
+  const competing = await page.request.patch(`${backendOrigin}/api/cms/pages/${pageRow.id}`, {
+    headers: { authorization: authorization! },
+    data: { ...pageRow.draftPayload, expectedRevision: pageRow.draftRevision },
+  })
+  if (!competing.ok()) {
+    throw new Error(`competing save failed: ${competing.status()} ${await competing.text()}`)
+  }
+
+  // The next debounced save now hits a 409 and the editor must say so instead of pretending.
+  if (!(await editor.isVisible())) {
+    await page.getByRole('button', { name: /2. Текст и изображение/ }).click()
+  }
+  await editor.fill('## Правка поверх конфликта')
+  await expect(page.getByText('Нужна проверка конфликта')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('Черновик изменился на сервере')).toBeVisible()
+})
+
+test('owner rejects an approval with a decision note and no publication appears', async ({ page }) => {
+  test.setTimeout(120_000)
+  await signInAsOwner(page)
+  await page.getByRole('link', { name: 'Страницы' }).click()
+  await page.getByRole('link', { name: 'О компании' }).click()
+
+  await page.getByRole('button', { name: 'Отправить на согласование' }).click()
+  await expect.poll(async () => db.cmsApprovalRequest.count()).toBe(1)
+
+  await page.getByRole('link', { name: 'Публикации' }).click()
+  await expect(page.getByText('Заявки на согласование')).toBeVisible()
+
+  // The decision needs a reason: reject stays disabled until the note is filled in.
+  const rejectButton = page.getByRole('button', { name: 'Отклонить' })
+  await expect(rejectButton).toBeDisabled()
+  await page.getByLabel('Причина отклонения').fill('Переделать заголовок')
+  await expect(rejectButton).toBeEnabled()
+  await rejectButton.click()
+
+  await expect(page.getByText('Ожидающих заявок нет.')).toBeVisible({ timeout: 15_000 })
+  const stored = await db.cmsApprovalRequest.findFirstOrThrow()
+  expect(stored.status).toBe('rejected')
+  expect(stored.decisionNote).toBe('Переделать заголовок')
+  expect(await db.cmsPublication.count()).toBe(0)
+})
+
+// KNOWN GAP: uploading through the hidden file input (#cms-media-upload) fails in the
+// browser before any network request - the change event delivers a valid File
+// (verified: hero.png|image/png|134) but the upload mutation errors client-side.
+// Until that UI bug is fixed, only the API-driven journey below is covered.
+test.fixme('owner uploads media through the file input', async () => {})
+
+test('a media asset added via the API shows in the library, persists alt text, and enters deleting state', async ({ page }) => {
+  test.setTimeout(120_000)
+  // The access token lives in browser memory only: capture it while the first authenticated
+  // page load is still in flight, then reuse it for direct API calls.
+  let authorization: string | undefined
+  page.on('request', (request) => {
+    const header = request.headers()['authorization']
+    if (header) authorization = header
+  })
+  await signInAsOwner(page)
+  await page.goto('/admin/media')
+
+  // The CMS media minimum is 100 bytes: pad the real 1x1 PNG with trailing bytes the
+  // signature check never reads.
+  const paddedPng = {
+    ...pngImage,
+    name: 'hero.png',
+    buffer: Buffer.concat([pngImage.buffer, Buffer.alloc(64, 0x00)]),
+  }
+  // Drive the real backend + storage stack through the API the UI itself uses, then check
+  // the library renders the result. (The file-input path currently fails in the browser
+  // before any network request - reported separately; see the commit message.)
+  await expect(page.getByText('hero.png')).toHaveCount(0)
+
+  const backendOrigin = process.env.E2E_BACKEND_URL
+  if (!backendOrigin) throw new Error('E2E_BACKEND_URL is required for the media E2E flow')
+  const authHeaders = { authorization: authorization! }
+  const ticketResponse = await page.request.post(`${backendOrigin}/api/cms/media/uploads`, {
+    headers: authHeaders,
+    data: { filename: 'hero.png', mimeType: 'image/png', byteSize: paddedPng.buffer.byteLength },
+  })
+  expect(ticketResponse.ok()).toBeTruthy()
+  const ticket = await ticketResponse.json()
+  const putResponse = await page.request.fetch(ticket.upload.url, {
+    method: ticket.upload.method,
+    headers: { ...ticket.upload.headers, 'content-type': 'image/png' },
+    data: paddedPng.buffer,
+  })
+  expect(putResponse.ok()).toBeTruthy()
+  const finalizeResponse = await page.request.post(
+    `${backendOrigin}/api/cms/media/${ticket.asset.id}/finalize`,
+    { headers: authHeaders },
+  )
+  expect(finalizeResponse.ok()).toBeTruthy()
+
+  await page.reload()
+  await expect(page.getByText('hero.png').first()).toBeVisible()
+
+  const altInput = page.getByLabel('Alt-текст для hero.png')
+  await altInput.fill('Главный баннер страницы')
+  await page.getByRole('button', { name: 'Сохранить alt' }).click()
+  await expect
+    .poll(async () => {
+      const asset = await db.cmsMediaAsset.findFirst({ where: { filename: 'hero.png' } })
+      return asset?.altText
+    })
+    .toBe('Главный баннер страницы')
+
+  await page.reload()
+  await expect(page.getByLabel('Alt-текст для hero.png')).toHaveValue('Главный баннер страницы')
+
+  await page.getByRole('button', { name: 'Удалить', exact: true }).click()
+  await page.getByRole('button', { name: 'Да', exact: true }).click()
+  await expect
+    .poll(async () => {
+      const asset = await db.cmsMediaAsset.findFirst({ where: { filename: 'hero.png' } })
+      return asset?.state
+    }, { timeout: 30_000 })
+    .toBe('deleting')
+  // The durable handoff runs outside the request, so the UI honestly reports the transition
+  // instead of the file vanishing instantly.
+  await page.reload()
+  await expect(page.getByText('Удаляется')).toBeVisible({ timeout: 15_000 })
+  expect(await db.cmsMediaAsset.count({ where: { state: 'deleting' } })).toBe(1)
 })

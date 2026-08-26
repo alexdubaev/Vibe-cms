@@ -42,6 +42,9 @@ maybeDescribe('media repository and service against PostgreSQL', () => {
   })
 
   afterAll(async () => {
+    // deploy-database validates every stored page when the E2E stack next boots against
+    // this database, so the helper page must not outlive this suite with empty blocks.
+    await db.cmsPage.deleteMany()
     await db.$disconnect()
   })
 
