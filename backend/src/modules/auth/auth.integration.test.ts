@@ -18,6 +18,9 @@ maybeDescribe('auth API integration', () => {
     CORS_ORIGINS: 'http://localhost:5173',
     // Short enough that a test can observe an access token expiring.
     ACCESS_TOKEN_TTL_SECONDS: '60',
+    // Every POST in this file shares one "unknown" client bucket under app.request, so the
+    // shared app must never be close to the limit - only the dedicated app below tests it.
+    AUTH_RATE_LIMIT_MAX: '1000',
   })
   const prisma = createPrisma(databaseUrl!)
   const app = createApp({ env, prisma })
@@ -442,6 +445,7 @@ maybeDescribe('auth API integration', () => {
     expect(setCookie).toContain('web_app_demo_refresh=')
     expect(setCookie).toContain('HttpOnly')
     expect(setCookie).toContain('SameSite=Lax')
+    expect(setCookie).toContain('Path=/api/auth')
 
     const refresh = await app.request('/api/auth/refresh', {
       method: 'POST',
@@ -742,6 +746,162 @@ maybeDescribe('auth API integration', () => {
       },
     })
     expect(users).toBe(1)
+  })
+
+  test('re-checks the database role on every request without reissuing a token', async () => {
+    // The JWT deliberately omits the role: the token above must keep working, but what it
+    // authorizes must follow the database, not the moment it was issued.
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'role-flip@example.com', password: 'password123' }),
+    })
+    const registered = await register.json()
+    const authorization = { Authorization: `Bearer ${registered.accessToken}` }
+
+    const beforePromotion = await app.request('/api/admin/users', { headers: authorization })
+    expect(beforePromotion.status).toBe(403)
+
+    await prisma.user.update({
+      where: { email: 'role-flip@example.com' },
+      data: { role: 'owner' },
+    })
+
+    const promotedMe = await app.request('/api/auth/me', { headers: authorization })
+    expect(promotedMe.status).toBe(200)
+    expect((await promotedMe.json()).user.role).toBe('owner')
+    const promotedAdmin = await app.request('/api/admin/users', { headers: authorization })
+    expect(promotedAdmin.status).toBe(200)
+
+    await prisma.user.update({
+      where: { email: 'role-flip@example.com' },
+      data: { role: 'user' },
+    })
+
+    const demotedAdmin = await app.request('/api/admin/users', { headers: authorization })
+    expect(demotedAdmin.status).toBe(403)
+  })
+
+  test('rate limits repeated failed logins from one client and not another', async () => {
+    // Register on the shared app so the limited app's budget is spent only on logins.
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'brute@example.com', password: 'password123' }),
+    })
+    expect(register.status).toBe(201)
+
+    const limitedApp = createApp({
+      env: {
+        ...env,
+        AUTH_RATE_LIMIT_MAX: 3,
+        TRUST_PROXY: true,
+        TRUSTED_PROXY_CLIENT_IP_HEADER: 'do-connecting-ip',
+      },
+      prisma,
+    })
+    const wrongPasswordLogin = (clientIp: string) =>
+      limitedApp.request('/api/auth/token/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Do-Connecting-Ip': clientIp,
+        },
+        body: JSON.stringify({ email: 'brute@example.com', password: 'wrong-password' }),
+      })
+
+    // Three 401s prove real password verification is being throttled, not just validation.
+    expect((await wrongPasswordLogin('203.0.113.10')).status).toBe(401)
+    expect((await wrongPasswordLogin('203.0.113.10')).status).toBe(401)
+    expect((await wrongPasswordLogin('203.0.113.10')).status).toBe(401)
+    const throttled = await wrongPasswordLogin('203.0.113.10')
+    expect(throttled.status).toBe(429)
+    expect(throttled.headers.get('retry-after')).toBeTruthy()
+    expect((await throttled.json()).error.code).toBe('RATE_LIMITED')
+    expect((await wrongPasswordLogin('203.0.113.11')).status).toBe(401)
+  })
+
+  test('rejects a password reset confirmation for an expired token', async () => {
+    const register = await app.request('/api/auth/token/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'expired-reset@example.com', password: 'password123' }),
+    })
+    expect(register.status).toBe(201)
+
+    const now = new Date()
+    // A real one-time code; the row stores its sha256, exactly like the service does.
+    const { createPasswordResetToken, hashPasswordResetToken } = await import(
+      './infrastructure/password-reset-tokens'
+    )
+    const token = createPasswordResetToken()
+    const tokenHash = hashPasswordResetToken(token)
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { email: 'expired-reset@example.com' },
+    })
+    await prisma.passwordResetToken.create({
+      data: {
+        expiresAt: new Date(now.getTime() - 60_000),
+        tokenHash,
+        userId: user.id,
+      },
+    })
+
+    const confirm = await app.request('/api/auth/password-reset/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password: 'new-password-123' }),
+    })
+    const confirmBody = await confirm.json()
+    expect(confirm.status).toBe(400)
+    expect(confirmBody.error.code).toBe('AUTH_PASSWORD_RESET_INVALID')
+
+    const originalPassword = await app.request('/api/auth/token/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'expired-reset@example.com', password: 'password123' }),
+    })
+    expect(originalPassword.status).toBe(200)
+    const storedToken = await prisma.passwordResetToken.findUniqueOrThrow({
+      where: { tokenHash },
+    })
+    expect(storedToken.usedAt).toBeNull()
+  })
+
+  test('logout clears the refresh cookie and stays idempotent for unknown credentials', async () => {
+    const register = await app.request('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'cookie-logout@example.com', password: 'password123' }),
+    })
+    expect(register.status).toBe(201)
+    const cookie = register.headers.get('set-cookie')!.split(';')[0]
+
+    const logout = await app.request('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({}),
+    })
+    expect(logout.status).toBe(204)
+    const setCookie = logout.headers.get('set-cookie')!
+    expect(setCookie).toContain('web_app_demo_refresh=')
+    expect(setCookie.toLowerCase()).toContain('max-age=0')
+    // A clearing cookie without the same Path would not overwrite the real one in a browser.
+    expect(setCookie).toContain('Path=/api/auth')
+
+    const revokedLogout = await app.request('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({}),
+    })
+    expect(revokedLogout.status).toBe(204)
+
+    const unknownTokenLogout = await app.request('/api/auth/token/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: 'r'.repeat(43) }),
+    })
+    expect(unknownTokenLogout.status).toBe(204)
   })
 
   async function registerForMeGuard(email: string) {

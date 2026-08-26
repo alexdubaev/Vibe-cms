@@ -39,4 +39,27 @@ describe('access tokens', () => {
 
     await expect(verifyAccessToken(token, env)).rejects.toThrow()
   })
+
+  test('rejects expired tokens and tokens signed with a different secret', async () => {
+    const expired = await new SignJWT({
+      sessionId: 'session_1',
+      email: 'user@example.com',
+    })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject('user_1')
+      .setExpirationTime(Math.floor(Date.now() / 1000) - 60)
+      .sign(new TextEncoder().encode(env.JWT_SECRET))
+    await expect(verifyAccessToken(expired, env)).rejects.toThrow()
+
+    const otherSecret = '98765432109876543210987654321098'
+    const foreignSigned = await new SignJWT({
+      sessionId: 'session_1',
+      email: 'user@example.com',
+    })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject('user_1')
+      .setExpirationTime('1m')
+      .sign(new TextEncoder().encode(otherSecret))
+    await expect(verifyAccessToken(foreignSigned, env)).rejects.toThrow()
+  })
 })
