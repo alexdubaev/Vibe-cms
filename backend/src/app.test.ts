@@ -159,6 +159,22 @@ test('account mutations reject oversized bodies before authentication', async ()
     .toBe(413)
 })
 
+test('CMS mutations reject oversized bodies before authentication', async () => {
+  const app = createApp({
+    env: { ...env, CMS_BODY_LIMIT_BYTES: 32 },
+    prisma: {} as DbClient,
+  })
+  const response = await app.request('/api/cms/pages/018f8c8d-5f34-7db2-8b98-2c7bf3d80a10', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'x'.repeat(64), path: '/', blocks: [] }),
+  })
+  const body = await response.json()
+
+  expect(response.status).toBe(413)
+  expect(body.error.code).toBe('PAYLOAD_TOO_LARGE')
+})
+
 test('account mutations share bounded write-rate protection', async () => {
   const app = createApp({
     env: { ...env, AUTH_RATE_LIMIT_MAX: 1 },

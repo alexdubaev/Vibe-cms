@@ -336,6 +336,24 @@ describe('CMS application service', () => {
     })
   })
 
+  test('rejects unknown collection entry types before any repository write', async () => {
+    let writes = 0
+    const { service } = createService({
+      createContentEntry: async () => {
+        writes += 1
+        throw new Error('must not be reached')
+      },
+    })
+    const editor = { id: 'editor', role: 'editor' as const }
+
+    // The registry allowlist gates writes by type before any repository work happens
+    // (reads by unknown type are already rejected by the transport's query schema).
+    await expect(
+      service.createEntry(editor, { type: 'blog', name: 'Запись', summary: 's' } as never),
+    ).rejects.toThrow(/"path": \[\s*"type"/)
+    expect(writes).toBe(0)
+  })
+
   test('returns a collection entry editor DTO for an existing entry', async () => {
     const entry = {
       id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a19',

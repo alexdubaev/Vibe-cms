@@ -3,9 +3,11 @@ import { Hono } from 'hono'
 import { createMiddleware } from 'hono/factory'
 
 import { handleError } from '../../../http/errors'
+import { createFixedWindowRateLimit } from '../../../http/security'
 import { createRequireAnyRole, type AuthHttpEnv } from '../../auth'
 import type { CmsService } from '../application/cms-service'
 import type { CmsPreviewService } from '../application/preview-service'
+import { CmsConflictError } from '../domain/errors'
 import { createCmsPreviewRuntimeRoutes, createCmsRoutes } from './routes'
 
 const pageId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10'
@@ -457,5 +459,117 @@ describe('CMS HTTP routes', () => {
     const restored = await app.request(`/api/cms/pages/${pageId}/revisions/${revisionId}/restore`, { method: 'POST' })
     expect(restored.status).toBe(200)
     expect(await restored.json()).toEqual({ id: pageId, title: 'Восстановлено', path: '/', draftPayload: {}, revision: 4 })
+  })
+
+  test('maps a stale expected revision to 409 and returns the current revision', async () => {
+    const auth = createMiddleware<AuthHttpEnv>(async (c, next) => {
+      c.set('user', {
+        id: 'editor',
+        role: 'editor',
+        email: 'editor@example.com',
+        displayName: null,
+        createdAt: new Date().toISOString(),
+        sessionId: 'session',
+      })
+      await next()
+    })
+    const service = {
+      savePage: async () => {
+        // Thrown by the repository's optimistic CAS; the transport must map it and carry
+        // the surviving revision so the editor can rebase instead of guessing.
+        throw new CmsConflictError(pageId, 7)
+      },
+    } as unknown as CmsService
+    const routes = createCmsRoutes({ requireAuth: auth, requireCmsAccess: auth, service, preview: {} as CmsPreviewService })
+    const app = new Hono<AuthHttpEnv>()
+    app.route('/api/cms', routes)
+    app.onError(handleError)
+
+    const response = await app.request(`/api/cms/pages/${pageId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Главная',
+        path: '/',
+        blocks: [
+          {
+            id: 'hero',
+            type: 'hero',
+            data: {
+              title: 'Добро пожаловать',
+              text: 'Описание компании',
+              primaryAction: { label: 'Подробнее', href: '/about' },
+            },
+          },
+        ],
+        expectedRevision: 6,
+      }),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(body.error.code).toBe('CMS_CONFLICT')
+    expect(body.error.details).toEqual({ currentRevision: 7 })
+  })
+
+  test('rate limits CMS mutations per user through the injected mutation middleware', async () => {
+    // Note: the seam applies to every method (routes.use('*')), so production CMS reads share
+    // the same per-user budget as mutations - only the app-level IP-keyed layer skips GETs.
+    const auth = createMiddleware<AuthHttpEnv>(async (c, next) => {
+      c.set('user', {
+        id: 'editor',
+        role: 'editor',
+        email: 'editor@example.com',
+        displayName: null,
+        createdAt: new Date().toISOString(),
+        sessionId: 'session',
+      })
+      await next()
+    })
+    const service = {
+      listPages: async () => [],
+      savePage: async () => ({ id: pageId, title: 'Главная', path: '/' }),
+    } as unknown as CmsService
+    const mutationRateLimit = createFixedWindowRateLimit<AuthHttpEnv>({
+      errorMessage: 'Too many CMS mutations',
+      key: (c) => c.var.user?.id ?? 'anonymous',
+      max: 2,
+      windowSeconds: 60,
+    })
+    const routes = createCmsRoutes({
+      requireAuth: auth,
+      requireCmsAccess: auth,
+      mutationRateLimit,
+      service,
+      preview: {} as CmsPreviewService,
+    })
+    const app = new Hono()
+    app.route('/api/cms', routes)
+    const saveDraft = () => app.request(`/api/cms/pages/${pageId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Главная',
+        path: '/',
+        blocks: [
+          {
+            id: 'hero',
+            type: 'hero',
+            data: {
+              title: 'Добро пожаловать',
+              text: 'Описание компании',
+              primaryAction: { label: 'Подробнее', href: '/about' },
+            },
+          },
+        ],
+        expectedRevision: 1,
+      }),
+    })
+
+    expect((await saveDraft()).status).toBe(200)
+    expect((await saveDraft()).status).toBe(200)
+    const limited = await saveDraft()
+    expect(limited.status).toBe(429)
+    expect(limited.headers.get('retry-after')).toBeTruthy()
   })
 })

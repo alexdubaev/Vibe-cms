@@ -170,6 +170,56 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
     if (!stale.updated) expect(stale.conflict.aggregateId).toBe(page.id)
   })
 
+  test('admits exactly one of two concurrent draft saves and reports the conflict to the loser', async () => {
+    const page = await repository.createPage({ path: '/race', title: 'Гонка', payload: { blocks: [] } })
+
+    const [first, second] = await Promise.all([
+      repository.updatePageDraft(page.id, page.draftRevision, { blocks: [{ type: 'textImage' }] }),
+      repository.updatePageDraft(page.id, page.draftRevision, { blocks: [] }),
+    ])
+
+    const outcomes = [first, second].sort((left, right) =>
+      left.updated === right.updated ? 0 : left.updated ? -1 : 1,
+    )
+    expect(outcomes[0]).toEqual({ updated: true, revision: 2 })
+    expect(outcomes[1].updated).toBe(false)
+    if (!outcomes[1].updated) {
+      expect(outcomes[1].conflict).toEqual({ aggregateId: page.id, currentRevision: 2 })
+    }
+    expect(
+      (await db.cmsPage.findUniqueOrThrow({ where: { id: page.id } })).draftRevision,
+    ).toBe(2)
+  })
+
+  // Known gap: updatePageDraft stores the draft path without re-checking uniqueness against
+  // other pages (the unique cmsPage.path column is only written at create), so a page edit can
+  // move its published path onto another page's path. Needs a product decision before a test
+  // can pin the intended behavior.
+  test.todo('updatePageDraft enforces path uniqueness across pages')
+
+  test('optimistic conflicts for menus and site settings name the surviving revision', async () => {
+    const menu = await db.cmsMenu.create({
+      data: { location: 'header', draftPayload: { items: [] } },
+    })
+
+    const menuUpdate = await repository.updateMenuDraft(menu.id, 1, { items: [{ label: 'О нас', href: '/about' }] })
+    const menuStale = await repository.updateMenuDraft(menu.id, 1, { items: [] })
+    expect(menuUpdate).toEqual({ updated: true, revision: 2 })
+    expect(menuStale.updated).toBe(false)
+    if (!menuStale.updated) {
+      expect(menuStale.conflict).toEqual({ aggregateId: menu.id, currentRevision: 2 })
+    }
+
+    await repository.getSiteSettings()
+    const settingsUpdate = await repository.updateSiteSettingsDraft(1, { companyName: 'Новое имя' })
+    const settingsStale = await repository.updateSiteSettingsDraft(1, { companyName: 'Ещё новое' })
+    expect(settingsUpdate).toEqual({ updated: true, revision: 2 })
+    expect(settingsStale.updated).toBe(false)
+    if (!settingsStale.updated) {
+      expect(settingsStale.conflict).toEqual({ aggregateId: 'default', currentRevision: 2 })
+    }
+  })
+
   test('lists active collection entries by type without returning unrelated payload fields', async () => {
     const active = await repository.createContentEntry({
       type: 'service',

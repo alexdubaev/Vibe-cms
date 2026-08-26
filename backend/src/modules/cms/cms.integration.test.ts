@@ -97,6 +97,47 @@ maybeDescribe('CMS application against PostgreSQL', () => {
     expect((await db.cmsApprovalRequest.findUniqueOrThrow({ where: { id: approval.id } })).status).toBe('approved')
   })
 
+  test('restores an immutable revision as a new draft without touching the source', async () => {
+    const editor = { id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a20', role: 'editor' as const }
+
+    // Revision 1 records the original payload; a second save advances the draft past it.
+    const original = await service.savePage(editor, pageId, { ...pagePayload, expectedRevision: 1 })
+    expect(original.revision).toBe(2)
+    await service.savePage(editor, pageId, {
+      ...pagePayload,
+      title: 'Новая редакция',
+      expectedRevision: 2,
+    })
+    const revisionsBefore = await db.cmsPageRevision.findMany({
+      where: { pageId },
+      orderBy: { revision: 'asc' },
+    })
+    expect(revisionsBefore).toHaveLength(2)
+    const sourceRevisionId = revisionsBefore[0]!.id
+    const sourceSnapshot = revisionsBefore[0]!.sourcePayload
+
+    const restored = await service.restorePage(editor, sourceRevisionId, pageId)
+
+    expect(restored.revision).toBe(4)
+    expect(restored.draftPayload.title).toBe(pagePayload.title)
+    expect(
+      (await db.cmsPage.findUniqueOrThrow({ where: { id: pageId } })).draftRevision,
+    ).toBe(4)
+    // Restore is a new revision, never a mutation of the immutable source.
+    const revisionsAfter = await db.cmsPageRevision.findMany({
+      where: { pageId },
+      orderBy: { revision: 'asc' },
+    })
+    expect(revisionsAfter).toHaveLength(3)
+    expect(
+      revisionsAfter.find(({ id }) => id === sourceRevisionId)!.sourcePayload,
+    ).toEqual(sourceSnapshot)
+    expect(revisionsAfter.at(-1)).toMatchObject({
+      sourceDraftRevision: 4,
+      authorUserId: editor.id,
+    })
+  })
+
   test('records the desired publication revision and one durable rebuild wake-up atomically', async () => {
     const owner = { id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a21', role: 'owner' as const }
 
