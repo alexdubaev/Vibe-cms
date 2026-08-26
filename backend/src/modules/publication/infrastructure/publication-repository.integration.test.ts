@@ -144,6 +144,94 @@ maybeDescribe('publication repository against PostgreSQL', () => {
     expect(secondResult).toBe('stale')
   })
 
+  test('does not promote a build that reports success without a verified marker', async () => {
+    const repository = createPublicationRepository(db)
+    const build = await repository.claimBuild({ publicationRevision: 4, slot: 'green', now: new Date() })
+
+    const result = await repository.recordResult({
+      buildId: build!.id,
+      status: 'succeeded',
+      markerVerified: false,
+      now: new Date('2026-08-24T10:02:00.000Z'),
+    })
+
+    expect(result).toBe('accepted')
+    expect(await db.cmsPublicationBuild.findUniqueOrThrow({ where: { id: build!.id } })).toMatchObject({
+      state: 'failed',
+      diagnostics: { error: 'Builder did not verify publication marker' },
+    })
+    // The blue slot stays live: no promotion without verification.
+    expect(await db.cmsPublicationController.findUniqueOrThrow({ where: { key: 'default' } })).toMatchObject({
+      activeBuildId: null,
+      activeSlot: 'blue',
+      publishedRevision: 3,
+      status: 'failed',
+      lastError: 'Builder did not verify publication marker',
+    })
+  })
+
+  test('records a builder failure and allows claiming a fresh build for the same revision', async () => {
+    const repository = createPublicationRepository(db)
+    const build = await repository.claimBuild({ publicationRevision: 4, slot: 'green', now: new Date() })
+
+    const failed = await repository.recordResult({
+      buildId: build!.id,
+      status: 'failed',
+      diagnostics: 'builder crashed',
+      now: new Date(),
+    })
+    expect(failed).toBe('accepted')
+    expect(await db.cmsPublicationController.findUniqueOrThrow({ where: { key: 'default' } })).toMatchObject({
+      activeBuildId: null,
+      status: 'failed',
+      lastError: 'builder crashed',
+    })
+
+    const reclaimed = await repository.claimBuild({ publicationRevision: 4, slot: 'green', now: new Date() })
+    expect(reclaimed).not.toBeNull()
+    expect(reclaimed!.id).not.toBe(build!.id)
+    expect(await db.cmsPublicationBuild.count({ where: { publicationRevision: 4 } })).toBe(2)
+    expect(
+      await db.cmsPublicationController.findUniqueOrThrow({ where: { key: 'default' } }),
+    ).toMatchObject({ activeBuildId: reclaimed!.id, status: 'queued' })
+  })
+
+  test('markStale fails the orphaned build and frees the controller for recovery', async () => {
+    const repository = createPublicationRepository(db)
+    const build = await repository.claimBuild({ publicationRevision: 4, slot: 'green', now: new Date() })
+    await repository.heartbeat(build!.id, new Date())
+
+    await repository.markStale(build!.id, 'Builder heartbeat expired')
+
+    expect(await db.cmsPublicationBuild.findUniqueOrThrow({ where: { id: build!.id } })).toMatchObject({
+      state: 'failed',
+      diagnostics: { error: 'Builder heartbeat expired' },
+    })
+    expect(await db.cmsPublicationController.findUniqueOrThrow({ where: { key: 'default' } })).toMatchObject({
+      activeBuildId: null,
+      heartbeatAt: null,
+      status: 'failed',
+      lastError: 'Builder heartbeat expired',
+    })
+  })
+
+  test('resolves exactly one claim when two workers claim the same revision concurrently', async () => {
+    const repository = createPublicationRepository(db)
+
+    const [first, second] = await Promise.all([
+      repository.claimBuild({ publicationRevision: 4, slot: 'green', now: new Date() }),
+      repository.claimBuild({ publicationRevision: 4, slot: 'green', now: new Date() }),
+    ])
+
+    const winner = [first, second].find((claim) => claim !== null)
+    expect(winner).toBeDefined()
+    expect([first, second].filter((claim) => claim !== null)).toHaveLength(1)
+    expect(await db.cmsPublicationBuild.count({ where: { publicationRevision: 4 } })).toBe(1)
+    expect(
+      await db.cmsPublicationController.findUniqueOrThrow({ where: { key: 'default' } }),
+    ).toMatchObject({ activeBuildId: winner!.id })
+  })
+
   test('claims and records an immutable publication artifact with idempotent retries', async () => {
     await db.cmsPublication.create({
       data: {

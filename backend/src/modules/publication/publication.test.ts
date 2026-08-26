@@ -121,4 +121,17 @@ describe('publication rebuild controller', () => {
     await expect(controller.reconcile()).resolves.toMatchObject({ kind: 'dispatch-failed' })
     expect(calls).toEqual(['claim:4:green', 'dispatch-failed:build-1:snapshot unavailable'])
   })
+
+  test('returns race-lost and dispatches nothing when another worker won the claim', async () => {
+    const { repository } = createRepository({ claimBuild: async () => null })
+    const dispatched: unknown[] = []
+    const controller = new PublicationRebuildController(repository, {
+      dispatch: async (input) => { dispatched.push(input) },
+    }, {
+      now: () => new Date('2026-08-24T10:00:01.000Z'),
+    })
+
+    await expect(controller.reconcile()).resolves.toEqual({ kind: 'race-lost' })
+    expect(dispatched).toEqual([])
+  })
 })

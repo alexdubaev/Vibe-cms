@@ -156,4 +156,60 @@ describe('publication internal builder routes', () => {
     }])
     expect(JSON.stringify(payload)).not.toContain('objectKey')
   })
+
+  test('refuses builder input for a terminal build without signing artifacts', async () => {
+    let artifactsSigned = 0
+    const app = createTestApp({
+      heartbeat: async () => true,
+      recordResult: async () => 'accepted',
+      getBuildForInput: async () => ({ id: buildId, publicationRevision: 4, slot: 'green', state: 'succeeded' }),
+    }, {
+      ensureArtifact: async () => {
+        artifactsSigned += 1
+        throw new Error('must not be reached')
+      },
+      createArtifactDownload: async () => {
+        artifactsSigned += 1
+        throw new Error('must not be reached')
+      },
+    })
+
+    const response = await app.fetch(await signedRequest(`/api/internal/cms/builds/${buildId}/input`, '{}', 'nonce-0000000010'))
+    expect(response.status).toBe(409)
+    expect((await response.json()).error.code).toBe('CONFLICT')
+    expect(artifactsSigned).toBe(0)
+  })
+
+  test('rejects a callback whose signature was issued for a different build', async () => {
+    const calls: unknown[] = []
+    const app = createTestApp({
+      heartbeat: async (...input) => { calls.push(input); return true },
+      recordResult: async (...input) => { calls.push(input); return 'accepted' },
+    })
+    // Sign for build A, but deliver to build B's route: the canonical request must bind
+    // the path build id, so the swapped signature cannot authenticate.
+    const otherBuildId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80b20'
+    const request: BuilderRequest = {
+      method: 'POST',
+      path: `/api/internal/cms/builds/${otherBuildId}/heartbeat`,
+      timestamp,
+      nonce: 'nonce-0000000011',
+      buildId: otherBuildId,
+      body: '{}',
+    }
+    const forged = new Request(`http://localhost/api/internal/cms/builds/${buildId}/heartbeat`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-cms-builder-timestamp': String(timestamp),
+        'x-cms-builder-nonce': request.nonce,
+        'x-cms-builder-signature': signBuilderRequest('builder-secret', request),
+      },
+      body: '{}',
+    })
+
+    const response = await app.fetch(forged)
+    expect(response.status).toBe(401)
+    expect(calls).toEqual([])
+  })
 })
