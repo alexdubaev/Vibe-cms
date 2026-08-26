@@ -7,7 +7,7 @@ import { createFixedWindowRateLimit } from '../../../http/security'
 import { createRequireAnyRole, type AuthHttpEnv } from '../../auth'
 import type { CmsService } from '../application/cms-service'
 import type { CmsPreviewService } from '../application/preview-service'
-import { CmsConflictError } from '../domain/errors'
+import { CmsConflictError, CmsRepositoryError } from '../domain/errors'
 import { createCmsPreviewRuntimeRoutes, createCmsRoutes } from './routes'
 
 const pageId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a10'
@@ -571,5 +571,79 @@ describe('CMS HTTP routes', () => {
     const limited = await saveDraft()
     expect(limited.status).toBe(429)
     expect(limited.headers.get('retry-after')).toBeTruthy()
+  })
+
+  test('maps a stale approval decision to 409 with CMS_APPROVAL_STALE', async () => {
+    const auth = createMiddleware<AuthHttpEnv>(async (c, next) => {
+      c.set('user', {
+        id: 'owner',
+        role: 'owner',
+        email: 'owner@example.com',
+        displayName: null,
+        createdAt: new Date().toISOString(),
+        sessionId: 'session',
+      })
+      await next()
+    })
+    const service = {
+      approve: async () => {
+        throw new CmsRepositoryError('Approval is no longer pending', 'CMS_APPROVAL_STALE')
+      },
+    } as unknown as CmsService
+    const routes = createCmsRoutes({ requireAuth: auth, requireCmsAccess: auth, service, preview: {} as CmsPreviewService })
+    const app = new Hono<AuthHttpEnv>()
+    app.route('/api/cms', routes)
+    app.onError(handleError)
+
+    const response = await app.request('/api/cms/approvals/018f8c8d-5f34-7db2-8b98-2c7bf3d80a11/approve', { method: 'POST' })
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(body.error.code).toBe('CMS_APPROVAL_STALE')
+  })
+
+  test('reject passes the trimmed note through and validates it before the service', async () => {
+    const auth = createMiddleware<AuthHttpEnv>(async (c, next) => {
+      const role = c.req.header('x-role') === 'owner' ? 'owner' : 'editor'
+      c.set('user', {
+        id: role,
+        role,
+        email: 'owner@example.com',
+        displayName: null,
+        createdAt: new Date().toISOString(),
+        sessionId: 'session',
+      })
+      await next()
+    })
+    let rejectedWith: { id: string; note: string } | undefined
+    const service = {
+      reject: async (_actor: unknown, id: string, note: string) => {
+        rejectedWith = { id, note }
+        return { id, status: 'rejected', requesterUserId: 'editor' }
+      },
+    } as unknown as CmsService
+    const routes = createCmsRoutes({ requireAuth: auth, requireCmsAccess: auth, service, preview: {} as CmsPreviewService })
+    const app = new Hono<AuthHttpEnv>()
+    app.route('/api/cms', routes)
+    app.onError(handleError)
+
+    const rejected = await app.request('/api/cms/approvals/018f8c8d-5f34-7db2-8b98-2c7bf3d80a11/reject', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-role': 'owner' },
+      body: JSON.stringify({ note: '  Переделать заголовок  ' }),
+    })
+    expect(rejected.status).toBe(200)
+    expect(rejectedWith).toEqual({ id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a11', note: 'Переделать заголовок' })
+    expect(await rejected.json()).toEqual({ id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a11', status: 'rejected', requesterUserId: 'editor' })
+
+    // An empty note never reaches the service. (Role gating of decisions is the service's
+    // cms:approve capability, covered in the service suite.)
+    const empty = await app.request('/api/cms/approvals/018f8c8d-5f34-7db2-8b98-2c7bf3d80a11/reject', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-role': 'owner' },
+      body: JSON.stringify({ note: '   ' }),
+    })
+    expect(empty.status).toBe(400)
+    expect(rejectedWith).toEqual({ id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a11', note: 'Переделать заголовок' })
   })
 })

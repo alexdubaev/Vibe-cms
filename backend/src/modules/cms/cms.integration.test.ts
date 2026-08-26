@@ -138,6 +138,51 @@ maybeDescribe('CMS application against PostgreSQL', () => {
     })
   })
 
+  test('rejects one pending approval while another stays pending, then approves it', async () => {
+    const editor = { id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a20', role: 'editor' as const }
+    const owner = { id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a21', role: 'owner' as const }
+
+    const first = await service.submitForApproval(editor, 1)
+    const second = await service.submitForApproval(editor, 1)
+
+    const rejected = await service.reject(owner, first.id, 'Переделать заголовок')
+    expect(rejected.status).toBe('rejected')
+    const storedRejected = await db.cmsApprovalRequest.findUniqueOrThrow({ where: { id: first.id } })
+    expect(storedRejected).toMatchObject({
+      status: 'rejected',
+      reviewerUserId: owner.id,
+      decisionNote: 'Переделать заголовок',
+    })
+
+    expect(await service.listPendingApprovals(owner)).toEqual([
+      expect.objectContaining({ id: second.id, status: 'pending' }),
+    ])
+
+    const approved = await service.approve(owner, second.id)
+    expect(approved.revision).toBe(1)
+    expect(await service.listPendingApprovals(owner)).toEqual([])
+  })
+
+  test('double approval is stale and creates no second publication', async () => {
+    const editor = { id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a20', role: 'editor' as const }
+    const owner = { id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a21', role: 'owner' as const }
+
+    const approval = await service.submitForApproval(editor, 1)
+    await service.approve(owner, approval.id)
+    expect(await db.cmsPublication.count()).toBe(1)
+    // TODO(local): without this pause the second decision transaction fails to start on the
+    // local Windows pg adapter ("Unable to start a transaction in the given time"). Root-cause
+    // the pool behaviour and remove the sleep.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    const secondApprove = service.approve(owner, approval.id)
+    await expect(secondApprove).rejects.toMatchObject({ code: 'CMS_APPROVAL_STALE' })
+    expect(await db.cmsPublication.count()).toBe(1)
+    expect(
+      (await db.cmsApprovalRequest.findUniqueOrThrow({ where: { id: approval.id } })).status,
+    ).toBe('approved')
+  })
+
   test('records the desired publication revision and one durable rebuild wake-up atomically', async () => {
     const owner = { id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a21', role: 'owner' as const }
 

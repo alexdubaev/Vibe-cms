@@ -354,6 +354,77 @@ describe('CMS application service', () => {
     expect(writes).toBe(0)
   })
 
+  test('reject records the reviewer and a trimmed decision note', async () => {
+    let decidedInput: Record<string, unknown> | undefined
+    const { service } = createService({
+      decideApproval: async (input) => {
+        decidedInput = input as unknown as Record<string, unknown>
+        return { status: 'rejected', reviewerUserId: 'owner-id' } as never
+      },
+    })
+
+    const rejected = await service.reject({ id: 'owner-id', role: 'owner' }, 'an-approval', '  Требует доработки  ')
+
+    expect(rejected.status).toBe('rejected')
+    expect(decidedInput).toMatchObject({
+      approvalId: 'an-approval',
+      expectedStatus: 'pending',
+      status: 'rejected',
+      reviewerUserId: 'owner-id',
+      decisionNote: 'Требует доработки',
+    })
+  })
+
+  test('deciding an approval that is no longer pending is stale, not a second decision', async () => {
+    const { service } = createService({
+      getApproval: async () => ({ status: 'rejected' }) as never,
+      decideApproval: async () => {
+        throw new Error('must not be reached')
+      },
+      // The approve path learns staleness from the repository's null result instead.
+      approveAndCreatePublication: async () => null,
+    })
+    const owner = { id: 'owner-id', role: 'owner' as const }
+
+    const rejection = service.reject(owner, 'an-approval', 'note')
+    await expect(rejection).rejects.toThrow('no longer pending')
+    await expect(rejection).rejects.toMatchObject({ code: 'CMS_APPROVAL_STALE' })
+
+    // The approve path fails stale through the repository's null result instead.
+    await expect(service.approve(owner, 'an-approval')).rejects.toMatchObject({
+      code: 'CMS_APPROVAL_STALE',
+    })
+  })
+
+  test('only owners can approve or reject, before any repository work', async () => {
+    const { service } = createService({
+      getApproval: async () => {
+        throw new Error('must not be reached')
+      },
+      approveAndCreatePublication: async () => {
+        throw new Error('must not be reached')
+      },
+    })
+
+    for (const actor of [{ id: 'e', role: 'editor' as const }, { id: 'u', role: 'user' as const }]) {
+      await expect(service.approve(actor, 'an-approval')).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(service.reject(actor, 'an-approval', 'note')).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    }
+  })
+
+  test('editor publication retry follows the owner policy like direct publishing', async () => {
+    let editorCanPublish = false
+    const { service } = createService({
+      getPolicy: async () => ({ key: 'default', editorCanPublish }),
+      retryPublication: async () => true,
+    })
+    const editor = { id: 'editor', role: 'editor' as const }
+
+    await expect(service.retryPublication(editor)).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    editorCanPublish = true
+    await expect(service.retryPublication(editor)).resolves.toEqual({ retried: true })
+  })
+
   test('returns a collection entry editor DTO for an existing entry', async () => {
     const entry = {
       id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a19',
