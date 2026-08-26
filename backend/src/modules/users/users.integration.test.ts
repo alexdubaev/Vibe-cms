@@ -21,6 +21,8 @@ maybeDescribe('users and admin API integration', () => {
     CORS_ORIGINS: 'http://localhost:5173',
     // Short enough that a test can observe an access token expiring.
     ACCESS_TOKEN_TTL_SECONDS: '60',
+    // Every POST in this file shares one "unknown" client bucket under app.request.
+    AUTH_RATE_LIMIT_MAX: '1000',
   })
   const prisma = createPrisma(databaseUrl!)
   const app = createApp({ env, prisma })
@@ -718,6 +720,221 @@ maybeDescribe('users and admin API integration', () => {
     expect(await app.request('/api/auth/me', {
       headers: authenticatedHeaders(replacementSession.accessToken),
     })).toHaveProperty('status', 200)
+  })
+
+  test('rejects editors from every admin endpoint', async () => {
+    // Editors can edit content but must never reach user administration: requireAdmin is
+    // owner-only, and this is the wiring that breaks if anyone widens it.
+    const editor = await register('editor-forbidden@example.com')
+    await prisma.user.update({
+      where: { id: editor.user.id },
+      data: { role: 'editor' },
+    })
+
+    const dashboard = await app.request('/api/admin/dashboard', {
+      headers: authenticatedHeaders(editor.accessToken),
+    })
+    const users = await app.request('/api/admin/users', {
+      headers: authenticatedHeaders(editor.accessToken),
+    })
+    const roleChange = await app.request(`/api/admin/users/${editor.user.id}/role`, {
+      method: 'PATCH',
+      headers: authenticatedJsonHeaders(editor.accessToken),
+      body: JSON.stringify({ role: 'owner' }),
+    })
+
+    for (const response of [dashboard, users, roleChange]) {
+      expect(response.status).toBe(403)
+      expect((await response.json()).error.code).toBe('FORBIDDEN')
+    }
+  })
+
+  test('returns 404 when changing the role of an unknown user id', async () => {
+    const admin = await register('unknown-target-admin@example.com')
+    await prisma.user.update({
+      where: { id: admin.user.id },
+      data: { role: 'owner' },
+    })
+
+    const unknownId = crypto.randomUUID()
+    const response = await app.request(`/api/admin/users/${unknownId}/role`, {
+      method: 'PATCH',
+      headers: authenticatedJsonHeaders(admin.accessToken),
+      body: JSON.stringify({ role: 'editor' }),
+    })
+    expect(response.status).toBe(404)
+    expect((await response.json()).error.code).toBe('NOT_FOUND')
+  })
+
+  test('maps a legacy admin row to owner in directory, dashboard, and role responses', async () => {
+    const admin = await register('legacy-listing-admin@example.com', 'Listing Admin')
+    await prisma.user.update({ where: { id: admin.user.id }, data: { role: 'owner' } })
+    const legacy = await register('legacy-listing-row@example.com', 'Legacy Row')
+    await prisma.user.update({ where: { id: legacy.user.id }, data: { role: 'admin' } })
+    // Guard against a fake pass: the persisted row really is the legacy role.
+    expect(
+      await prisma.user.findUniqueOrThrow({
+        where: { id: legacy.user.id },
+        select: { role: true },
+      }),
+    ).toEqual({ role: 'admin' })
+
+    const list = await app.request('/api/admin/users?q=legacy-listing-row&page=1&pageSize=20', {
+      headers: authenticatedHeaders(admin.accessToken),
+    })
+    const listBody = await list.json()
+    expect(list.status).toBe(200)
+    expect(listBody.total).toBe(1)
+    expect(listBody.items[0].role).toBe('owner')
+
+    // The dashboard counts the legacy row among administrators.
+    const dashboard = await app.request('/api/admin/dashboard', {
+      headers: authenticatedHeaders(admin.accessToken),
+    })
+    expect(await dashboard.json()).toEqual({
+      totalUsers: 2,
+      totalAdmins: 2,
+      newUsersLast7Days: 2,
+    })
+
+    // A real transition away and back revokes sessions and never leaks the string 'admin'.
+    const demote = await app.request(`/api/admin/users/${legacy.user.id}/role`, {
+      method: 'PATCH',
+      headers: authenticatedJsonHeaders(admin.accessToken),
+      body: JSON.stringify({ role: 'user' }),
+    })
+    expect(demote.status).toBe(200)
+    expect((await demote.json()).user.role).toBe('user')
+    const revokedMe = await app.request('/api/auth/me', {
+      headers: authenticatedHeaders(legacy.accessToken),
+    })
+    expect(revokedMe.status).toBe(401)
+
+    const repromote = await app.request(`/api/admin/users/${legacy.user.id}/role`, {
+      method: 'PATCH',
+      headers: authenticatedJsonHeaders(admin.accessToken),
+      body: JSON.stringify({ role: 'owner' }),
+    })
+    expect(repromote.status).toBe(200)
+    expect((await repromote.json()).user.role).toBe('owner')
+  })
+
+  test('demoting an administrator deterministically revokes sessions and locks out the old token', async () => {
+    const actingAdmin = await register('demote-actor@example.com')
+    await prisma.user.update({
+      where: { id: actingAdmin.user.id },
+      data: { role: 'owner' },
+    })
+    const target = await register('demote-target@example.com')
+    await prisma.user.update({
+      where: { id: target.user.id },
+      data: { role: 'owner' },
+    })
+
+    const demotion = await app.request(`/api/admin/users/${target.user.id}/role`, {
+      method: 'PATCH',
+      headers: authenticatedJsonHeaders(actingAdmin.accessToken),
+      body: JSON.stringify({ role: 'user' }),
+    })
+    expect(demotion.status).toBe(200)
+    expect((await demotion.json()).user.role).toBe('user')
+
+    const revokedMe = await app.request('/api/auth/me', {
+      headers: authenticatedHeaders(target.accessToken),
+    })
+    expect(revokedMe.status).toBe(401)
+
+    const reLogin = await login('demote-target@example.com')
+    expect(reLogin.user.role).toBe('user')
+    expect(await prisma.user.count({ where: { role: 'owner' } })).toBe(1)
+  })
+
+  test('blocks demoting the last administrator to editor', async () => {
+    const sole = await register('last-admin-editor@example.com')
+    await prisma.user.update({
+      where: { id: sole.user.id },
+      data: { role: 'owner' },
+    })
+
+    const selfDemotionToEditor = await app.request(`/api/admin/users/${sole.user.id}/role`, {
+      method: 'PATCH',
+      headers: authenticatedJsonHeaders(sole.accessToken),
+      body: JSON.stringify({ role: 'editor' }),
+    })
+    expect(selfDemotionToEditor.status).toBe(409)
+    expect((await selfDemotionToEditor.json()).error.code).toBe('CONFLICT')
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: sole.user.id } })).role,
+    ).toBe('owner')
+  })
+
+  test('paginates the directory with a true hasNext and stable newest-first ordering', async () => {
+    const admin = await register('pagination-admin@example.com')
+    await prisma.user.update({
+      where: { id: admin.user.id },
+      data: { role: 'owner' },
+    })
+    const oldest = await register('pagination-oldest@example.com')
+    const middle = await register('pagination-middle@example.com')
+    const newest = await register('pagination-newest@example.com')
+
+    const firstPage = await app.request('/api/admin/users?page=1&pageSize=2', {
+      headers: authenticatedHeaders(admin.accessToken),
+    })
+    const firstPageBody = await firstPage.json()
+    expect(firstPage.status).toBe(200)
+    expect(firstPageBody.total).toBe(4)
+    expect(firstPageBody.hasNext).toBe(true)
+    const firstPageIds = firstPageBody.items.map((item: { id: string }) => item.id)
+    expect(firstPageIds).toHaveLength(2)
+
+    const secondPage = await app.request('/api/admin/users?page=2&pageSize=2', {
+      headers: authenticatedHeaders(admin.accessToken),
+    })
+    const secondPageBody = await secondPage.json()
+    expect(secondPage.status).toBe(200)
+    expect(secondPageBody.hasNext).toBe(false)
+    const secondPageIds = secondPageBody.items.map((item: { id: string }) => item.id)
+    expect(secondPageIds).toHaveLength(2)
+    // Pages are disjoint; nothing on page two is newer than anything on page one
+    // (compared via createdAt, so equal-timestamp tie-breaks by id stay free to change).
+    expect(firstPageIds.filter((id: string) => secondPageIds.includes(id))).toEqual([])
+    const createdAt = (page: { items: { createdAt: string }[] }) =>
+      page.items.map((item) => new Date(item.createdAt).getTime())
+    const firstPageTimestamps = createdAt(firstPageBody)
+    // Within a page, ordering is also newest-first.
+    expect([...firstPageTimestamps].sort((left, right) => right - left)).toEqual(
+      firstPageTimestamps,
+    )
+    expect(Math.min(...firstPageTimestamps)).toBeGreaterThanOrEqual(
+      Math.max(...createdAt(secondPageBody)),
+    )
+  })
+
+  test('matches directory search against display names case-insensitively', async () => {
+    const admin = await register('display-search-admin@example.com')
+    await prisma.user.update({
+      where: { id: admin.user.id },
+      data: { role: 'owner' },
+    })
+    await register('zed-query@example.com', 'Zed Query')
+
+    const response = await app.request('/api/admin/users?q=zed%20que&page=1&pageSize=20', {
+      headers: authenticatedHeaders(admin.accessToken),
+    })
+    const body = await response.json()
+    expect(response.status).toBe(200)
+    expect(body.total).toBe(1)
+    expect(body.items[0].email).toBe('zed-query@example.com')
+
+    // The same search matches the email branch case-insensitively too.
+    const byEmail = await app.request('/api/admin/users?q=ZED-QUERY&page=1&pageSize=20', {
+      headers: authenticatedHeaders(admin.accessToken),
+    })
+    const byEmailBody = await byEmail.json()
+    expect(byEmail.status).toBe(200)
+    expect(byEmailBody.total).toBe(1)
+    expect(byEmailBody.items[0].email).toBe('zed-query@example.com')
   })
 
   function createOutstandingPasswordResetToken(userId: string, token: string) {
