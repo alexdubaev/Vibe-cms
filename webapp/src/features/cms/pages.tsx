@@ -248,6 +248,7 @@ export function CmsPublicationsPage() {
   const reject = useRejectCmsApprovalMutation()
   const publish = usePublishCmsCurrentMutation()
   const retry = useRetryCmsPublicationMutation()
+  const [rejectionNotice, setRejectionNotice] = useState<string | null>(null)
   const canApprove = auth.user?.role === 'owner'
   const canPublish = canApprove || Boolean(publication.data?.policy.editorCanPublish)
   const actionError = approve.error ?? reject.error ?? publish.error ?? retry.error
@@ -271,6 +272,12 @@ export function CmsPublicationsPage() {
         />
       )}
       {actionError && <CmsActionError />}
+      {rejectionNotice && (
+        <Alert>
+          <AlertTitle>Заявка отклонена</AlertTitle>
+          <AlertDescription>Отклонено: {rejectionNotice}</AlertDescription>
+        </Alert>
+      )}
       <PendingApprovalsCard
         approvals={approvals.data}
         canApprove={canApprove}
@@ -279,7 +286,10 @@ export function CmsPublicationsPage() {
         isPending={approvals.isPending}
         isRejecting={reject.isPending}
         onApprove={(approvalId) => approve.mutate(approvalId)}
-        onReject={(approvalId, note) => reject.mutate({ approvalId, note })}
+        onReject={(approvalId, note) => reject.mutate(
+          { approvalId, note },
+          { onSuccess: (approval) => setRejectionNotice(approval.decisionNote ?? note.trim()) },
+        )}
       />
     </PageContainer>
   )

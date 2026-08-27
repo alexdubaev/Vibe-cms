@@ -203,17 +203,32 @@ test('owner rejects an approval with a decision note and no publication appears'
   await rejectButton.click()
 
   await expect(page.getByText('Ожидающих заявок нет.')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('Отклонено: Переделать заголовок')).toBeVisible()
   const stored = await db.cmsApprovalRequest.findFirstOrThrow()
   expect(stored.status).toBe('rejected')
   expect(stored.decisionNote).toBe('Переделать заголовок')
   expect(await db.cmsPublication.count()).toBe(0)
 })
 
-// KNOWN GAP: uploading through the hidden file input (#cms-media-upload) fails in the
-// browser before any network request - the change event delivers a valid File
-// (verified: hero.png|image/png|134) but the upload mutation errors client-side.
-// Until that UI bug is fixed, only the API-driven journey below is covered.
-test.fixme('owner uploads media through the file input', async () => {})
+test('owner uploads media through the file input', async ({ page }) => {
+  test.setTimeout(120_000)
+  await signInAsOwner(page)
+  await page.goto('/admin/media')
+  const paddedPng = Buffer.concat([pngImage.buffer, Buffer.alloc(64, 0x00)])
+
+  await page.locator('#cms-media-upload').setInputFiles({
+    name: 'hero.png',
+    mimeType: 'image/png',
+    buffer: paddedPng,
+  })
+
+  await expect(page.getByText('Не удалось загрузить файл. Проверьте формат и соединение.')).toHaveCount(0)
+  await expect(page.getByText('hero.png').first()).toBeVisible({ timeout: 30_000 })
+  await expect.poll(async () => {
+    const asset = await db.cmsMediaAsset.findFirst({ where: { filename: 'hero.png' } })
+    return asset?.state
+  }, { timeout: 30_000 }).toBe('ready')
+})
 
 test('a media asset added via the API shows in the library, persists alt text, and enters deleting state', async ({ page }) => {
   test.setTimeout(120_000)

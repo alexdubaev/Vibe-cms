@@ -323,7 +323,11 @@ export function useUploadCmsMediaMutation() {
               : 'Файл превышает допустимый размер.',
         )
       }
-      const { asset, upload } = await createCmsMediaUpload(auth.transport, described)
+      const { asset, upload } = await createCmsMediaUpload(auth.transport, {
+        filename: described.filename,
+        mimeType: described.mimeType,
+        byteSize: described.byteSize,
+      })
       await uploadMediaObject(upload, file)
       return finalizeCmsMediaUpload(auth.transport, asset.id)
     },

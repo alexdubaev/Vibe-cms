@@ -191,11 +191,20 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
     ).toBe(2)
   })
 
-  // Known gap: updatePageDraft stores the draft path without re-checking uniqueness against
-  // other pages (the unique cmsPage.path column is only written at create), so a page edit can
-  // move its published path onto another page's path. Needs a product decision before a test
-  // can pin the intended behavior.
-  test.todo('updatePageDraft enforces path uniqueness across pages')
+  test('rejects a page draft path that is already owned by another page', async () => {
+    const source = await repository.createPage({ path: '/source', title: 'Исходная', payload: { blocks: [] } })
+    const destination = await repository.createPage({ path: '/destination', title: 'Занятая', payload: { blocks: [] } })
+
+    await expectRejected(
+      repository.updatePageDraft(source.id, source.draftRevision, { title: 'Исходная', path: destination.path, blocks: [] }),
+      CmsConflictError,
+    )
+
+    expect(await db.cmsPage.findUniqueOrThrow({ where: { id: source.id } })).toMatchObject({
+      path: '/source',
+      draftRevision: source.draftRevision,
+    })
+  })
 
   test('optimistic conflicts for menus and site settings name the surviving revision', async () => {
     const menu = await db.cmsMenu.create({
@@ -238,7 +247,7 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
     expect(entries[0]).not.toHaveProperty('objectKey')
   })
 
-  test('replaces media and content usage rows transactionally', async () => {
+  test('replaces an owner media usage without removing other owners', async () => {
     const page = await repository.createPage({ path: '/gallery', title: 'Галерея', payload: { blocks: [] } })
     const entry = await repository.createContentEntry({ type: 'case', payload: { title: 'Кейс' } })
     const asset = await repository.createMediaAsset({
@@ -248,16 +257,19 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
       byteSize: 512,
     })
 
-    await repository.replaceMediaUsage(asset.id, [
-      { ownerType: 'page', ownerId: page.id, scope: 'draft' },
-      { ownerType: 'entry', ownerId: entry.id, scope: 'draft' },
-    ])
+    await repository.replaceMediaUsage({ ownerType: 'page', ownerId: page.id, scope: 'draft' }, [asset.id])
+    await repository.replaceMediaUsage({ ownerType: 'entry', ownerId: entry.id, scope: 'draft' }, [asset.id])
     await repository.replaceContentUsage({ ownerType: 'page', ownerId: page.id, scope: 'draft' }, [
       { referencedType: 'entry', referencedId: entry.id, path: 'blocks[0].caseId' },
     ])
 
     expect(await db.cmsMediaUsage.count({ where: { assetId: asset.id } })).toBe(2)
     expect(await db.cmsContentUsage.count({ where: { ownerId: page.id } })).toBe(1)
+
+    await repository.replaceMediaUsage({ ownerType: 'page', ownerId: page.id, scope: 'draft' }, [])
+    expect(await db.cmsMediaUsage.findMany({ where: { assetId: asset.id } })).toMatchObject([
+      { ownerType: 'entry', ownerId: entry.id, scope: 'draft' },
+    ])
   })
 
   test('keeps publication revisions monotonic', async () => {
@@ -383,7 +395,7 @@ maybeDescribe('CMS repository against PostgreSQL', () => {
       contentType: 'image/webp',
       byteSize: 512,
     })
-    await repository.replaceMediaUsage(asset.id, [{ ownerType: 'page', ownerId: page.id, scope: 'draft' }])
+    await repository.replaceMediaUsage({ ownerType: 'page', ownerId: page.id, scope: 'draft' }, [asset.id])
 
     await db.cmsPage.delete({ where: { id: page.id } })
     expect(await db.cmsPageRevision.count({ where: { pageId: page.id } })).toBe(0)

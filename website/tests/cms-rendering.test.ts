@@ -8,7 +8,9 @@ import {
 import { selectedSitePackageWebsite } from '@vibe-cms/selected-site-package/website'
 
 import { blockTypes } from '../src/cms/block-registry'
-import { pageForPath, parsePublicationSnapshot, resolvePageMetadata } from '../src/cms/snapshot'
+import * as cmsSnapshot from '../src/cms/snapshot'
+
+const { pageForPath, parsePublicationSnapshot, resolvePageMetadata } = cmsSnapshot
 
 const snapshot = {
   revision: 7,
@@ -74,6 +76,18 @@ test('CMS renderer resolves normalised paths from one immutable snapshot', () =>
   assert.equal(pageForPath(parsedSnapshot, '/'), parsedSnapshot.pages[0])
   assert.equal(pageForPath(parsedSnapshot, '/ABOUT/'), parsedSnapshot.pages[1])
   assert.equal(pageForPath(parsedSnapshot, '/missing'), undefined)
+})
+
+test('publication redirects become static route mappings', () => {
+  const withRedirect = parsePublicationSnapshot({
+    ...snapshot,
+    redirects: [{ source: '/old-about', destination: '/about' }],
+  })
+
+  const redirectsForSnapshot = (cmsSnapshot as typeof cmsSnapshot & {
+    redirectsForSnapshot: (input: typeof withRedirect) => Record<string, string>
+  }).redirectsForSnapshot
+  assert.deepEqual(redirectsForSnapshot(withRedirect), { '/old-about': '/about' })
 })
 
 test('CMS block registry is closed and public-safe', () => {

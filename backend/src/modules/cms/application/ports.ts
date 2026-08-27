@@ -174,8 +174,8 @@ export type CmsRepository = {
   getSiteSettings(): Promise<CmsSettingsRecord | null>
   updateSiteSettingsDraft(expectedRevision: number, payload: unknown): Promise<CmsOptimisticResult>
   replaceMediaUsage(
-    assetId: string,
-    usages: Array<{ ownerType: string; ownerId: string; scope: string }>,
+    owner: { ownerType: string; ownerId: string; scope: string },
+    assetIds: string[],
   ): Promise<void>
   replaceContentUsage(
     owner: { ownerType: string; ownerId: string; scope: string },

@@ -110,7 +110,7 @@ test('CMS homepage build uses selected package shell, snapshot SEO, and stable m
       { location: 'header', items: [{ label: 'Home', href: '/' }] },
       { location: 'footer', items: [{ label: 'Privacy', href: '/privacy' }] },
     ],
-    redirects: [],
+    redirects: [{ source: '/old-home', destination: '/' }],
     media: [{
       id: imageId,
       contentVersion: imageVersion,
@@ -151,4 +151,8 @@ test('CMS homepage build uses selected package shell, snapshot SEO, and stable m
   assert.doesNotMatch(html, /ЙЙ — шаблон для создания сайтов/)
   assert.match(html, /<img[^>]+width="1600"[^>]+height="900"[^>]+loading="eager"[^>]+fetchpriority="high"[^>]+sizes="\(min-width: 1024px\) 896px, 100vw"/)
   assert.match(html, /<img[^>]+width="1600"[^>]+height="900"[^>]+loading="lazy"[^>]+sizes="\(min-width: 1024px\) 33vw, \(min-width: 640px\) 50vw, 100vw"/)
+
+  const redirectHtml = await readFile(resolve(websiteRoot, 'dist', 'client', 'old-home', 'index.html'), 'utf8')
+  assert.match(redirectHtml, /http-equiv="refresh"/i)
+  assert.match(redirectHtml, /url=\//i)
 })

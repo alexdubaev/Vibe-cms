@@ -288,23 +288,33 @@ export function createCmsRepository(
     },
 
     async updatePageDraft(pageId, expectedRevision, payload) {
-      return withMutableDraftWrite(db, sitePackage, async (transaction) => {
-        const result = await transaction.cmsPage.updateMany({
-          where: { id: pageId, draftRevision: expectedRevision },
-          data: {
-            draftPayload: asJson(payload),
-            draftRevision: { increment: 1 },
-          },
+      const draftPath = payload && typeof payload === 'object' && !Array.isArray(payload)
+        && typeof (payload as Record<string, unknown>).path === 'string'
+        ? normalizeCmsPath((payload as Record<string, string>).path)
+        : undefined
+      try {
+        return await withMutableDraftWrite(db, sitePackage, async (transaction) => {
+          const result = await transaction.cmsPage.updateMany({
+            where: { id: pageId, draftRevision: expectedRevision },
+            data: {
+              ...(draftPath === undefined ? {} : { path: draftPath }),
+              draftPayload: asJson(payload),
+              draftRevision: { increment: 1 },
+            },
+          })
+
+          if (result.count === 1) return { updated: true as const, revision: expectedRevision + 1 }
+
+          const current = await transaction.cmsPage.findUnique({ where: { id: pageId }, select: { draftRevision: true } })
+          return {
+            updated: false as const,
+            conflict: { aggregateId: pageId, currentRevision: current?.draftRevision },
+          }
         })
-
-        if (result.count === 1) return { updated: true as const, revision: expectedRevision + 1 }
-
-        const current = await transaction.cmsPage.findUnique({ where: { id: pageId }, select: { draftRevision: true } })
-        return {
-          updated: false as const,
-          conflict: { aggregateId: pageId, currentRevision: current?.draftRevision },
-        }
-      })
+      } catch (error) {
+        if (isUniqueViolation(error)) throw new CmsConflictError(draftPath ?? pageId)
+        throw error
+      }
     },
 
     async createPageRevision(input) {
@@ -483,12 +493,12 @@ export function createCmsRepository(
       })
     },
 
-    async replaceMediaUsage(assetId, usages) {
+    async replaceMediaUsage(owner, assetIds) {
       await db.$transaction(async (tx) => {
-        await tx.cmsMediaUsage.deleteMany({ where: { assetId } })
-        if (usages.length > 0) {
+        await tx.cmsMediaUsage.deleteMany({ where: owner })
+        if (assetIds.length > 0) {
           await tx.cmsMediaUsage.createMany({
-            data: usages.map((usage) => ({ assetId, ...usage })),
+            data: assetIds.map((assetId) => ({ assetId, ...owner })),
           })
         }
       })

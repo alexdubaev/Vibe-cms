@@ -62,9 +62,16 @@ test('saveCmsPage validates the draft and sends an optimistic PATCH', async () =
 test('publication actions use safe response contracts and never send snapshots', async () => {
   const calls: Array<{ path: string; options?: Record<string, unknown> }> = []
   const transport: AuthenticatedTransport = {
-    async request(path, _schema, options) {
+    async request(path, schema, options) {
       calls.push({ path, options: options as Record<string, unknown> | undefined })
-      return { id: '00000000-0000-7000-8000-000000000001', status: 'pending', requesterUserId: '00000000-0000-7000-8000-000000000001', revision: 2 } as never
+      return schema.parse(path === '/api/cms/publish' || path.endsWith('/approve')
+        ? { id: '00000000-0000-7000-8000-000000000001', revision: 2 }
+        : {
+            id: '00000000-0000-7000-8000-000000000001',
+            status: 'rejected',
+            requesterUserId: '00000000-0000-7000-8000-000000000001',
+            decisionNote: 'Нужно уточнить',
+          }) as never
     },
   }
 

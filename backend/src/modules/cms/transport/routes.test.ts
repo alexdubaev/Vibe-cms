@@ -385,7 +385,7 @@ describe('CMS HTTP routes', () => {
     const service = {
       submitForApproval: async () => ({ id: pageId, status: 'pending', requesterUserId: pageId, candidateSnapshot: { secret: 'private' } }),
       approve: async () => ({ id: pageId, revision: 3, snapshot: { secret: 'private' } }),
-      reject: async () => ({ id: pageId, status: 'rejected', requesterUserId: pageId, candidateSnapshot: { secret: 'private' } }),
+      reject: async () => ({ id: pageId, status: 'rejected', requesterUserId: pageId, decisionNote: 'Не подходит', candidateSnapshot: { secret: 'private' } }),
       publishCurrent: async () => ({ id: pageId, revision: 3, snapshot: { secret: 'private' } }),
     } as unknown as CmsService
     const routes = createCmsRoutes({ requireAuth: auth, requireCmsAccess: auth, service, preview: {} as CmsPreviewService })
@@ -399,7 +399,7 @@ describe('CMS HTTP routes', () => {
     })
     const submitted = await submit.json() as Record<string, unknown>
     expect(submit.status).toBe(201)
-    expect(submitted).toEqual({ id: pageId, status: 'pending', requesterUserId: pageId })
+    expect(submitted).toEqual({ id: pageId, status: 'pending', requesterUserId: pageId, decisionNote: null })
     expect(submitted).not.toHaveProperty('candidateSnapshot')
 
     const approved = await app.request(`/api/cms/approvals/${pageId}/approve`, { method: 'POST' })
@@ -415,7 +415,7 @@ describe('CMS HTTP routes', () => {
     })
     const rejection = await rejected.json() as Record<string, unknown>
     expect(rejected.status).toBe(200)
-    expect(rejection).toEqual({ id: pageId, status: 'rejected', requesterUserId: pageId })
+    expect(rejection).toEqual({ id: pageId, status: 'rejected', requesterUserId: pageId, decisionNote: 'Не подходит' })
 
     const published = await app.request('/api/cms/publish', {
       method: 'POST',
@@ -512,9 +512,7 @@ describe('CMS HTTP routes', () => {
     expect(body.error.details).toEqual({ currentRevision: 7 })
   })
 
-  test('rate limits CMS mutations per user through the injected mutation middleware', async () => {
-    // Note: the seam applies to every method (routes.use('*')), so production CMS reads share
-    // the same per-user budget as mutations - only the app-level IP-keyed layer skips GETs.
+  test('rate limits CMS mutations per user without charging CMS reads', async () => {
     const auth = createMiddleware<AuthHttpEnv>(async (c, next) => {
       c.set('user', {
         id: 'editor',
@@ -566,6 +564,8 @@ describe('CMS HTTP routes', () => {
       }),
     })
 
+    expect((await app.request('/api/cms/pages')).status).toBe(200)
+    expect((await app.request('/api/cms/pages')).status).toBe(200)
     expect((await saveDraft()).status).toBe(200)
     expect((await saveDraft()).status).toBe(200)
     const limited = await saveDraft()
@@ -619,7 +619,7 @@ describe('CMS HTTP routes', () => {
     const service = {
       reject: async (_actor: unknown, id: string, note: string) => {
         rejectedWith = { id, note }
-        return { id, status: 'rejected', requesterUserId: 'editor' }
+        return { id, status: 'rejected', requesterUserId: 'editor', decisionNote: note }
       },
     } as unknown as CmsService
     const routes = createCmsRoutes({ requireAuth: auth, requireCmsAccess: auth, service, preview: {} as CmsPreviewService })
@@ -634,7 +634,12 @@ describe('CMS HTTP routes', () => {
     })
     expect(rejected.status).toBe(200)
     expect(rejectedWith).toEqual({ id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a11', note: 'Переделать заголовок' })
-    expect(await rejected.json()).toEqual({ id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a11', status: 'rejected', requesterUserId: 'editor' })
+    expect(await rejected.json()).toEqual({
+      id: '018f8c8d-5f34-7db2-8b98-2c7bf3d80a11',
+      status: 'rejected',
+      requesterUserId: 'editor',
+      decisionNote: 'Переделать заголовок',
+    })
 
     // An empty note never reaches the service. (Role gating of decisions is the service's
     // cms:approve capability, covered in the service suite.)

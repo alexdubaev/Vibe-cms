@@ -151,6 +151,7 @@ export type ApprovalDto = {
   status: CmsApprovalRecord['status']
   requesterUserId: string
   candidateSnapshot: unknown
+  decisionNote: string | null
 }
 
 export type PendingApprovalDto = {
@@ -188,6 +189,7 @@ type ServiceDependencies = {
     | 'updateContentEntryDraft'
     | 'updateMenuDraft'
     | 'updateSiteSettingsDraft'
+    | 'replaceMediaUsage'
     | 'createPageRevision'
     | 'createContentEntryRevision'
     | 'createApproval'
@@ -289,6 +291,10 @@ export class CmsService {
       type: draft.type,
       payload: draft,
     })
+    await this.dependencies.repository.replaceMediaUsage(
+      { ownerType: 'entry', ownerId: entry.id, scope: 'draft' },
+      mediaAssetIds(draft),
+    )
     await this.dependencies.repository.createContentEntryRevision({
       entryId: entry.id,
       sourceDraftRevision: entry.draftRevision,
@@ -370,6 +376,10 @@ export class CmsService {
     if (!result.updated) {
       throw new CmsConflictError(pageId, result.conflict.currentRevision)
     }
+    await this.dependencies.repository.replaceMediaUsage(
+      { ownerType: 'page', ownerId: pageId, scope: 'draft' },
+      mediaAssetIds(pageDraft),
+    )
     await this.dependencies.repository.createPageRevision({
       pageId,
       sourceDraftRevision: result.revision,
@@ -415,6 +425,10 @@ export class CmsService {
     const { expectedRevision, ...payload } = draft
     const result = await this.dependencies.repository.updateContentEntryDraft(entryId, expectedRevision, payload)
     if (!result.updated) throw new CmsConflictError(entryId, result.conflict.currentRevision)
+    await this.dependencies.repository.replaceMediaUsage(
+      { ownerType: 'entry', ownerId: entryId, scope: 'draft' },
+      mediaAssetIds(payload),
+    )
     await this.dependencies.repository.createContentEntryRevision({
       entryId,
       sourceDraftRevision: result.revision,
@@ -567,7 +581,28 @@ function toApprovalDto(approval: CmsApprovalRecord): ApprovalDto {
     status: approval.status,
     requesterUserId: approval.requesterUserId,
     candidateSnapshot: approval.candidateSnapshot,
+    decisionNote: approval.decisionNote ?? null,
   }
+}
+
+const mediaReferenceKeys = new Set(['mediaId', 'mediaIds', 'imageId', 'socialImageId'])
+
+function mediaAssetIds(input: unknown): string[] {
+  const assetIds = new Set<string>()
+  const visit = (value: unknown, key?: string) => {
+    if (typeof value === 'string') {
+      if (key && mediaReferenceKeys.has(key)) assetIds.add(value)
+      return
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, key)
+      return
+    }
+    if (!value || typeof value !== 'object') return
+    for (const [nestedKey, nestedValue] of Object.entries(value)) visit(nestedValue, nestedKey)
+  }
+  visit(input)
+  return [...assetIds]
 }
 
 function toPageListItemDto(page: CmsPageRecord): PageListItemDto {

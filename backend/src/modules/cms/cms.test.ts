@@ -67,6 +67,7 @@ function createService(overrides: Partial<CmsRepository> = {}, validation: CmsVa
       page.draftRevision += 1
       return { updated: true, revision: page.draftRevision }
     },
+    replaceMediaUsage: async () => undefined,
     createPageRevision: async () => ({ id: 'page-revision', pageId: page.id, revision: page.draftRevision, sourcePayload: heroDraft(page.draftRevision), sitePackageSchemaVersion: 1 }),
     createContentEntryRevision: async () => ({ id: 'entry-revision', entryId: 'entry', revision: 1 }),
     getPolicy: async () => ({ key: 'default', editorCanPublish: false }),
@@ -359,13 +360,13 @@ describe('CMS application service', () => {
     const { service } = createService({
       decideApproval: async (input) => {
         decidedInput = input as unknown as Record<string, unknown>
-        return { status: 'rejected', reviewerUserId: 'owner-id' } as never
+        return { status: 'rejected', reviewerUserId: 'owner-id', decisionNote: input.decisionNote } as never
       },
     })
 
     const rejected = await service.reject({ id: 'owner-id', role: 'owner' }, 'an-approval', '  Требует доработки  ')
 
-    expect(rejected.status).toBe('rejected')
+    expect(rejected).toMatchObject({ status: 'rejected', decisionNote: 'Требует доработки' })
     expect(decidedInput).toMatchObject({
       approvalId: 'an-approval',
       expectedStatus: 'pending',
@@ -450,6 +451,58 @@ describe('CMS application service', () => {
     })
 
     await expectRejected(service.savePage({ id: 'editor', role: 'editor' }, 'page', heroDraft(1)), CmsConflictError)
+  })
+
+  test('records every draft media reference when a page is saved', async () => {
+    const mediaId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a30'
+    let recorded: { owner: unknown; assetIds: string[] } | undefined
+    const { service, page } = createService({
+      replaceMediaUsage: async (owner, assetIds) => {
+        recorded = { owner, assetIds }
+      },
+    })
+
+    await service.savePage({ id: 'editor', role: 'editor' }, page.id, {
+      ...heroDraft(1),
+      seo: { socialImageId: mediaId },
+      blocks: [{
+        ...heroDraft(1).blocks[0],
+        data: { ...heroDraft(1).blocks[0].data, mediaId },
+      }],
+    })
+
+    expect(recorded).toEqual({
+      owner: { ownerType: 'page', ownerId: page.id, scope: 'draft' },
+      assetIds: [mediaId],
+    })
+  })
+
+  test('records an entry image when content is created', async () => {
+    const mediaId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a31'
+    const entryId = '018f8c8d-5f34-7db2-8b98-2c7bf3d80a32'
+    let recorded: { owner: unknown; assetIds: string[] } | undefined
+    const { service } = createService({
+      createContentEntry: async () => ({
+        id: entryId,
+        type: 'service',
+        draftPayload: {},
+        draftRevision: 1,
+      }),
+      replaceMediaUsage: async (owner, assetIds) => {
+        recorded = { owner, assetIds }
+      },
+    })
+
+    await service.createEntry({ id: 'editor', role: 'editor' }, {
+      type: 'service',
+      name: 'Аудит',
+      imageId: mediaId,
+    })
+
+    expect(recorded).toEqual({
+      owner: { ownerType: 'entry', ownerId: entryId, scope: 'draft' },
+      assetIds: [mediaId],
+    })
   })
 
   test('lists safe page revision metadata and restores a selected revision', async () => {

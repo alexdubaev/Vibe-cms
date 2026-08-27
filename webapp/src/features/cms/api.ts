@@ -122,6 +122,7 @@ const cmsApprovalMutationResponseSchema = z
     id: z.uuid(),
     status: z.enum(['pending', 'approved', 'rejected']),
     requesterUserId: z.uuid(),
+    decisionNote: z.string().trim().max(2_000).nullable(),
   })
   .strict()
 

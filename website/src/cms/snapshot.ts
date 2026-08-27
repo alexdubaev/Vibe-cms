@@ -47,6 +47,11 @@ export function pageForPath(snapshot: WebsitePublicationSnapshot, pathname: stri
   return snapshot.pages.find((page) => page.path === normalised)
 }
 
+/** Turns the immutable publication input into Astro's build-time redirect map. */
+export function redirectsForSnapshot(snapshot: WebsitePublicationSnapshot): Record<string, string> {
+  return Object.fromEntries(snapshot.redirects.map(({ source, destination }) => [source, destination]))
+}
+
 export function resolvePageMetadata(
   snapshot: WebsitePublicationSnapshot,
   page: WebsitePublicPage,

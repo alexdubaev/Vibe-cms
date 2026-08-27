@@ -102,10 +102,6 @@ maybeDescribe('media repository and service against PostgreSQL', () => {
     expect(deleted).toEqual(['cms-media/2026/08/integration-key'])
   })
 
-  // Known gap: replaceMediaUsage has no production caller, so content saves never record
-  // media usage and the in-use deletion guard only triggers on rows created manually (as
-  // above). Wiring content saves to usage tracking needs a product decision first.
-  test.todo('saving content records and replaces media usage rows')
 })
 
 function pngDimensions(width: number, height: number) {

@@ -1,9 +1,11 @@
 // @ts-check
+import { readFile } from 'node:fs/promises';
 import { defineConfig } from 'astro/config';
 
 import node from '@astrojs/node';
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
+import { parsePublicationSnapshot, redirectsForSnapshot } from './src/cms/snapshot.ts';
 
 // https://astro.build/config
 //
@@ -34,11 +36,19 @@ import tailwindcss from '@tailwindcss/vite';
 //      path". Note: built-in per-page ISR is not part of the default
 //      DigitalOcean/Yandex static path; use rebuilds or CDN/runtime cache
 //      freshness instead.
-export default defineConfig({
+const redirectsFromPublication = async () => {
+  const snapshotPath = process.env.CMS_SNAPSHOT_FILE;
+  if (!snapshotPath) return {};
+  const snapshot = parsePublicationSnapshot(JSON.parse(await readFile(snapshotPath, 'utf8')));
+  return redirectsForSnapshot(snapshot);
+};
+
+export default defineConfig(async () => ({
   adapter: node({ mode: 'standalone' }),
   output: 'static',
+  redirects: await redirectsFromPublication(),
   integrations: [react()],
   vite: {
     plugins: [tailwindcss()]
   }
-});
+}));

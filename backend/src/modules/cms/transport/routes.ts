@@ -48,7 +48,12 @@ export function createCmsRoutes({
     c.header('Cache-Control', 'private, no-store')
     await next()
   })
-  if (mutationRateLimit) routes.use('*', mutationRateLimit)
+  if (mutationRateLimit) {
+    routes.use('*', async (c, next) => {
+      if (c.req.method === 'GET') return next()
+      return mutationRateLimit(c, next)
+    })
+  }
 
   routes.get('/publication', async (c) => {
     const result = await executeCms(() => service.getPublicationSummary(c.var.user))
@@ -198,11 +203,12 @@ export function createCmsRoutes({
   return routes
 }
 
-function toSafeApproval(input: { id: string; status: string; requesterUserId: string }) {
+function toSafeApproval(input: { id: string; status: string; requesterUserId: string; decisionNote?: string | null }) {
   return {
     id: input.id,
     status: input.status,
     requesterUserId: input.requesterUserId,
+    decisionNote: input.decisionNote ?? null,
   }
 }
 
