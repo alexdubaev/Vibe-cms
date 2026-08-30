@@ -24,7 +24,7 @@ export function SiteIdentityPanel() {
   const invalid = trimmedName.length === 0 || trimmedName.length > 160
 
   return (
-    <Card>
+    <Card className="shadow-none">
       <CardHeader>
         <Typography as="h2" variant="h6">Название сайта</Typography>
         <CardDescription>

@@ -10,6 +10,8 @@ export type AdminRoutePath =
   | '/admin/publications'
   | '/admin/media'
 export type WorkspaceRoutePath = UserRoutePath | AdminRoutePath
+export type NavigationItem = { label: string; to: WorkspaceRoutePath }
+export type NavigationGroup = { label: string; items: readonly NavigationItem[] }
 
 const navigationByRole = {
   user: [
@@ -38,6 +40,26 @@ const navigationByRole = {
 
 export function navigationItemsForRole(role: UserRole) {
   return navigationByRole[role]
+}
+
+export function navigationGroupsForRole(role: UserRole): readonly NavigationGroup[] {
+  const items = navigationItemsForRole(role)
+  if (role === 'user') return [{ label: 'Личный кабинет', items }]
+
+  const group = (label: string, paths: readonly WorkspaceRoutePath[]): NavigationGroup => ({
+    label,
+    items: paths.flatMap((path) => {
+      const item = items.find((candidate) => candidate.to === path)
+      return item ? [item] : []
+    }),
+  })
+
+  return [
+    group('Рабочее пространство', ['/admin']),
+    group('Сайт', ['/admin/pages', '/admin/content/service', '/admin/media']),
+    group('Выпуск', ['/admin/publications']),
+    group('Управление', ['/admin/users', '/admin/settings']),
+  ].filter((section) => section.items.length > 0)
 }
 
 export function homePathForRole(role: UserRole): '/app' | '/admin' {

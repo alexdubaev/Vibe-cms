@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 
 import {
   homePathForRole,
+  navigationGroupsForRole,
   navigationItemsForRole,
   resolveRoleDestination,
   safeReturnPath,
@@ -16,6 +17,22 @@ test('role navigation exposes only the current workspace', () => {
   expect(homePathForRole('user')).toBe('/app')
   expect(homePathForRole('editor')).toBe('/admin')
   expect(homePathForRole('owner')).toBe('/admin')
+})
+
+test('admin navigation is grouped by the work editors are doing', () => {
+  expect(navigationGroupsForRole('editor').map((group) => group.label)).toEqual([
+    'Рабочее пространство',
+    'Сайт',
+    'Выпуск',
+    'Управление',
+  ])
+  expect(navigationGroupsForRole('editor')[1]?.items.map((item) => item.label)).toEqual([
+    'Страницы',
+    'Контент',
+    'Медиатека',
+  ])
+  expect(navigationGroupsForRole('editor').flatMap((group) => group.items).map((item) => item.to)).not.toContain('/admin/users')
+  expect(navigationGroupsForRole('owner').flatMap((group) => group.items).map((item) => item.to)).toContain('/admin/users')
 })
 
 test('CMS navigation uses human Russian labels instead of internal workspace terms', () => {

@@ -46,8 +46,7 @@ export function MediaLibraryPage() {
         description="Управляйте файлами сайта и описаниями для доступности. Ссылки на закрытое хранилище здесь не показываются."
         title="Медиатека"
         actions={
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <form className="flex gap-2" onSubmit={submitSearch}>
+          <form className="flex min-w-0 gap-2" onSubmit={submitSearch}>
               <Input
                 aria-label="Поиск медиафайлов"
                 className="sm:w-64"
@@ -59,12 +58,19 @@ export function MediaLibraryPage() {
               <Button type="submit" variant="outline">
                 Найти
               </Button>
-            </form>
-            <MediaUploadControl isPending={upload.isPending} onFile={upload.mutate} />
-          </div>
+          </form>
         }
       />
       {upload.isError && <MediaError text="Не удалось загрузить файл. Проверьте формат и соединение." />}
+      <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-dashed bg-card px-4 py-3">
+        <div className="grid gap-1">
+          <Typography variant="bodySmMedium">Файлы сайта</Typography>
+          <Typography tone="muted" variant="caption">
+            {query.data ? `${query.data.assets.length} ${query.data.assets.length === 1 ? 'файл' : 'файлов'}` : 'Загружаем список'} · изображения, видео и PDF
+          </Typography>
+        </div>
+        <MediaUploadControl isPending={upload.isPending} onFile={upload.mutate} />
+      </div>
       {query.isPending && <MediaLoading />}
       {query.isError && <MediaError />}
       {query.data && query.data.assets.length === 0 && (
@@ -77,7 +83,7 @@ export function MediaLibraryPage() {
         </Card>
       )}
       {query.data && query.data.assets.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {query.data.assets.map((asset) => (
             <MediaAssetCard asset={asset} canDelete={canDelete} key={asset.id} />
           ))}
@@ -99,7 +105,7 @@ function MediaAssetCard({ asset, canDelete }: { asset: MediaAsset; canDelete: bo
   }
 
   return (
-    <Card>
+    <Card className="shadow-none">
       <CardHeader className="gap-3">
         <MediaVisual asset={asset} />
         <div className="flex items-start justify-between gap-3">
@@ -166,7 +172,7 @@ function MediaVisual({ asset }: { asset: MediaAsset }) {
   return (
     <div
       aria-label={`${label}: ${asset.filename}`}
-      className="relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded-lg border bg-secondary/70"
+      className="relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded-lg border bg-muted/55"
       role="img"
     >
       {isImage && imageDownload.data ? (
@@ -245,7 +251,7 @@ function ActionError({ text }: { text: string }) {
 
 function MediaLoading() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       <Skeleton className="h-64 w-full" />
       <Skeleton className="h-64 w-full" />
       <Skeleton className="h-64 w-full" />

@@ -72,7 +72,7 @@ export function CollectionEditor({
   }
 
   return (
-    <Card>
+    <Card className="shadow-none">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="grid gap-1">

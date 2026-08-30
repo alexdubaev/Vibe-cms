@@ -18,7 +18,7 @@ export function PublicationPolicyPanel() {
 
   const enabled = publication.data.policy.editorCanPublish
   return (
-    <Card>
+    <Card className="shadow-none">
       <CardHeader>
         <div className="flex items-center gap-2"><HugeiconsIcon aria-hidden className="text-primary" icon={ShieldKeyIcon} strokeWidth={2} /><Typography as="h2" variant="h6">Права на публикацию</Typography></div>
         <CardDescription>Определите, может ли редактор выпускать изменения сам или сначала отправляет их на согласование.</CardDescription>

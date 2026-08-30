@@ -41,7 +41,7 @@ export function AppearancePanel() {
   const selectedTheme = isTheme(theme) ? theme : 'system'
 
   return (
-    <Card>
+    <Card className="shadow-none">
       <CardHeader>
         <Typography as="h2" variant="h6">
           Внешний вид

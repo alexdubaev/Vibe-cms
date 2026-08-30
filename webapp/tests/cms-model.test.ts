@@ -3,6 +3,7 @@ import { expect, test } from 'bun:test'
 import {
   collectionEntryTypeLabel,
   emptyCollectionEntryDraft,
+  filterCmsCollectionEntries,
   cmsCollectionViewState,
   cmsPublicationStatusLabel,
   summarizeCmsDraft,
@@ -26,6 +27,17 @@ test('CMS collection state has explicit loading, error, empty, and ready states'
   expect(cmsCollectionViewState({ isPending: false, isError: true })).toBe('error')
   expect(cmsCollectionViewState({ isPending: false, isError: false, itemCount: 0 })).toBe('empty')
   expect(cmsCollectionViewState({ isPending: false, isError: false, itemCount: 1 })).toBe('ready')
+})
+
+test('content search matches names and summaries without case sensitivity', () => {
+  const entries = [
+    { id: 'one', name: 'Аудит сайта', summary: 'Техническая проверка' },
+    { id: 'two', name: 'Поддержка', summary: 'Регулярные работы' },
+  ]
+
+  expect(filterCmsCollectionEntries(entries, 'аудит').map((entry) => entry.id)).toEqual(['one'])
+  expect(filterCmsCollectionEntries(entries, 'РАБОТЫ').map((entry) => entry.id)).toEqual(['two'])
+  expect(filterCmsCollectionEntries(entries, '   ')).toEqual(entries)
 })
 
 test('draft summary exposes safe editorial fields, not raw payload', () => {

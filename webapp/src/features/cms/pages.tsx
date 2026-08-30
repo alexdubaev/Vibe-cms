@@ -40,10 +40,11 @@ import {
   useSubmitCmsApprovalMutation,
   useRestoreCmsPageRevisionMutation,
 } from './queries'
-import { cmsCollectionViewState, cmsPublicationStatusLabel, summarizeCmsDraft } from './model'
+import { cmsCollectionViewState, cmsPublicationStatusLabel, resolveCmsWorkflowState, summarizeCmsDraft } from './model'
 import { PageEditor } from './components/PageEditor'
 import { CollectionEditor } from './components/CollectionEditor'
 import { CollectionList } from './components/CollectionList'
+import { WorkflowStatus } from './components/WorkflowStatus'
 import type { CmsPageRevision } from './api'
 import { collectionTypeSchema } from '@web-app-demo/contracts'
 
@@ -65,10 +66,10 @@ export function CmsPagesPage() {
       {state === 'error' && <CmsError />}
       {state === 'empty' && <CmsEmpty title="Страниц пока нет" />}
       {state === 'ready' && query.data && (
-        <Card>
+        <Card className="shadow-none">
           <CardHeader>
-            <CardTitle>Страницы сайта</CardTitle>
-            <CardDescription>Статус и содержимое доступны в самой странице — без технических деталей.</CardDescription>
+            <CardTitle>Страницы сайта · {query.data.length}</CardTitle>
+            <CardDescription>Откройте страницу, чтобы изменить её секции, проверить черновик и отправить его на согласование.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -76,16 +77,17 @@ export function CmsPagesPage() {
                 <TableRow>
                   <TableHead>Название</TableHead>
                   <TableHead>Путь</TableHead>
-                  <TableHead>Статус</TableHead>
+                  <TableHead>Версия</TableHead>
+                  <TableHead className="text-right">Состояние</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {query.data.map((page) => (
-                  <TableRow key={page.id}>
+                  <TableRow className="group" key={page.id}>
                     <TableCell>
                       <Typography asChild tone="primary" variant="bodySmMedium">
                         <Link
-                          className="underline-offset-4 hover:underline"
+                          className="inline-flex min-h-9 items-center underline-offset-4 group-hover:underline"
                           params={{ pageId: page.id }}
                           to="/admin/pages/$pageId"
                         >
@@ -97,8 +99,11 @@ export function CmsPagesPage() {
                       <Typography variant="codeXs">{page.path}</Typography>
                     </TableCell>
                     <TableCell>
+                      <Typography variant="bodySm">Черновик {page.draftRevision}</Typography>
+                    </TableCell>
+                    <TableCell className="text-right">
                       <Badge variant={page.archived ? 'outline' : 'secondary'}>
-                        {page.archived ? 'Архив' : 'Черновик'}
+                        {page.archived ? 'В архиве' : 'В работе'}
                       </Badge>
                     </TableCell>
                   </TableRow>
@@ -143,7 +148,7 @@ export function CmsContentPage() {
         </Alert>
       )}
       {entries.isError && <CmsError />}
-      <div className="grid gap-6 xl:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.2fr)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(19rem,0.72fr)_minmax(0,1.28fr)] xl:items-start">
         <CollectionList
           entries={entries.data}
           isPending={entries.isPending}
@@ -196,25 +201,6 @@ export function CmsPageDetailPage() {
       <PageHeader
         description="Редактируйте содержимое без показа служебных идентификаторов и сырого JSON."
         title={query.data?.title ?? 'Страница'}
-        actions={
-          query.data ? (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                disabled={preview.isPending}
-                onClick={() => preview.mutate(pageId, { onSuccess: (grant) => setPreviewUrl(grant.previewUrl) })}
-                variant="outline"
-              >
-                {preview.isPending ? 'Открываем…' : 'Предпросмотр'}
-              </Button>
-              <Button
-                disabled={submit.isPending}
-                onClick={() => submit.mutate(query.data!.draftRevision)}
-              >
-                {submit.isPending ? 'Отправляем…' : 'Отправить на согласование'}
-              </Button>
-            </div>
-          ) : undefined
-        }
       />
       {query.isPending && <CmsLoading />}
       {query.isError && <CmsError />}
@@ -223,7 +209,29 @@ export function CmsPageDetailPage() {
       {query.data && !query.isPending && !query.isError && (
         <div className={previewUrl ? 'grid gap-6 2xl:grid-cols-[minmax(0,1fr)_minmax(23rem,0.8fr)]' : 'grid gap-6'}>
           <div className="grid gap-6">
-            <PageEditor key={`${query.data.id}:${query.data.draftRevision}`} page={query.data} />
+            <PageEditor
+              actions={(
+                <>
+                  <Button
+                    disabled={preview.isPending}
+                    onClick={() => preview.mutate(pageId, { onSuccess: (grant) => setPreviewUrl(grant.previewUrl) })}
+                    size="sm"
+                    variant="outline"
+                  >
+                    {preview.isPending ? 'Открываем…' : 'Предпросмотр'}
+                  </Button>
+                  <Button
+                    disabled={submit.isPending}
+                    onClick={() => submit.mutate(query.data!.draftRevision)}
+                    size="sm"
+                  >
+                    {submit.isPending ? 'Отправляем…' : 'Отправить на согласование'}
+                  </Button>
+                </>
+              )}
+              key={`${query.data.id}:${query.data.draftRevision}`}
+              page={query.data}
+            />
             <CmsDraftSummaryCard page={query.data} />
             <RevisionHistoryCard
               error={revisions.isError || restore.isError}
@@ -401,12 +409,19 @@ function PublicationStatusCard({
 }) {
   const status = data.controller?.status
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Состояние публикации</CardTitle>
-        <CardDescription>Сайт обновляется безопасно: сначала проверяется новая версия, затем она становится доступна посетителям.</CardDescription>
+    <Card className="shadow-none">
+      <CardHeader className="border-b pb-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="grid gap-1">
+            <CardTitle>Путь изменений на сайт</CardTitle>
+            <CardDescription>Черновик проходит проверку и безопасную сборку, прежде чем его увидят посетители.</CardDescription>
+          </div>
+          <WorkflowStatus state={resolveCmsWorkflowState({ publicationStatus: status })} />
+        </div>
       </CardHeader>
-      <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <CardContent className="grid gap-5 pt-1">
+        <PublicationTimeline status={status} />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryItem label="Статус" value={cmsPublicationStatusLabel(status)} />
         <SummaryItem
           label="На сайте сейчас"
@@ -420,8 +435,9 @@ function PublicationStatusCard({
           label="Подготовка"
           value={publicationArtifactLabel(data.latestPublication?.artifactState)}
         />
+        </div>
         {data.controller?.lastError && (
-          <div className="sm:col-span-2 lg:col-span-4">
+          <div>
             <Alert variant="destructive">
               <AlertTitle>Сборка завершилась с ошибкой</AlertTitle>
               <AlertDescription>{data.controller.lastError}</AlertDescription>
@@ -429,20 +445,42 @@ function PublicationStatusCard({
           </div>
         )}
         {canPublish && data.controller?.desiredRevision && status !== 'failed' && (
-          <div className="sm:col-span-2 lg:col-span-4">
+          <div className="flex justify-end border-t pt-4">
             <Button disabled={isPublishing} onClick={() => onPublish(data.controller!.desiredRevision!)}>
               {isPublishing ? 'Публикуем…' : 'Опубликовать изменения'}
             </Button>
           </div>
         )}
         {canPublish && status === 'failed' && (
-          <div className="grid gap-2 sm:col-span-2 lg:col-span-4">
+          <div className="grid gap-2 border-t pt-4">
             <Typography tone="muted" variant="caption">Предыдущая попытка не завершилась. Повторный запуск использует тот же проверенный черновик.</Typography>
             <div><Button disabled={isRetrying} onClick={onRetry}>{isRetrying ? 'Запускаем повторно…' : 'Повторить публикацию'}</Button></div>
           </div>
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function PublicationTimeline({ status }: { status: 'queued' | 'building' | 'published' | 'failed' | null | undefined }) {
+  const activeIndex = status === 'published' ? 3 : status === 'building' ? 2 : status === 'queued' ? 1 : 0
+  const steps = ['Черновик', 'В очереди', 'Сборка', 'На сайте']
+  return (
+    <ol aria-label="Этапы публикации" className="grid gap-2 sm:grid-cols-4">
+      {steps.map((step, index) => {
+        const completed = index <= activeIndex && status !== 'failed'
+        return (
+          <li className="flex items-center gap-2 rounded-lg border bg-muted/15 px-3 py-2.5" key={step}>
+            <Typography asChild variant="controlXs">
+              <span className={`flex size-6 items-center justify-center rounded-full ${completed ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                {index + 1}
+              </span>
+            </Typography>
+            <Typography as="span" tone={completed ? 'default' : 'muted'} variant="bodySmMedium">{step}</Typography>
+          </li>
+        )
+      })}
+    </ol>
   )
 }
 
@@ -468,10 +506,10 @@ function PendingApprovalsCard({
   onReject: (approvalId: string, note: string) => void
 }) {
   return (
-    <Card>
+    <Card className="shadow-none">
       <CardHeader>
         <CardTitle>Заявки на согласование</CardTitle>
-        <CardDescription>Здесь отображаются только ожидающие решения заявки.</CardDescription>
+        <CardDescription>Ожидающие решения заявки собраны в одном месте.</CardDescription>
       </CardHeader>
       <CardContent>
         {isPending && <Skeleton className="h-10 w-full" />}
@@ -517,7 +555,7 @@ function ApprovalCard({
   const [note, setNote] = useState('')
 
   return (
-    <div className="grid gap-3 rounded-lg border p-3">
+    <div className="grid gap-3 rounded-lg border bg-muted/10 p-4">
       <div className="flex items-center justify-between gap-4">
                 <div className="grid gap-1">
                   <Typography variant="bodySmMedium">Новая заявка</Typography>

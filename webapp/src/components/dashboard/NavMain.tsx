@@ -20,36 +20,48 @@ export type DashboardNavigationItem = {
   to: WorkspaceRoutePath
 }
 
-export function NavMain({
-  items,
-}: {
+export type DashboardNavigationGroup = {
+  label: string
   items: ReadonlyArray<DashboardNavigationItem>
+}
+
+export function NavMain({
+  groups,
+}: {
+  groups: ReadonlyArray<DashboardNavigationGroup>
 }) {
   return (
     <nav aria-label="Основная навигация">
-      <SidebarGroup>
-        <SidebarGroupLabel>Рабочее пространство</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {items.map((item) => (
-              <SidebarMenuItem key={item.to}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={item.isActive}
-                  tooltip={item.label}
-                >
-                  <DashboardLink to={item.to}>
-                    <HugeiconsIcon icon={item.icon} strokeWidth={2} />
-                    <Typography asChild variant="control">
-                      <span>{item.label}</span>
-                    </Typography>
-                  </DashboardLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
+      {groups.map((group) => (
+        <SidebarGroup className="py-2" key={group.label}>
+          <Typography asChild tone="sidebar" variant="controlXs">
+            <SidebarGroupLabel className="px-2 text-sidebar-foreground/45 uppercase">
+              {group.label}
+            </SidebarGroupLabel>
+          </Typography>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {group.items.map((item) => (
+                <SidebarMenuItem key={item.to}>
+                  <SidebarMenuButton
+                    asChild
+                    className="min-h-9 text-sidebar-foreground/78 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground data-[active=true]:shadow-[inset_3px_0_0_var(--sidebar-primary)]"
+                    isActive={item.isActive}
+                    tooltip={item.label}
+                  >
+                    <DashboardLink to={item.to}>
+                      <HugeiconsIcon icon={item.icon} strokeWidth={1.8} />
+                      <Typography asChild variant="control">
+                        <span>{item.label}</span>
+                      </Typography>
+                    </DashboardLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      ))}
     </nav>
   )
 }

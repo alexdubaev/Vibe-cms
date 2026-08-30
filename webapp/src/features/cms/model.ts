@@ -7,6 +7,44 @@ export type CmsQueryState = {
   itemCount?: number
 }
 
+export type CmsWorkflowStage =
+  | 'editing'
+  | 'saving'
+  | 'saved'
+  | 'conflict'
+  | 'awaiting-review'
+  | 'publishing'
+  | 'published'
+  | 'failed'
+
+export type CmsWorkflowState = {
+  stage: CmsWorkflowStage
+  label: string
+  tone: 'neutral' | 'primary' | 'warning' | 'destructive'
+}
+
+export function resolveCmsWorkflowState({
+  approvalStatus,
+  publicationStatus,
+  saveStatus = 'saved',
+}: {
+  approvalStatus?: 'pending' | 'approved' | 'rejected' | null
+  publicationStatus?: 'queued' | 'building' | 'published' | 'failed' | null
+  saveStatus?: 'idle' | 'dirty' | 'saving' | 'saved' | 'conflict' | 'error'
+}): CmsWorkflowState {
+  if (saveStatus === 'conflict') return { stage: 'conflict', label: 'Нужно разрешить конфликт', tone: 'destructive' }
+  if (saveStatus === 'error') return { stage: 'failed', label: 'Сохранение не завершено', tone: 'destructive' }
+  if (saveStatus === 'dirty') return { stage: 'editing', label: 'Есть несохранённые изменения', tone: 'warning' }
+  if (saveStatus === 'saving') return { stage: 'saving', label: 'Сохраняем изменения', tone: 'primary' }
+  if (publicationStatus === 'failed') return { stage: 'failed', label: 'Публикация не завершена', tone: 'destructive' }
+  if (publicationStatus === 'queued' || publicationStatus === 'building') {
+    return { stage: 'publishing', label: 'Сайт обновляется', tone: 'primary' }
+  }
+  if (approvalStatus === 'pending') return { stage: 'awaiting-review', label: 'Ожидает согласования', tone: 'warning' }
+  if (publicationStatus === 'published') return { stage: 'published', label: 'Опубликовано', tone: 'primary' }
+  return { stage: 'saved', label: 'Черновик сохранён', tone: 'neutral' }
+}
+
 export function cmsCollectionViewState({
   isError,
   isPending,
@@ -69,6 +107,17 @@ const collectionEntryLabels: Record<CmsCollectionEntry['type'], string> = {
 
 export function collectionEntryTypeLabel(type: CmsCollectionEntry['type']) {
   return collectionEntryLabels[type]
+}
+
+export function filterCmsCollectionEntries<T extends { name: string; summary: string | null }>(
+  entries: readonly T[],
+  query: string,
+): readonly T[] {
+  const needle = query.trim().toLocaleLowerCase('ru-RU')
+  if (!needle) return entries
+  return entries.filter((entry) =>
+    `${entry.name}\n${entry.summary ?? ''}`.toLocaleLowerCase('ru-RU').includes(needle),
+  )
 }
 
 export function emptyCollectionEntryDraft(

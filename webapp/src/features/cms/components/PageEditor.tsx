@@ -1,4 +1,6 @@
 import type { RegisteredContentBlock } from '@web-app-demo/contracts'
+import { ArrowDown01Icon, ArrowUp01Icon, Copy01Icon, Delete02Icon, Settings02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { selectedPageDraftSchema, type SelectedPageDraft } from '@vibe-cms/selected-site-package/contract'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
@@ -18,6 +20,8 @@ import {
   moveEditorBlock,
   removeEditorBlock,
 } from '../editor-model'
+import { resolveCmsWorkflowState } from '../model'
+import { WorkflowStatus } from './WorkflowStatus'
 import {
   getAdminBlockRegistration,
   getAdminBlockRegistrations,
@@ -25,9 +29,9 @@ import {
   type BlockEditorProps,
 } from '../site-package/registry'
 
-type PageEditorProps = { page: CmsPageEditor }
+type PageEditorProps = { actions?: ReactNode; page: CmsPageEditor }
 
-export function PageEditor({ page }: PageEditorProps) {
+export function PageEditor({ actions, page }: PageEditorProps) {
   const initialDraft = readDraft(page)
   if (!initialDraft) {
     return (
@@ -37,10 +41,10 @@ export function PageEditor({ page }: PageEditorProps) {
       </Alert>
     )
   }
-  return <PageEditorForm initialDraft={initialDraft} page={page} />
+  return <PageEditorForm actions={actions} initialDraft={initialDraft} page={page} />
 }
 
-function PageEditorForm({ page, initialDraft }: PageEditorProps & { initialDraft: SelectedPageDraft }) {
+function PageEditorForm({ actions, page, initialDraft }: PageEditorProps & { initialDraft: SelectedPageDraft }) {
   const mutation = useSaveCmsPageMutation()
   const media = useCmsMediaQuery()
   const entries = useCmsEntriesQuery()
@@ -119,50 +123,63 @@ function PageEditorForm({ page, initialDraft }: PageEditorProps & { initialDraft
   const registrations = getAdminBlockRegistrations()
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Редактор страницы</CardTitle>
-        <CardDescription>Изменения сохраняются автоматически. Служебные данные и JSON здесь не показываются.</CardDescription>
+    <Card className="overflow-visible py-0">
+      <CardHeader className="sticky top-[3.75rem] z-10 grid gap-3 rounded-t-xl border-b bg-card/96 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/90 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:px-5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+          <CardTitle>Редактор страницы</CardTitle>
+          <WorkflowStatus state={{ ...resolveCmsWorkflowState({ saveStatus: saveState.status }), label: saveLabel(saveState.status) }} />
+          <CardDescription className="w-full">Работайте с одной секцией за раз — изменения сохраняются автоматически.</CardDescription>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button disabled={saveState.status === 'saving'} onClick={() => void queue.current?.flush()} size="sm" variant="outline">
+            Сохранить сейчас
+          </Button>
+          <>{actions}</>
+        </div>
       </CardHeader>
-      <CardContent className="grid gap-6">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Заголовок" htmlFor="cms-page-title">
-            <Input id="cms-page-title" value={draft.title} onChange={(event) => update({ title: event.target.value })} />
-          </Field>
-          <Field label="Адрес страницы" htmlFor="cms-page-path">
-            <Input id="cms-page-path" value={draft.path} onChange={(event) => update({ path: event.target.value })} />
-          </Field>
-          <Field label="Метка в меню" htmlFor="cms-page-navigation-label">
-            <Input
-              id="cms-page-navigation-label"
-              value={draft.navigationLabel ?? ''}
-              onChange={(event) => update({ navigationLabel: event.target.value || undefined })}
-            />
-          </Field>
-        </div>
-
-        <div className="grid gap-4">
-          <div>
-            <Typography variant="bodySmMedium">SEO</Typography>
-            <Typography tone="muted" variant="caption">Необязательные данные для поисковой выдачи.</Typography>
+      <CardContent className="grid gap-5 px-4 py-5 sm:px-5">
+        <details className="group rounded-lg border bg-muted/15 open:bg-card">
+          <Typography asChild variant="label">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 [&::-webkit-details-marker]:hidden">
+              <HugeiconsIcon aria-hidden className="size-4 text-muted-foreground" icon={Settings02Icon} strokeWidth={1.8} />
+              Настройки страницы и SEO
+              <Typography as="span" className="ml-auto" tone="muted" variant="caption">{draft.path}</Typography>
+            </summary>
+          </Typography>
+          <div className="grid gap-5 border-t px-4 py-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <Field label="Заголовок" htmlFor="cms-page-title">
+                <Input id="cms-page-title" value={draft.title} onChange={(event) => update({ title: event.target.value })} />
+              </Field>
+              <Field label="Адрес страницы" htmlFor="cms-page-path">
+                <Input id="cms-page-path" value={draft.path} onChange={(event) => update({ path: event.target.value })} />
+              </Field>
+              <Field label="Метка в меню" htmlFor="cms-page-navigation-label">
+                <Input
+                  id="cms-page-navigation-label"
+                  value={draft.navigationLabel ?? ''}
+                  onChange={(event) => update({ navigationLabel: event.target.value || undefined })}
+                />
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="SEO-заголовок" htmlFor="cms-page-seo-title">
+                <Input
+                  id="cms-page-seo-title"
+                  value={draft.seo?.title ?? ''}
+                  onChange={(event) => updateSeo({ title: event.target.value })}
+                />
+              </Field>
+              <Field label="Описание для поисковой выдачи" htmlFor="cms-page-seo-description">
+                <Textarea
+                  id="cms-page-seo-description"
+                  value={draft.seo?.description ?? ''}
+                  onChange={(event) => updateSeo({ description: event.target.value })}
+                />
+              </Field>
+            </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="SEO-заголовок" htmlFor="cms-page-seo-title">
-              <Input
-                id="cms-page-seo-title"
-                value={draft.seo?.title ?? ''}
-                onChange={(event) => updateSeo({ title: event.target.value })}
-              />
-            </Field>
-            <Field label="Описание" htmlFor="cms-page-seo-description">
-              <Textarea
-                id="cms-page-seo-description"
-                value={draft.seo?.description ?? ''}
-                onChange={(event) => updateSeo({ description: event.target.value })}
-              />
-            </Field>
-          </div>
-        </div>
+        </details>
 
         <div className="grid gap-4 border-t pt-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -172,12 +189,13 @@ function PageEditorForm({ page, initialDraft }: PageEditorProps & { initialDraft
             </div>
             <Typography tone="muted" variant="caption">{draft.blocks.length} {draft.blocks.length === 1 ? 'секция' : 'секции'}</Typography>
           </div>
-          <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)]">
-            <nav aria-label="Секции страницы" className="grid content-start gap-2 rounded-xl border bg-muted/20 p-2">
+          <div className="grid gap-4 lg:grid-cols-[14.5rem_minmax(0,1fr)]">
+            <nav aria-label="Секции страницы" className="grid content-start gap-1 rounded-xl border bg-muted/25 p-2 lg:sticky lg:top-[10.5rem] lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto">
               {draft.blocks.map((block, index) => (
                 <Button
                   aria-current={selectedBlockId === block.id ? 'step' : undefined}
-                  className="h-auto min-h-11 justify-start whitespace-normal px-3 py-2 text-left"
+                  className="h-auto min-h-12 justify-start whitespace-normal border-l-2 border-transparent px-3 py-2 text-left data-[active=true]:border-primary"
+                  data-active={selectedBlockId === block.id}
                   key={block.id}
                   onClick={() => setSelectedBlockId(block.id)}
                   type="button"
@@ -191,17 +209,17 @@ function PageEditorForm({ page, initialDraft }: PageEditorProps & { initialDraft
               ))}
             </nav>
             {draft.blocks.map((block, index) => selectedBlockId === block.id && (
-              <div className="grid gap-5 rounded-xl border bg-card p-4 shadow-sm sm:p-5" key={block.id}>
+              <div className="grid gap-5 rounded-xl border bg-card p-4 shadow-xs sm:p-5" key={block.id}>
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
                   <div className="grid gap-1">
                     <Typography variant="bodySmMedium">{getAdminBlockRegistration(block.type)?.label ?? 'Неподдерживаемая секция'}</Typography>
                     <Typography tone="muted" variant="caption">Секция {index + 1} из {draft.blocks.length}</Typography>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button aria-label="Переместить секцию выше" disabled={index === 0} onClick={() => moveBlock(index, -1)} size="sm" type="button" variant="outline">Выше</Button>
-                    <Button aria-label="Переместить секцию ниже" disabled={index === draft.blocks.length - 1} onClick={() => moveBlock(index, 1)} size="sm" type="button" variant="outline">Ниже</Button>
-                    <Button onClick={() => duplicateBlock(block)} size="sm" type="button" variant="outline">Дублировать</Button>
-                    <Button aria-label="Удалить секцию" disabled={draft.blocks.length <= 1} onClick={() => removeBlock(block)} size="sm" type="button" variant="ghost">Удалить</Button>
+                    <Button aria-label="Переместить секцию выше" disabled={index === 0} onClick={() => moveBlock(index, -1)} size="icon-sm" title="Выше" type="button" variant="outline"><HugeiconsIcon aria-hidden icon={ArrowUp01Icon} strokeWidth={1.8} /></Button>
+                    <Button aria-label="Переместить секцию ниже" disabled={index === draft.blocks.length - 1} onClick={() => moveBlock(index, 1)} size="icon-sm" title="Ниже" type="button" variant="outline"><HugeiconsIcon aria-hidden icon={ArrowDown01Icon} strokeWidth={1.8} /></Button>
+                    <Button aria-label="Дублировать секцию" onClick={() => duplicateBlock(block)} size="icon-sm" title="Дублировать" type="button" variant="outline"><HugeiconsIcon aria-hidden icon={Copy01Icon} strokeWidth={1.8} /></Button>
+                    <Button aria-label="Удалить секцию" disabled={draft.blocks.length <= 1} onClick={() => removeBlock(block)} size="icon-sm" title="Удалить" type="button" variant="ghost"><HugeiconsIcon aria-hidden icon={Delete02Icon} strokeWidth={1.8} /></Button>
                   </div>
                 </div>
                 <RegisteredBlockEditor
@@ -216,10 +234,6 @@ function PageEditorForm({ page, initialDraft }: PageEditorProps & { initialDraft
           <SitePackageBlockAddMenu onAdd={addBlock} registrations={registrations} />
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-          <Typography tone={saveTone(saveState.status)} variant="caption">{saveLabel(saveState.status)}</Typography>
-          <Button disabled={saveState.status === 'saving'} onClick={() => void queue.current?.flush()} variant="secondary">Сохранить сейчас</Button>
-        </div>
         {saveState.status === 'conflict' && (
           <Alert variant="destructive">
             <AlertTitle>Черновик изменился на сервере</AlertTitle>
@@ -311,10 +325,4 @@ function saveLabel(status: AutosaveSnapshot<SelectedPageDraft>['status']) {
     conflict: 'Нужна проверка конфликта',
     error: 'Сохранение не завершено',
   }[status]
-}
-
-function saveTone(status: AutosaveSnapshot<SelectedPageDraft>['status']) {
-  if (status === 'conflict' || status === 'error') return 'destructive' as const
-  if (status === 'saved') return 'primary' as const
-  return 'muted' as const
 }

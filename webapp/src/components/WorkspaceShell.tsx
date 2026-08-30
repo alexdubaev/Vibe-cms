@@ -14,13 +14,16 @@ import type { PropsWithChildren } from 'react'
 
 import {
   AppSidebar,
+  type DashboardNavigationGroup,
   type DashboardNavigationItem,
   SiteHeader,
 } from '@/components/dashboard'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import {
   homePathForRole,
+  navigationGroupsForRole,
   navigationItemsForRole,
+  type NavigationItem,
 } from '@/features/navigation'
 import { useCmsSiteSettingsQuery } from '@/features/cms'
 
@@ -56,14 +59,19 @@ export function WorkspaceShell({
 }>) {
   const pathname = useLocation({ select: (location) => location.pathname })
   const navigationItems = navigationItemsForRole(user.role)
+  const navigationGroups = navigationGroupsForRole(user.role)
   const siteSettings = useCmsSiteSettingsQuery(user.role !== 'user')
   const activeItem = navigationItems.find((item) => item.to === pathname)
   const homePath = homePathForRole(user.role)
   const settingsPath = user.role === 'user' ? '/app/settings' : '/admin/settings'
-  const items: ReadonlyArray<DashboardNavigationItem> = navigationItems.map((item) => ({
+  const toDashboardItem = (item: NavigationItem): DashboardNavigationItem => ({
     ...item,
     icon: iconsByPath[item.to],
     isActive: item.to === pathname,
+  })
+  const groups: ReadonlyArray<DashboardNavigationGroup> = navigationGroups.map((group) => ({
+    label: group.label,
+    items: group.items.map(toDashboardItem),
   }))
 
   return (
@@ -71,7 +79,7 @@ export function WorkspaceShell({
       <AppSidebar
         accountPath={user.role === 'user' ? '/app/profile' : undefined}
         homePath={homePath}
-        items={items}
+        groups={groups}
         onLogout={onLogout}
         settingsPath={settingsPath}
         user={user}
